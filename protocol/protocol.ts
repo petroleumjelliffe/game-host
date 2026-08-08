@@ -8,6 +8,17 @@ export type Lifecycle = 'lobby' | 'playing' | 'over';
  * `rejected` channel (engine refusals, `undoOutOfSegment`) passes through this
  * layer opaquely for the game to interpret — which is how `useRoom` always
  * behaved; this type names it.
+ *
+ * `notConnected` is not a refusal at all in the protocol sense — the server
+ * never sends it — it is the client's own signal that the transport is down,
+ * given a real member here rather than borrowing an unrelated wire code.
+ *
+ * `noSuchRoom` and `seatRefused` are one refusal split in two, because they
+ * have different remedies. Nothing reaches a room that is not there, so that
+ * is an ending: the game may have finished, or the server may have restarted
+ * with an ephemeral disk. A room that is there but refuses this seat means the
+ * stored identity is stale, and joining fresh works. Sending one code for both
+ * made every wiped game read as `cannot join ABC123`.
  */
 export type LobbyRejectionCode =
   | 'noSuchRoom'
