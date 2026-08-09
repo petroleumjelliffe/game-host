@@ -24,38 +24,52 @@ export function ShareRoomButton({ url, text = 'Join my game room' }: ShareRoomBu
 
   useEffect(() => () => { if (timer.current !== null) clearTimeout(timer.current); }, []);
 
-  async function share(): Promise<void> {
-    // Guarded like identity.ts's storage reads: every branch that can throw is
-    // wrapped, and failure degrades to whatever still works. A lobby that
-    // throws on a share tap is worse than a share that quietly only copied.
-    try {
-      await navigator.clipboard?.writeText(url);
-    } catch {
-      // No clipboard permission: the sheet below may still work.
-    }
-
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ url, text });
-      } catch {
-        // A dismissed sheet (AbortError) is a choice, not an error — and the
-        // copy already happened, so there is nothing to recover.
-      }
-      return;
-    }
-
-    // No sheet on this platform: the copy is the whole action, so say it
-    // happened. A text swap, not an animation — nothing for reduced-motion
-    // to object to.
+  function showCopied(): void {
+    // A text swap, not an animation — nothing for reduced-motion to object to.
     setCopied(true);
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = setTimeout(() => { setCopied(false); }, COPIED_MS);
   }
 
+  function share(): void {
+    // Copy and sheet start in the SAME gesture tick — no await between the
+    // click and `navigator.share`. Safari spends the click's user activation
+    // on whatever is called during it; awaiting the clipboard first burned
+    // the activation and the sheet was refused with `NotAllowedError`, which
+    // the old silent catch then swallowed. Found by hand in Safari on
+    // 2026-08-09; Chrome's laxer activation window hid it. Guarded like
+    // identity.ts's storage reads throughout: failure degrades to whatever
+    // still works.
+    const copy: Promise<void> = (async () => {
+      await navigator.clipboard?.writeText(url);
+    })();
+    const copiedThenSay = (): void => {
+      // Only claim "Copied" if the write actually landed; a clipboard that
+      // refused has nothing to announce, and lying about it is worse.
+      copy.then(showCopied).catch(() => {});
+    };
+
+    if (typeof navigator.share === 'function') {
+      navigator.share({ url, text }).catch((e: unknown) => {
+        // A dismissed sheet (AbortError) is a choice, not an error — and the
+        // copy already happened, so there is nothing to recover. Any OTHER
+        // refusal means no sheet ever showed, so the copy is the whole
+        // action: say it happened.
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        copiedThenSay();
+      });
+      return;
+    }
+
+    // No sheet on this platform (desktop Firefox, most desktop browsers):
+    // the copy is the whole action, so say it happened.
+    copiedThenSay();
+  }
+
   return (
     <button
       type="button"
-      onClick={() => { void share(); }}
+      onClick={share}
       className="m-0 w-full rounded-lg border border-[var(--lobby-accent,#2563eb)] px-4 py-2 font-semibold text-[var(--lobby-accent,#2563eb)] hover:bg-gray-50"
     >
       {copied ? 'Copied' : 'Share link'}

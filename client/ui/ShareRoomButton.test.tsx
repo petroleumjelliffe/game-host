@@ -71,6 +71,40 @@ describe('ShareRoomButton', () => {
     expect(screen.getByRole('button')).toHaveTextContent(/share/i);
   });
 
+  /**
+   * Safari's rule, pinned: `navigator.share` must be called inside the click's
+   * user-activation window, so it cannot wait behind the clipboard write. A
+   * never-settling clipboard is the sharpest form of "behind": the sheet must
+   * open anyway. This is the bug found by hand on 2026-08-09 — Chrome's laxer
+   * activation window hid it.
+   */
+  it('asks for the sheet in the same gesture tick, not after the clipboard', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn(() => new Promise(() => {})) },
+      configurable: true,
+    });
+    const share = installShare();
+    render(<ShareRoomButton url={URL} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(share).toHaveBeenCalledWith({ url: URL, text: 'Join my game room' });
+  });
+
+  it('a sheet that refuses — not a dismissal — falls back to saying Copied', async () => {
+    installClipboard();
+    Object.defineProperty(navigator, 'share', {
+      value: vi.fn(() => Promise.reject(new DOMException('activation gone', 'NotAllowedError'))),
+      configurable: true,
+    });
+    render(<ShareRoomButton url={URL} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByRole('button')).toHaveTextContent(/copied/i);
+  });
+
   it('a dismissed sheet is silence, and the link is already copied', async () => {
     const writeText = installClipboard();
     Object.defineProperty(navigator, 'share', {
