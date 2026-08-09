@@ -5,6 +5,7 @@
 
 import type { RosterMessage } from '../../../lobby/protocol';
 import { LobbyCard, SeatRow } from './LobbyCard';
+import { ShareRoomButton } from './ShareRoomButton';
 
 export interface RoomLobbyProps {
   roomId: string;
@@ -26,10 +27,19 @@ export interface RoomLobbyProps {
    * renders as is the caller's to decide.
    */
   seatEmoji: (seat: number) => string | null;
+  /**
+   * The room's link, when the game wants a Share button under the code block.
+   * The kit never computes URLs — for this game the lobby lives at
+   * `/room/:id`, so the page passes its own address.
+   */
+  shareUrl?: string;
+  /** Share-sheet text. Absent means the kit's game-neutral default. */
+  shareText?: string;
 }
 
 export function RoomLobby({
   roomId, players, myPlayerId, isHost, note, onStart, onRename, onLeaveSeat, seatEmoji,
+  shareUrl, shareText,
 }: RoomLobbyProps) {
   const enough = players.length >= 2;
 
@@ -38,6 +48,9 @@ export function RoomLobby({
       title="New Room"
       subtitle="Share this code with other players"
       code={roomId}
+      underCode={shareUrl !== undefined && (
+        <ShareRoomButton url={shareUrl} {...(shareText === undefined ? {} : { text: shareText })} />
+      )}
       note={note}
       onLeave={onLeaveSeat}
       primary={isHost ? (

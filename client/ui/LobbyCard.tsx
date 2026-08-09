@@ -70,6 +70,8 @@ export interface LobbyCardProps {
   onCodeChange?: (next: string) => void;
   /** The rows — see `SeatRow`. */
   children: ReactNode;
+  /** Rendered directly under the code block — the New Room card's Share button. */
+  underCode?: ReactNode;
   note?: string | null;
   /** The primary action, or whatever stands in its place. */
   primary: ReactNode;
@@ -79,7 +81,7 @@ export interface LobbyCardProps {
 }
 
 export function LobbyCard({
-  title, subtitle, code, onCodeChange, children, note, primary, onLeave, onSubmit,
+  title, subtitle, code, onCodeChange, children, underCode, note, primary, onLeave, onSubmit,
 }: LobbyCardProps) {
   const inner = (
     <>
@@ -100,6 +102,8 @@ export function LobbyCard({
           className={`mb-6 ${CODE_CLASS} border border-gray-300 uppercase`}
         />
       )}
+
+      {underCode && <div className="-mt-3 mb-6">{underCode}</div>}
 
       <ul className="mb-6 flex flex-col gap-2">{children}</ul>
 
