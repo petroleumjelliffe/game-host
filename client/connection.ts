@@ -42,6 +42,13 @@ export interface LobbyConnection {
   leaveSeat(): void;
   onJoined(handler: (msg: JoinedMessage) => void): () => void;
   onRoster(handler: (msg: RosterMessage) => void): () => void;
+  /**
+   * Shares the socket's `rejected` event with `src/net/transport.ts`'s
+   * `onRejected` — one channel, two subscribers. This side branches on the
+   * lobby's own codes (`noSuchRoom`, `versionMismatch`, …); the game side
+   * interprets whatever it doesn't recognize. A subscriber added on either
+   * side is heard by both.
+   */
   onRejected(handler: (msg: RejectedMessage) => void): () => void;
   close(): void;
 }
