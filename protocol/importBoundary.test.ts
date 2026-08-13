@@ -45,8 +45,13 @@ test('every relative import under the lobby resolves back inside the lobby', () 
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
     for (const match of source.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+      // `string | undefined` under `noUncheckedIndexedAccess`, which Rail
+      // Baron sets and Acquire does not. Shared code has to satisfy the
+      // strictest consumer rather than the first one: this line compiled
+      // inside Acquire for as long as it existed and failed the moment a
+      // second game compiled it.
       const spec = match[1];
-      if (!spec.startsWith('.')) continue; // bare imports (react, socket.io) are fine
+      if (spec === undefined || !spec.startsWith('.')) continue; // bare imports are fine
       const target = resolve(dirname(file), spec);
       if (!LOBBY_ROOTS.some((root) => target.startsWith(root + sep)))
         offences.push(`${file} imports ${spec}`);
