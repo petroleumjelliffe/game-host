@@ -1,16 +1,22 @@
-// The extraction's contract: these directories are game-agnostic, so the lift
-// to a second game is a `git mv`. The rule is an allowlist, not a blocklist:
-// every relative import must resolve back inside the lobby directories. A
-// blocklist of engine/session/src-game would leave server/room.ts and
-// src/net/ importable — a GameRoom import in handlers.ts would pass the gate
-// while breaking exactly what the gate guards.
+// The contract, now that this is its own repo: every relative import must
+// resolve back inside it. The rule is an allowlist, not a blocklist — a
+// blocklist of a consuming game's directories would leave anything *else*
+// importable, and an import reaching out of this repo is broken for every
+// consumer, not just the one it was written against.
+//
+// The lift happened on 2026-08-13: `lobby/`, `server/lobby/` and `src/lobby/`
+// left Acquire and became `protocol/`, `server/` and `client/` here, carried
+// by `git filter-repo` with all fifteen commits. That is why this test's
+// history is longer than this repo's directory names are old.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, sep } from 'node:path';
 
 // import.meta.url, not __dirname: the node vitest project runs ESM.
+// One level up from `protocol/` is this repo's root — which, inside a
+// consumer, is `vendor/lobby/`. The roots below resolve either way.
 const REPO = fileURLToPath(new URL('..', import.meta.url));
-const LOBBY_ROOTS = ['lobby', 'server/lobby', 'src/lobby'].map((p) => resolve(REPO, p));
+const LOBBY_ROOTS = ['protocol', 'server', 'client'].map((p) => resolve(REPO, p));
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
