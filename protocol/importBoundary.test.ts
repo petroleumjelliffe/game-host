@@ -22,8 +22,8 @@ function sourceFiles(dir: string): string[] {
 
 test('every relative import under the lobby resolves back inside the lobby', () => {
   const files = LOBBY_ROOTS.flatMap((root) => sourceFiles(root));
-  // Nine files: lobby/{protocol,importBoundary.test},
-  // server/lobby/{handlers,rooms,genericConsumer.test},
+  // Ten files: lobby/{protocol,importBoundary.test},
+  // server/lobby/{handlers,rooms,rooms.test,genericConsumer.test},
   // src/lobby/{connection,identity,identity.test,useLobbyRoom}.
   //
   // Exact rather than a floor. The floor was here so an empty walk could not
@@ -33,7 +33,7 @@ test('every relative import under the lobby resolves back inside the lobby', () 
   //
   // The UI left for src/game/lobby/ on 2026-08-12: it was Acquire's screens,
   // not a themeable kit, and Rail Baron has neither Tailwind nor className.
-  expect(files.length).toBe(9);
+  expect(files.length).toBe(10);
 
   const offences: string[] = [];
   for (const file of files) {

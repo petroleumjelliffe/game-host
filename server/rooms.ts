@@ -37,23 +37,62 @@ export interface LobbyRegistry<R extends LobbyRoomLike> {
 }
 
 /**
+ * The seats a game has, supplied by the game. Its length is the room's
+ * capacity, and an id is either free or taken — so a duplicate seat id is
+ * unrepresentable rather than merely unlikely.
+ *
+ * Ids used to be derived from `players.length`, which shrinks when a seat is
+ * given up: p1,p2,p3 → p2 leaves → the next join minted a *second* p3, and
+ * rename, rejoin and socket-binding lookups all resolved to whichever the
+ * find hit first.
+ *
+ * The lobby carries no badge — no emoji, no colour. Decoration is derived by
+ * the game from the seat: Acquire reads an emoji by seat index, and Rail
+ * Baron's ids *are* its colours, so there the decoration and the identity are
+ * the same string. Letting a player *pick* one would be a choice rather than
+ * a derivation, and would need an opaque field here plus uniqueness; that is
+ * deliberately not built.
+ */
+export interface SeatSpace {
+  readonly ids: readonly string[];
+  /** Display name for an unnamed player seated at `index`. */
+  defaultName?(index: number): string;
+}
+
+/**
  * The one place both `create` and `join` seat somebody, and therefore the only
- * place that can name an unnamed player: the seat number is what the default
- * is made of, and the client does not know its seat until this has run.
+ * place that can name an unnamed player: the seat is what the default is made
+ * of, and the client does not know its seat until this has run.
  *
  * Nobody types a name before entering a room as of the Lobby Flow corrections
  * — both cards seat you first and let you edit your own row afterwards — so
  * an absent name is the ordinary case, not a malformed payload. A blank or
  * whitespace-only name is treated as absent rather than seating a nameless
  * row that no roster could render.
+ *
+ * `isHost` is "this room has no players yet", not "index zero". Once ids are
+ * reused those differ: `leaveSeat` promotes `players[0]` when the host goes,
+ * and a newcomer taking the freed first id would otherwise arrive believing
+ * it is host as well — two hosts, one room.
+ *
+ * Returns null when every seat is taken. `join` already returns null for a
+ * refusal, so capacity needs no new path through the handlers.
  */
-export function seatPlayer(seat: number, name?: string): SeatHolder {
+export function seatPlayer(
+  space: SeatSpace,
+  taken: readonly SeatHolder[],
+  name?: string,
+): SeatHolder | null {
+  const held = new Set(taken.map((p) => p.id));
+  const index = space.ids.findIndex((id) => !held.has(id));
+  if (index === -1) return null;
+
   const given = name?.trim();
   return {
-    id: `p${seat + 1}`,
-    name: given ? given : `Player ${seat + 1}`,
+    id: space.ids[index]!,
+    name: given ? given : (space.defaultName?.(index) ?? `Player ${index + 1}`),
     token: randomUUID(),
-    isHost: seat === 0,
+    isHost: taken.length === 0,
     connected: true,
   };
 }
@@ -68,6 +107,7 @@ function roomCode(): string {
 
 export function createLobbyRegistry<R extends LobbyRoomLike>(
   makeRoom: (id: string, players: SeatHolder[]) => R,
+  space: SeatSpace,
 ): LobbyRegistry<R> {
   const rooms = new Map<string, R>();
 
@@ -80,7 +120,9 @@ export function createLobbyRegistry<R extends LobbyRoomLike>(
       let id = roomCode();
       while (rooms.has(id)) id = roomCode();
 
-      const host = seatPlayer(0, hostName);
+      const host = seatPlayer(space, [], hostName);
+      // An empty room always has a free seat unless the game supplied none.
+      if (!host) throw new Error('SeatSpace has no ids: a room could seat nobody');
       const room = makeRoom(id, [host]);
       rooms.set(id, room);
       return { room, player: host };
@@ -117,7 +159,8 @@ export function createLobbyRegistry<R extends LobbyRoomLike>(
         abandoned.connected = true;
         return { room, player: abandoned };
       }
-      const player = seatPlayer(room.players.length, name);
+      const player = seatPlayer(space, room.players, name);
+      if (!player) return null; // every seat is taken
       room.players.push(player);
       return { room, player };
     },

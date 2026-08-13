@@ -6,6 +6,11 @@ import type { Lifecycle } from '../../lobby/protocol.js';
 
 interface StubRoom extends LobbyRoomLike { begun: boolean }
 
+// Deliberately nothing like Acquire's `p1…p6`. This file exists to catch the
+// lobby growing a requirement only GameRoom satisfies, and a seat space that
+// looked like Acquire's would hide exactly that.
+const STUB_SEATS = { ids: ['seat-a', 'seat-b', 'seat-c'] };
+
 function makeStub(id: string, players: SeatHolder[]): StubRoom {
   const lifecycle: Lifecycle = 'lobby';
   return { id, players, lifecycle: () => lifecycle, begun: false };
@@ -21,7 +26,7 @@ void _hooks;
 
 describe('the registry over a room that is not GameRoom', () => {
   it('creates, seats the host, and names an unnamed second seat by number', () => {
-    const registry = createLobbyRegistry<StubRoom>(makeStub);
+    const registry = createLobbyRegistry<StubRoom>(makeStub, STUB_SEATS);
     const { room, player: host } = registry.create('Ada');
     expect(host.isHost).toBe(true);
     expect(host.name).toBe('Ada');
@@ -32,15 +37,15 @@ describe('the registry over a room that is not GameRoom', () => {
   });
 
   it('a rejoin must present the seat\'s own token', () => {
-    const registry = createLobbyRegistry<StubRoom>(makeStub);
+    const registry = createLobbyRegistry<StubRoom>(makeStub, STUB_SEATS);
     const { room, player } = registry.create('Ada');
     expect(registry.join(room.id, undefined, player.id, 'wrong-token')).toBeNull();
     expect(registry.join(room.id, undefined, player.id, player.token)?.player.id).toBe(player.id);
   });
 
   it('adopt replaces whatever holds the id', () => {
-    const registry = createLobbyRegistry<StubRoom>(makeStub);
-    const replacement = makeStub('ABC123', [seatPlayer(0, 'Bee')]);
+    const registry = createLobbyRegistry<StubRoom>(makeStub, STUB_SEATS);
+    const replacement = makeStub('ABC123', [seatPlayer(STUB_SEATS, [], 'Bee')!]);
     registry.adopt(replacement);
     expect(registry.get('ABC123')).toBe(replacement);
   });
