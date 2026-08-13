@@ -3,7 +3,20 @@
 Rooms, seats, join/rejoin tokens, presence, rename/leave — game-agnostic, shared
 by every game in this family. Three pieces: `lobby/` (wire types, node-safe),
 `server/lobby/` (seating registry + socket handlers), `src/lobby/` (headless
-React client + default UI under `ui/`).
+React client).
+
+**The lobby has no UI, and that is a correction.** It used to ship a "themeable
+default UI" under `src/lobby/ui/`, behind three `--lobby-*` CSS variables. Rail
+Baron — the first real second consumer — has neither Tailwind nor `className`,
+and its lobby *is* a seven-row split-flap departures board, which no amount of
+theming turns a card into. Those components moved to `src/game/lobby/` on
+2026-08-12: they were Acquire's screens.
+
+**What is shared is the element inventory, not components**: representatives of
+players, a way to add players, a share link, a begin control, presence, and
+terminal states. Every game needs all of them and every game will draw them
+differently. See
+[`docs/superpowers/specs/2026-08-12-lobby-lift-carry-forward.md`](../docs/superpowers/specs/2026-08-12-lobby-lift-carry-forward.md).
 
 **The lobby is turn-agnostic.** It knows seats, presence, lifecycle, and "the
 host pressed begin" — never turns, actors, or timing. Turn-based, real-time,
@@ -25,9 +38,9 @@ simultaneous: all equally at home; whatever happens after `onBegin` is yours.
 - **An `appId`** for `createIdentityStore` — the `localStorage` namespace. Games
   share the origin; a duplicated appId lets one game's seat tokens shadow
   another's.
-- **A seat-emoji function** for `RoomLobby` (`seatEmoji(seat) => string | null`),
-  and optionally a theme: `--lobby-accent`, `--lobby-accent-strong`,
-  `--lobby-on-accent` (defaults render the reference blue).
+- **Every pixel.** The lobby returns state and actions; the game renders them.
+  There is no theme to configure and no component to override, because there
+  are no components — see the note above about why that changed.
 
 ## What the lobby decides for you (re-ask at the lift if it doesn't fit)
 

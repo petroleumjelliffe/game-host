@@ -22,7 +22,18 @@ function sourceFiles(dir: string): string[] {
 
 test('every relative import under the lobby resolves back inside the lobby', () => {
   const files = LOBBY_ROOTS.flatMap((root) => sourceFiles(root));
-  expect(files.length).toBeGreaterThan(10); // the absence-assertion guard: an empty walk passes vacuously
+  // Nine files: lobby/{protocol,importBoundary.test},
+  // server/lobby/{handlers,rooms,genericConsumer.test},
+  // src/lobby/{connection,identity,identity.test,useLobbyRoom}.
+  //
+  // Exact rather than a floor. The floor was here so an empty walk could not
+  // pass vacuously; an exact count also catches a file quietly *leaving* the
+  // lobby, which is the failure this directory now exists to prevent — what
+  // remains here is precisely what moves to the shared repo.
+  //
+  // The UI left for src/game/lobby/ on 2026-08-12: it was Acquire's screens,
+  // not a themeable kit, and Rail Baron has neither Tailwind nor className.
+  expect(files.length).toBe(9);
 
   const offences: string[] = [];
   for (const file of files) {
