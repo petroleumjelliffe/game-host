@@ -22,9 +22,9 @@ function sourceFiles(dir: string): string[] {
 
 test('every relative import under the lobby resolves back inside the lobby', () => {
   const files = LOBBY_ROOTS.flatMap((root) => sourceFiles(root));
-  // Ten files: lobby/{protocol,importBoundary.test},
+  // Twelve files: lobby/{protocol,importBoundary.test},
   // server/lobby/{handlers,rooms,rooms.test,genericConsumer.test},
-  // src/lobby/{connection,identity,identity.test,useLobbyRoom}.
+  // src/lobby/{connection,identity,identity.test,useLobbyRoom,view,view.test}.
   //
   // Exact rather than a floor. The floor was here so an empty walk could not
   // pass vacuously; an exact count also catches a file quietly *leaving* the
@@ -33,7 +33,7 @@ test('every relative import under the lobby resolves back inside the lobby', () 
   //
   // The UI left for src/game/lobby/ on 2026-08-12: it was Acquire's screens,
   // not a themeable kit, and Rail Baron has neither Tailwind nor className.
-  expect(files.length).toBe(10);
+  expect(files.length).toBe(12);
 
   const offences: string[] = [];
   for (const file of files) {
