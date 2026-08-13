@@ -3,7 +3,7 @@
 // whatever `makeRoom` builds, and this file never looks inside it.
 
 import { randomUUID } from 'node:crypto';
-import type { Lifecycle } from '../../lobby/protocol.js';
+import type { Lifecycle } from '../protocol/protocol.js';
 
 export interface SeatHolder {
   id: string;

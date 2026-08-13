@@ -8,7 +8,7 @@ import {
   type JoinedMessage,
   type RosterMessage,
   type RejectedMessage,
-} from '../../lobby/protocol';
+} from '../protocol/protocol';
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 

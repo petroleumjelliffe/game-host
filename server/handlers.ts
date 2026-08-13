@@ -12,7 +12,7 @@ import {
   type JoinedMessage,
   type RenamePlayerMessage,
   type RosterMessage,
-} from '../../lobby/protocol.js';
+} from '../protocol/protocol.js';
 import type { LobbyRegistry, LobbyRoomLike, Seated } from './rooms.js';
 
 /** Which room and seat a socket is bound to. The client never says. */

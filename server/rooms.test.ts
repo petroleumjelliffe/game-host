@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createLobbyRegistry, seatPlayer, type LobbyRoomLike, type SeatHolder } from './rooms.js';
-import type { Lifecycle } from '../../lobby/protocol.js';
+import type { Lifecycle } from '../protocol/protocol.js';
 
 interface StubRoom extends LobbyRoomLike { stage: Lifecycle }
 

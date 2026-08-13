@@ -2,7 +2,7 @@
 // only GameRoom satisfies, this file is what goes red — before the lift does.
 import { createLobbyRegistry, seatPlayer, type LobbyRoomLike, type SeatHolder } from './rooms.js';
 import type { LobbyHooks } from './handlers.js';
-import type { Lifecycle } from '../../lobby/protocol.js';
+import type { Lifecycle } from '../protocol/protocol.js';
 
 interface StubRoom extends LobbyRoomLike { begun: boolean }
 

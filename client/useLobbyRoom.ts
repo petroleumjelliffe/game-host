@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RosterMessage } from '../../lobby/protocol';
+import type { RosterMessage } from '../protocol/protocol';
 import type { LobbyConnection, ConnectionStatus } from './connection';
 import type { IdentityStore } from './identity';
 

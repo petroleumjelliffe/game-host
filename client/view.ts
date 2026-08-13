@@ -1,4 +1,4 @@
-import type { RosterMessage } from '../../lobby/protocol';
+import type { RosterMessage } from '../protocol/protocol';
 import type { ConnectionStatus } from './connection';
 
 /**
