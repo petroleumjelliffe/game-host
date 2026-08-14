@@ -256,10 +256,10 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
 
       const at = room.players.findIndex((p) => p.id === bound.playerId);
       if (at === -1) return;
-      const wasHost = room.players[at].isHost;
+      const wasHost = room.players[at]!.isHost;
       room.players.splice(at, 1);
       // A lobby with no host is a lobby nobody can ever start.
-      if (wasHost && room.players.length > 0) room.players[0].isHost = true;
+      if (wasHost && room.players.length > 0) room.players[0]!.isHost = true;
 
       bindings.delete(socket.id);
       void socket.leave(room.id);
