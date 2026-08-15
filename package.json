@@ -1,0 +1,43 @@
+{
+  "name": "marco-polo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "dev": "concurrently -k \"tsx watch server/main.ts\" \"vite\"",
+    "build": "vite build",
+    "start": "tsx server/main.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p client"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "concurrently": "^10.0.5",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
+  }
+}
