@@ -71,3 +71,37 @@ describe('applyInput validation', () => {
     expect(state.players[0]!.tx).toBeNull();
   });
 });
+
+describe('turbo', () => {
+  it('doubles speed and drains while held', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    applyInput(state, 'p1', { tx: 0.9, ty: 0, turbo: true });
+    tick(state, 0.5);
+    const marco = state.players[0]!;
+    expect(marco.x).toBeCloseTo(TUNING.baseSpeed * TUNING.turboMultiplier * 0.5, 5);
+    expect(marco.turbo).toBeCloseTo(1 - 0.5 / TUNING.turboFullSeconds, 5);
+  });
+
+  it('falls back to base speed once empty, and does not recharge while held', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    applyInput(state, 'p1', { tx: 0.9, ty: 0, turbo: true });
+    for (let i = 0; i < 40; i++) tick(state, 0.05); // 2s > turboFullSeconds
+    const marco = state.players[0]!;
+    expect(marco.turbo).toBe(0);
+    const before = marco.x;
+    tick(state, 0.1);
+    expect(marco.x - before).toBeCloseTo(TUNING.baseSpeed * 0.1, 5);
+    expect(marco.turbo).toBe(0);
+  });
+
+  it('recharges to full over turboRechargeSeconds when released', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    const marco = state.players[0]!;
+    marco.turbo = 0;
+    applyInput(state, 'p1', { tx: null, ty: null, turbo: false });
+    tick(state, TUNING.turboRechargeSeconds / 2);
+    expect(marco.turbo).toBeCloseTo(0.5, 5);
+    tick(state, TUNING.turboRechargeSeconds);
+    expect(marco.turbo).toBe(1);
+  });
+});
