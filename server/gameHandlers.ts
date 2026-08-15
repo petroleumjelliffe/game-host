@@ -1,0 +1,136 @@
+// The game half of the socket wire: inputs in, snapshots and events out, and
+// the 20Hz loop per room. All rules live in game.ts/sim.ts — this file only
+// routes bytes and enforces WHO may say what (marco calls, host advances).
+
+import type { Server as SocketServer, Socket } from 'socket.io';
+import { LOBBY_SERVER_EVENTS } from '../vendor/lobby/protocol/protocol.js';
+import type { LobbyRegistry } from '../vendor/lobby/server/rooms.js';
+import type { LobbyWiring } from '../vendor/lobby/server/handlers.js';
+import {
+  GAME_CLIENT_EVENTS,
+  GAME_SERVER_EVENTS,
+  MIN_PLAYERS,
+  TUNING,
+  type GameEvent,
+} from '../protocol/game.js';
+import { snapshotFor } from './snapshot.js';
+import { applyInput, tryCall } from './sim/sim.js';
+import { startMatch, startNextRound, stepRound, type MarcoPoloRoom } from './game.js';
+
+export interface GameWiring {
+  begin(room: MarcoPoloRoom): void;
+  seat(room: MarcoPoloRoom, playerId: string): void;
+  attach(socket: Socket): void;
+  stop(): void;
+}
+
+export function createGameHandlers(
+  io: SocketServer,
+  registry: Pick<LobbyRegistry<MarcoPoloRoom>, 'get'>,
+  wiring: LobbyWiring<MarcoPoloRoom>,
+  opts: { tickMs?: number } = {},
+): GameWiring {
+  const tickMs = opts.tickMs ?? 1000 / TUNING.tickHz;
+  const loops = new Map<string, NodeJS.Timeout>();
+
+  function broadcastSnapshots(room: MarcoPoloRoom): void {
+    // Per-socket, not per-room: every player's snapshot differs (their own
+    // meter at least, and Marco's is missing everyone).
+    for (const socket of io.sockets.sockets.values()) {
+      const b = wiring.seatOf(socket.id);
+      if (b?.roomId === room.id) {
+        socket.emit(GAME_SERVER_EVENTS.state, snapshotFor(room, b.playerId));
+      }
+    }
+  }
+
+  function emitEvents(room: MarcoPoloRoom, events: GameEvent[]): void {
+    for (const ev of events) io.to(room.id).emit(GAME_SERVER_EVENTS.event, ev);
+  }
+
+  function begin(room: MarcoPoloRoom): void {
+    if (room.begun) return;
+    if (room.players.length < MIN_PLAYERS) {
+      const host = room.players.find((p) => p.isHost);
+      for (const s of host ? wiring.socketsFor(room.id, host.id) : []) {
+        s.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'notEnoughPlayers',
+          message: `Marco Polo needs at least ${MIN_PLAYERS} players`,
+        });
+      }
+      return;
+    }
+    emitEvents(room, [startMatch(room)]);
+    wiring.broadcastRoster(room);
+    broadcastSnapshots(room);
+    loops.set(
+      room.id,
+      setInterval(() => {
+        emitEvents(room, stepRound(room, tickMs / 1000));
+        broadcastSnapshots(room);
+      }, tickMs),
+    );
+  }
+
+  function seat(room: MarcoPoloRoom, playerId: string): void {
+    if (!room.begun || !room.sim) return;
+    for (const s of wiring.socketsFor(room.id, playerId)) {
+      s.emit(GAME_SERVER_EVENTS.state, snapshotFor(room, playerId));
+    }
+  }
+
+  function boundRoom(socket: Socket): { room: MarcoPoloRoom; playerId: string } | null {
+    const b = wiring.seatOf(socket.id);
+    const room = b && registry.get(b.roomId);
+    return room ? { room, playerId: b.playerId } : null;
+  }
+
+  function attach(socket: Socket): void {
+    socket.on(GAME_CLIENT_EVENTS.input, (msg: unknown) => {
+      const found = boundRoom(socket);
+      if (found?.room.sim && !found.room.between) {
+        applyInput(found.room.sim, found.playerId, msg);
+      }
+    });
+
+    socket.on(GAME_CLIENT_EVENTS.call, () => {
+      const found = boundRoom(socket);
+      if (!found?.room.sim || found.room.between) return;
+      if (found.playerId !== found.room.sim.marcoId) return; // polos have no MARCO
+      const ev = tryCall(found.room.sim);
+      if (ev) emitEvents(found.room, [ev]);
+    });
+
+    socket.on(GAME_CLIENT_EVENTS.nextRound, () => {
+      const found = boundRoom(socket);
+      if (!found) return;
+      const host = found.room.players.find((p) => p.isHost);
+      if (host?.id !== found.playerId) return;
+      const ev = startNextRound(found.room);
+      if (ev) {
+        emitEvents(found.room, [ev]);
+        broadcastSnapshots(found.room);
+      }
+    });
+
+    // Registered before the lobby's own disconnect handler (see app.ts):
+    // that one deletes the binding this one reads. A vanished player stops
+    // swimming and floats in place, still catchable.
+    socket.on('disconnect', () => {
+      const found = boundRoom(socket);
+      if (found?.room.sim && !found.room.between) {
+        applyInput(found.room.sim, found.playerId, { tx: null, ty: null, turbo: false });
+      }
+    });
+  }
+
+  return {
+    begin,
+    seat,
+    attach,
+    stop() {
+      for (const loop of loops.values()) clearInterval(loop);
+      loops.clear();
+    },
+  };
+}
