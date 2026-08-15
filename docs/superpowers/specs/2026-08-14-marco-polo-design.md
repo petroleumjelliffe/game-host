@@ -111,8 +111,10 @@ Server → client:
 - `event` — one-shot occurrences with positions stamped at emission time:
   `call { x, y }`, `reply { playerId, x, y }` (reply events go to everyone —
   for Marco they are the sighting; for Polos they confirm what leaked),
-  `caught { marcoId, poloId }`, `roundStart { marcoId, round }`,
-  `roundEnd { reason, scores, nextMarcoId }`.
+  `roundStart { round, marcoId }`, and
+  `roundEnd { reason, caughtId, nextMarcoId, scores }` — a catch is the
+  `roundEnd` with `reason: 'catch'`, not a separate event, since the two
+  always travel together.
 
 Cheat-proofing falls out of filtering: Marco's phone cannot render what it was
 never sent.
