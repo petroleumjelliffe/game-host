@@ -25,3 +25,19 @@ input {
 .seats li.empty { opacity: 0.4; }
 .error { color: #ff8a8a; }
 .notice { justify-content: center; height: 100%; }
+.game { padding: 0; gap: 8px; height: 100%; justify-content: center; }
+.hud-top { display: flex; justify-content: space-between; width: 100%; padding: 12px 16px; }
+.role.marco { color: #ff6e6e; font-weight: 700; }
+.role.polo { color: #8cebff; }
+.timer { font-variant-numeric: tabular-nums; font-weight: 700; }
+.hud-bottom { display: flex; gap: 16px; width: 100%; padding: 0 16px 16px; justify-content: space-between; }
+.marco-btn { flex: 1; font-size: 1.3rem; background: #b03030; padding: 18px; }
+.marco-btn:disabled { opacity: 0.5; }
+.turbo { flex: 1; position: relative; overflow: hidden; background: #133; padding: 18px; }
+.turbo .meter { position: absolute; inset: 0 auto 0 0; background: #1c6dd0; z-index: -1; transition: width 120ms linear; }
+.turbo.held { outline: 2px solid #7fd4ff; }
+.overlay {
+  position: fixed; inset: 0; background: rgba(4, 10, 18, 0.88);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+}
+.scores { list-style: none; padding: 0; font-size: 1.2rem; text-align: center; }
