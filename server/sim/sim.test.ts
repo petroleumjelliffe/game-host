@@ -183,3 +183,27 @@ describe('the call', () => {
     expect(tick(state, 0.5)).toEqual([]); // never a second volley
   });
 });
+
+describe('catching', () => {
+  it('ends the round when marco overlaps a polo', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    const polo = state.players.find((p) => p.role === 'polo')!;
+    polo.x = 0.05;
+    polo.y = 0;
+    // marco at origin: distance 0.05 < 2 * avatarRadius (0.09)
+    tick(state, 0.001);
+    expect(state.over).toEqual({ reason: 'catch', caughtId: polo.id });
+  });
+
+  it('does not catch across a gap wider than two avatars', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    const polo = state.players.find((p) => p.role === 'polo')!;
+    polo.x = 0.2;
+    polo.y = 0;
+    const other = state.players.find((p) => p.role === 'polo' && p.id !== polo.id)!;
+    other.x = 0.3;
+    other.y = 0.3;
+    tick(state, 0.001);
+    expect(state.over).toBeNull();
+  });
+});
