@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../../protocol/game.js';
-import { applyInput, createRound, tick, ringRadius } from './sim.js';
+import { applyInput, createRound, tick, ringRadius, tryCall } from './sim.js';
 
 const ids = ['p1', 'p2', 'p3'];
 
@@ -148,5 +148,38 @@ describe('timeout', () => {
     expect(state.over).toEqual({ reason: 'timeout', caughtId: null });
     tick(state, 0.05); // ticking a finished round is a no-op
     expect(state.over).toEqual({ reason: 'timeout', caughtId: null });
+  });
+});
+
+describe('the call', () => {
+  it('emits a call at marco position and enters cooldown', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    const ev = tryCall(state);
+    expect(ev).toEqual({ type: 'call', x: 0, y: 0 });
+    expect(state.callCooldown).toBe(TUNING.callCooldownSeconds);
+    expect(tryCall(state)).toBeNull(); // still cooling down
+  });
+
+  it('becomes available again after the cooldown elapses', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    tryCall(state);
+    for (let i = 0; i < 101; i++) tick(state, 0.05); // 5.05s
+    expect(tryCall(state)).not.toBeNull();
+  });
+
+  it('forces every polo to reply after the delay, once, at their position then', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    tryCall(state);
+    let events = tick(state, TUNING.replyDelaySeconds / 2);
+    expect(events).toEqual([]);
+    // a polo moves during the delay — the reply must use the later position
+    const polo = state.players.find((p) => p.role === 'polo')!;
+    applyInput(state, polo.id, { tx: 0, ty: 0, turbo: false });
+    events = tick(state, TUNING.replyDelaySeconds); // now past replyDue
+    const replies = events.filter((e) => e.type === 'reply');
+    expect(replies).toHaveLength(2); // 3 players, 1 marco
+    const his = replies.find((r) => r.type === 'reply' && r.playerId === polo.id)!;
+    expect(his).toMatchObject({ x: polo.x, y: polo.y });
+    expect(tick(state, 0.5)).toEqual([]); // never a second volley
   });
 });
