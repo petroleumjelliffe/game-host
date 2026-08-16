@@ -12,6 +12,7 @@ import {
   MIN_PLAYERS,
   TUNING,
   type GameEvent,
+  type GameEventEnvelope,
 } from '../protocol/game.js';
 import { snapshotFor } from './snapshot.js';
 import { applyInput, tryCall } from './sim/sim.js';
@@ -45,7 +46,30 @@ export function createGameHandlers(
   }
 
   function emitEvents(room: MarcoPoloRoom, events: GameEvent[]): void {
-    for (const ev of events) io.to(room.id).emit(GAME_SERVER_EVENTS.event, ev);
+    for (const ev of events) {
+      io.to(room.id).emit(GAME_SERVER_EVENTS.event, {
+        roomId: room.id,
+        event: ev,
+      } satisfies GameEventEnvelope);
+    }
+  }
+
+  function startLoop(room: MarcoPoloRoom): void {
+    if (loops.has(room.id)) return;
+    loops.set(
+      room.id,
+      setInterval(() => {
+        emitEvents(room, stepRound(room, tickMs / 1000));
+        broadcastSnapshots(room);
+        // The round just ended: one final snapshot/event pair already went
+        // out above (so clients render the final positions plus the
+        // betweenRounds phase) — now pause until nextRound restarts us.
+        if (room.between) {
+          clearInterval(loops.get(room.id));
+          loops.delete(room.id);
+        }
+      }, tickMs),
+    );
   }
 
   function begin(room: MarcoPoloRoom): void {
@@ -63,13 +87,7 @@ export function createGameHandlers(
     emitEvents(room, [startMatch(room)]);
     wiring.broadcastRoster(room);
     broadcastSnapshots(room);
-    loops.set(
-      room.id,
-      setInterval(() => {
-        emitEvents(room, stepRound(room, tickMs / 1000));
-        broadcastSnapshots(room);
-      }, tickMs),
-    );
+    startLoop(room);
   }
 
   function seat(room: MarcoPoloRoom, playerId: string): void {
@@ -110,6 +128,7 @@ export function createGameHandlers(
       if (ev) {
         emitEvents(found.room, [ev]);
         broadcastSnapshots(found.room);
+        startLoop(found.room);
       }
     });
 

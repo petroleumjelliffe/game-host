@@ -3,7 +3,7 @@ import type { LobbyConnection } from '../../../vendor/lobby/client/connection';
 import {
   GAME_CLIENT_EVENTS,
   GAME_SERVER_EVENTS,
-  type GameEvent,
+  type GameEventEnvelope,
   type InputMessage,
   type StateMessage,
 } from '../../../protocol/game';
@@ -18,7 +18,7 @@ export interface GameSession {
   nextRound(): void;
 }
 
-export function useGameSession(conn: LobbyConnection): GameSession {
+export function useGameSession(conn: LobbyConnection, roomId: string): GameSession {
   const [session, setSession] = useState<SessionState>(initialSession);
   const bufferRef = useRef(new SnapshotBuffer());
 
@@ -28,14 +28,20 @@ export function useGameSession(conn: LobbyConnection): GameSession {
       bufferRef.current.push(msg.players, Date.now());
       setSession((s) => onState(s, msg));
     };
-    const onEv = (ev: GameEvent) => setSession((s) => onEvent(s, ev, Date.now()));
+    // A socket that joined a previous room stays subscribed to that room's
+    // socket.io channel (the vendor lobby never leaves it), so envelopes
+    // from a stale room must be dropped here rather than trusted blind.
+    const onEv = (env: GameEventEnvelope) => {
+      if (env.roomId !== roomId) return;
+      setSession((s) => onEvent(s, env.event, Date.now()));
+    };
     sock.on(GAME_SERVER_EVENTS.state, onSt);
     sock.on(GAME_SERVER_EVENTS.event, onEv);
     return () => {
       sock.off(GAME_SERVER_EVENTS.state, onSt);
       sock.off(GAME_SERVER_EVENTS.event, onEv);
     };
-  }, [conn]);
+  }, [conn, roomId]);
 
   const sendInput = useCallback(
     (msg: InputMessage) => conn.socket.emit(GAME_CLIENT_EVENTS.input, msg),

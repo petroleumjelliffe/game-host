@@ -10,7 +10,7 @@ export function RoomScreen({ roomId }: { roomId: string }) {
   const conn = connection();
   const lobby = useLobbyRoom(roomId, conn, identity);
   const view = lobbyView(lobby, { capacity: MAX_PLAYERS, minPlayers: MIN_PLAYERS });
-  const game = useGameSession(conn);
+  const game = useGameSession(conn, roomId);
 
   if (view.terminal === 'gone')
     return <main className="notice">This pool has drained. <a href="#/">Start a new one</a></main>;

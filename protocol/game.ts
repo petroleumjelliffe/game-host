@@ -82,6 +82,17 @@ export type GameEvent =
       scores: Record<string, number>;
     };
 
+/**
+ * Wire wrapper for `gameEvent` broadcasts. Socket.io channels are per-room
+ * for lobby purposes, but a socket that hops from room A to room B stays
+ * subscribed to A's channel (the vendor lobby never leaves it) — so events
+ * are tagged with the room they belong to, and receivers filter by roomId.
+ */
+export interface GameEventEnvelope {
+  roomId: string;
+  event: GameEvent;
+}
+
 export const GAME_CLIENT_EVENTS = {
   input: 'input',
   call: 'call',

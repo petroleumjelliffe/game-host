@@ -11,6 +11,7 @@ import {
   GAME_SERVER_EVENTS,
   PROTOCOL_VERSION,
   type GameEvent,
+  type GameEventEnvelope,
   type StateMessage,
 } from '../protocol/game.js';
 import { createAppServer } from './app.js';
@@ -49,11 +50,11 @@ function eventWhere(
       socket.off(GAME_SERVER_EVENTS.event, on);
       reject(new Error('no matching event before timeout'));
     }, timeoutMs);
-    const on = (e: GameEvent) => {
-      if (!pred(e)) return;
+    const on = (env: GameEventEnvelope) => {
+      if (!pred(env.event)) return;
       clearTimeout(timer);
       socket.off(GAME_SERVER_EVENTS.event, on);
-      resolve(e);
+      resolve(env.event);
     };
     socket.on(GAME_SERVER_EVENTS.event, on);
   });
@@ -142,8 +143,24 @@ describe('over the wire', () => {
     const reply = (await heardReply) as Extract<GameEvent, { type: 'reply' }>;
     expect(typeof reply.x).toBe('number'); // ripples DO carry positions — that is the game
 
-    // A polo pressing MARCO is ignored.
+    // A polo pressing MARCO is ignored: no call event may reach anyone.
+    // Register right before emitting — marco's own earlier legitimate call
+    // already fired and was consumed above, so only count arrivals after.
+    // Wait out marco's own callCooldown (TUNING.callCooldownSeconds = 5s,
+    // just started by that same earlier call) first: tryCall() rejects any
+    // second call while it's running regardless of who sends it, so testing
+    // immediately would pass even with the marco-only authorization check
+    // deleted — this only becomes a real test of THAT gate once the
+    // cooldown itself can no longer be the thing blocking the polo's call.
+    let spurious = false;
+    const onEv = (env: GameEventEnvelope) => {
+      if (env.event.type === 'call') spurious = true;
+    };
+    marcoSocket.on(GAME_SERVER_EVENTS.event, onEv);
+    await new Promise((r) => setTimeout(r, 5300));
     poloSocket.emit(GAME_CLIENT_EVENTS.call);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 300));
+    marcoSocket.off(GAME_SERVER_EVENTS.event, onEv);
+    expect(spurious).toBe(false);
   }, 15000);
 });
