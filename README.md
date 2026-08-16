@@ -48,6 +48,40 @@ See [`protocol/README.md`](protocol/README.md) — the room shape, the two hooks
 (`onBegin`, `onSeated`), the protocol version, the `appId` namespace, and the
 seat-id space the game supplies.
 
+## The client integration checklist
+
+The client half is headless hooks and callbacks, and its correct *usage
+pattern* is as much a part of the contract as the types are. The second
+consumer rebuilt that pattern from the API surface alone and hit every one of
+these by hand; the third shouldn't have to. The reference integration is
+Acquire's `src/net/connection.ts` — read it whole before writing yours.
+
+- **One connection, module-owned, lazy.** A shared `getConnection()` singleton
+  plus an explicit `closeConnection()`, opened on first use. Shared because
+  the create screen and the room screen are two views of one connection — the
+  server's rejoin shortcut keys on the *socket's own binding*, which is the
+  creator's only claim to their seat until `useLobbyRoom` stores the identity
+  from the `joined` reply. A second socket arrives as a stranger and takes a
+  second seat.
+- **Never close it in a component lifecycle.** React's StrictMode mounts,
+  unmounts and remounts every component in development; a connection closed in
+  an effect cleanup dies on that pass and nothing rebuilds it — `close()` is
+  `socket.disconnect()`, which is permanent. The symptom is a room stuck on
+  its connecting state with an empty roster and no error anywhere. Close only
+  on an explicit leave.
+- **Subscribe to `rejected` everywhere you act.** Failure on this wire is
+  opt-in: every refusal arrives on that channel or not at all, and a channel
+  left unread is a refusal shown to no one. That includes the messages
+  `useLobbyRoom` exposes but deliberately ranks below the roster ("only the
+  host may begin") — they reach nobody unless a screen carries them.
+- **Test the composition layer.** The no-mock rule here covers
+  `connection.ts` — a stubbed-socket test of it restates the file. It does
+  not cover *your* glue: lifecycle (how many sockets get made, who closes
+  them) and wiring (which channels are subscribed) test fine against a fake
+  handed through an injectable `connect`, exactly as Acquire's page tests do.
+  Every by-hand bug the second consumer found lived in glue its tests had
+  excused.
+
 ## Tests
 
 There is no build tooling here on purpose: this repo is compiled by its
