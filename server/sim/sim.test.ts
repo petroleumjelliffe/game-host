@@ -152,10 +152,10 @@ describe('timeout', () => {
 });
 
 describe('the call', () => {
-  it('emits a call at marco position and enters cooldown', () => {
+  it('emits a lead call ping at marco position and enters cooldown', () => {
     const state = createRound(ids, 'p1', () => 0.5);
     const ev = tryCall(state);
-    expect(ev).toEqual({ type: 'call', x: 0, y: 0 });
+    expect(ev).toEqual({ type: 'call', playerId: 'p1', x: 0, y: 0, lead: true });
     expect(state.callCooldown).toBe(TUNING.callCooldownSeconds);
     expect(tryCall(state)).toBeNull(); // still cooling down
   });
@@ -167,20 +167,82 @@ describe('the call', () => {
     expect(tryCall(state)).not.toBeNull();
   });
 
-  it('forces every polo to reply after the delay, once, at their position then', () => {
+  it('keeps pinging the call from marco moving position through the burst', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    applyInput(state, 'p1', { tx: 0.9, ty: 0, turbo: false });
+    tryCall(state);
+    const pings: { x: number; lead: boolean }[] = [];
+    // burst window: non-lead pings at 0.25, 0.5, 0.75
+    for (let i = 0; i < 16; i++) {
+      for (const e of tick(state, 0.05)) {
+        if (e.type === 'call') pings.push({ x: e.x, lead: e.lead });
+      }
+    }
+    expect(pings).toHaveLength(TUNING.replyBurstSeconds / TUNING.pingIntervalSeconds - 1);
+    expect(pings.every((p) => !p.lead)).toBe(true);
+    // marco swims +x the whole time, so each ping is stamped further along
+    expect(pings[0]!.x).toBeGreaterThan(0);
+    expect(pings[1]!.x).toBeGreaterThan(pings[0]!.x);
+    expect(pings[2]!.x).toBeGreaterThan(pings[1]!.x);
+  });
+
+  it('forces every polo into a reply burst that tracks them as they move', () => {
     const state = createRound(ids, 'p1', () => 0.5);
     tryCall(state);
     let events = tick(state, TUNING.replyDelaySeconds / 2);
-    expect(events).toEqual([]);
-    // a polo moves during the delay — the reply must use the later position
+    expect(events.filter((e) => e.type === 'reply')).toEqual([]);
+    // a polo moves during the delay — every ping must use their position then
     const polo = state.players.find((p) => p.role === 'polo')!;
     applyInput(state, polo.id, { tx: 0, ty: 0, turbo: false });
-    events = tick(state, TUNING.replyDelaySeconds); // now past replyDue
-    const replies = events.filter((e) => e.type === 'reply');
-    expect(replies).toHaveLength(2); // 3 players, 1 marco
-    const his = replies.find((r) => r.type === 'reply' && r.playerId === polo.id)!;
-    expect(his).toMatchObject({ x: polo.x, y: polo.y });
-    expect(tick(state, 0.5)).toEqual([]); // never a second volley
+
+    const volleys: { x: number; lead: boolean }[] = [];
+    for (let i = 0; i < 40; i++) {
+      for (const e of tick(state, 0.05)) {
+        if (e.type === 'reply' && e.playerId === polo.id) volleys.push({ x: e.x, lead: e.lead });
+      }
+    }
+    // 4 pings per burst (1s / 0.25s), lead flag only on the first
+    expect(volleys).toHaveLength(TUNING.replyBurstSeconds / TUNING.pingIntervalSeconds);
+    expect(volleys.map((v) => v.lead)).toEqual([true, false, false, false]);
+    // the polo swims toward the origin, so successive pings track inward
+    expect(Math.abs(volleys[3]!.x)).toBeLessThan(Math.abs(volleys[0]!.x));
+    // both polos ping in each volley
+    expect(tick(state, 2)).toEqual([]); // burst spent — silence after
+  });
+});
+
+describe('turbo splashes', () => {
+  it('a boosting polo splashes at the splash interval, at their moving position', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    const polo = state.players.find((p) => p.role === 'polo')!;
+    applyInput(state, polo.id, { tx: 0, ty: 0, turbo: true });
+    const splashes: { x: number; playerId: string }[] = [];
+    for (let i = 0; i < 20; i++) {
+      for (const e of tick(state, 0.05)) {
+        if (e.type === 'splash') splashes.push({ x: e.x, playerId: e.playerId });
+      }
+    }
+    // 1s of boosting → splash at start plus every splashIntervalSeconds (0.4): 3 splashes
+    expect(splashes).toHaveLength(3);
+    expect(splashes.every((s) => s.playerId === polo.id)).toBe(true);
+    expect(Math.abs(splashes[2]!.x)).toBeLessThan(Math.abs(splashes[0]!.x)); // tracks movement
+  });
+
+  it('stops splashing when turbo is released or empty, and marco never splashes', () => {
+    const state = createRound(ids, 'p1', () => 0.5);
+    const polo = state.players.find((p) => p.role === 'polo')!;
+    applyInput(state, polo.id, { tx: 0, ty: 0, turbo: true });
+    tick(state, 0.05); // first splash
+    applyInput(state, polo.id, { tx: 0, ty: 0, turbo: false });
+    for (let i = 0; i < 20; i++) {
+      expect(tick(state, 0.05).filter((e) => e.type === 'splash')).toEqual([]);
+    }
+
+    // marco boosting is silent — he is the seeker
+    applyInput(state, 'p1', { tx: 0.5, ty: 0, turbo: true });
+    for (let i = 0; i < 20; i++) {
+      expect(tick(state, 0.05).filter((e) => e.type === 'splash')).toEqual([]);
+    }
   });
 });
 

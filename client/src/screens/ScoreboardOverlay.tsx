@@ -1,4 +1,5 @@
 import type { GameEvent, StateMessage } from '../../../protocol/game';
+import { playerColor } from '../render/colors';
 
 export function ScoreboardOverlay({
   snapshot,
@@ -28,6 +29,7 @@ export function ScoreboardOverlay({
       <ol className="scores">
         {rows.map((p) => (
           <li key={p.id}>
+            <span className="chip" style={{ background: playerColor(p.id) }} />
             {p.name} — {snapshot.scores[p.id] ?? 0}
           </li>
         ))}

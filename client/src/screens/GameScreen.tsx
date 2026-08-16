@@ -16,6 +16,9 @@ export function GameScreen({ game, view, youId }: { game: GameSession; view: Lob
   const inputRef = useRef<{ tx: number | null; ty: number | null; turbo: boolean; lastSent: number }>(
     { tx: null, ty: null, turbo: false, lastSent: 0 },
   );
+  // Only the pointer that touched the water steers — a second finger on the
+  // MARCO or TURBO buttons must not hijack or interrupt the swim gesture.
+  const steerPointerRef = useRef<number | null>(null);
 
   const snapshot = game.session.latest!;
   const you = snapshot.you;
@@ -60,7 +63,9 @@ export function GameScreen({ game, view, youId }: { game: GameSession; view: Lob
       const g = gameRef.current;
       const snap = g.session.latest;
       if (snap) {
-        const size = canvas.width;
+        // Backing store is devicePixelRatio-scaled; drawScene works in CSS px.
+        const size = canvas.width / (window.devicePixelRatio || 1);
+        ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
         drawScene(ctx, {
           size,
           youId,
@@ -77,6 +82,7 @@ export function GameScreen({ game, view, youId }: { game: GameSession; view: Lob
   }, [youId]);
 
   const side = Math.min(window.innerWidth, window.innerHeight - 120);
+  const dpr = window.devicePixelRatio || 1;
 
   return (
     <main className="game">
@@ -88,20 +94,46 @@ export function GameScreen({ game, view, youId }: { game: GameSession; view: Lob
       </div>
       <canvas
         ref={canvasRef}
-        width={side}
-        height={side}
+        width={Math.round(side * dpr)}
+        height={Math.round(side * dpr)}
         style={{ width: side, height: side, touchAction: 'none' }}
-        onPointerDown={(e) => setTarget(e, false)}
-        onPointerMove={(e) => e.buttons > 0 && setTarget(e, false)}
-        onPointerUp={(e) => setTarget(e, true)}
-        onPointerCancel={(e) => setTarget(e, true)}
+        onPointerDown={(e) => {
+          if (steerPointerRef.current !== null) return;
+          steerPointerRef.current = e.pointerId;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // A pointer released before the handler ran can't be captured;
+            // steering still works, moves just aren't glued to the canvas.
+          }
+          setTarget(e, false);
+        }}
+        onPointerMove={(e) => {
+          if (e.pointerId !== steerPointerRef.current) return;
+          setTarget(e, false);
+        }}
+        onPointerUp={(e) => {
+          if (e.pointerId !== steerPointerRef.current) return;
+          steerPointerRef.current = null;
+          setTarget(e, true);
+        }}
+        onPointerCancel={(e) => {
+          if (e.pointerId !== steerPointerRef.current) return;
+          steerPointerRef.current = null;
+          setTarget(e, true);
+        }}
       />
       <div className="hud-bottom">
         {isMarco && (
           <button
             className="marco-btn"
             disabled={(you.callCooldown ?? 0) > 0}
-            onClick={() => gameRef.current.call()}
+            // pointerdown, not click: it must fire from a second finger while
+            // the first is mid-drag on the water.
+            onPointerDown={(e) => {
+              e.preventDefault();
+              gameRef.current.call();
+            }}
           >
             {you.callCooldown && you.callCooldown > 0
               ? `MARCO… ${Math.ceil(you.callCooldown)}`

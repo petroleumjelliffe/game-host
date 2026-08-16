@@ -21,6 +21,12 @@ export const TUNING = {
   endRadiusFraction: 0.35,
   callCooldownSeconds: 5,
   replyDelaySeconds: 1,
+  /** A shout is not instant: pings keep coming for this long, tracking the shouter. */
+  replyBurstSeconds: 1,
+  /** Interval between pings within a burst (call and reply alike). */
+  pingIntervalSeconds: 0.25,
+  /** A boosting polo splashes this often — sprinting costs stealth. */
+  splashIntervalSeconds: 0.4,
   tickHz: 20,
 } as const;
 
@@ -71,8 +77,17 @@ export interface StateMessage {
  * marks where the sound happened, and does not track the player afterward.
  */
 export type GameEvent =
-  | { type: 'call'; x: number; y: number }
-  | { type: 'reply'; playerId: string; x: number; y: number }
+  /**
+   * One ping of a shout. A call or reply is a ~1s BURST of pings at
+   * `pingIntervalSeconds`, each stamped where the shouter is at that moment —
+   * rings trail a moving swimmer, and fleeing during a reply leaks a path,
+   * not a point. `lead` marks the burst's first ping (the one that draws the
+   * word); `playerId` names the shouter so clients can color the voice.
+   */
+  | { type: 'call'; playerId: string; x: number; y: number; lead: boolean }
+  | { type: 'reply'; playerId: string; x: number; y: number; lead: boolean }
+  /** A boosting polo's wake — wordless, and deliberately audible to Marco. */
+  | { type: 'splash'; playerId: string; x: number; y: number }
   | { type: 'roundStart'; round: number; marcoId: string }
   | {
       type: 'roundEnd';

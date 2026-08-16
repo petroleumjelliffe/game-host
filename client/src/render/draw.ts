@@ -3,8 +3,9 @@
 // them), so the branches here are styling, not information control.
 
 import { TUNING, type StateMessage } from '../../../protocol/game';
-import { RIPPLE_MS, type Ripple } from '../game/sessionState';
+import { RIPPLE_MS, SPLASH_MS, type Ripple } from '../game/sessionState';
 import { worldScale, worldToScreen } from '../game/camera';
+import { playerColor, playerRgba } from './colors';
 
 export interface SceneOpts {
   size: number;
@@ -35,36 +36,43 @@ export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOpts): void {
   ctx.arc(center.x, center.y, worldScale(snapshot.ringRadius, size), 0, Math.PI * 2);
   ctx.stroke();
 
-  // ripples
+  // ripples — one ring per ping, colored by whoever made the sound.
+  // Successive pings of a burst are stamped along the shouter's path, so a
+  // moving swimmer trails rings; splashes are smaller and die faster.
   for (const r of o.ripples) {
-    const age = (o.now - r.at) / RIPPLE_MS; // 0..1
+    const life = r.kind === 'splash' ? SPLASH_MS : RIPPLE_MS;
+    const age = (o.now - r.at) / life; // 0..1
     if (age >= 1) continue;
     const at = worldToScreen(r.x, r.y, size);
     const alpha = 1 - age;
-    ctx.strokeStyle =
-      r.word === 'marco' ? `rgba(255,110,110,${alpha})` : `rgba(140,235,255,${alpha})`;
-    ctx.lineWidth = 2 + 2 * (1 - age);
-    for (const lag of [0, 0.18, 0.36]) {
-      const a = age - lag;
-      if (a <= 0) continue;
+    ctx.strokeStyle = playerRgba(r.playerId, alpha);
+    if (r.kind === 'splash') {
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(at.x, at.y, worldScale(0.06 + a * 0.5, size), 0, Math.PI * 2);
+      ctx.arc(at.x, at.y, worldScale(0.025 + age * 0.12, size), 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.lineWidth = 2 + 2 * (1 - age);
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, worldScale(0.06 + age * 0.5, size), 0, Math.PI * 2);
       ctx.stroke();
     }
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.font = `${Math.round(size / 22)}px system-ui`;
-    ctx.textAlign = 'center';
-    ctx.fillText(r.word, at.x, at.y - worldScale(0.09, size) - age * 14);
+    if (r.word) {
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.font = `${Math.round(size / 22)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText(r.word, at.x, at.y - worldScale(0.09, size) - age * 14);
+    }
   }
 
-  // players — whatever positions the server let this viewer have
+  // players — whatever positions the server let this viewer have. Identity
+  // is the fill color; the marco role reads as a red halo on top of it.
   for (const p of snapshot.players) {
     const pos = o.positions.get(p.id);
     if (!pos) continue;
     const at = worldToScreen(pos.x, pos.y, size);
     const r = worldScale(TUNING.avatarRadius, size);
-    const isMarco = p.id === snapshot.marcoId;
-    ctx.fillStyle = isMarco ? '#ff6e6e' : p.id === o.youId ? '#ffe27a' : '#8cebff';
+    ctx.fillStyle = playerColor(p.id);
     ctx.beginPath();
     ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -73,11 +81,18 @@ export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOpts): void {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+    if (p.id === snapshot.marcoId) {
+      ctx.strokeStyle = '#ff5a5a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, r + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     if (!marcoView) {
-      ctx.fillStyle = 'rgba(232,241,248,0.8)';
+      ctx.fillStyle = playerRgba(p.id, 0.9);
       ctx.font = `${Math.round(size / 30)}px system-ui`;
       ctx.textAlign = 'center';
-      ctx.fillText(p.name, at.x, at.y + r + 14);
+      ctx.fillText(p.name, at.x, at.y + r + 16);
     }
   }
 }

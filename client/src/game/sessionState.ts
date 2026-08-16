@@ -4,9 +4,15 @@
 import type { GameEvent, StateMessage } from '../../../protocol/game';
 
 export const RIPPLE_MS = 2000;
+/** Splashes are quieter than voices: smaller rings, faster fade. */
+export const SPLASH_MS = 1000;
 
 export interface Ripple {
-  word: 'marco' | 'polo';
+  kind: 'call' | 'reply' | 'splash';
+  /** Who made the sound — the client colors the voice by it. */
+  playerId: string;
+  /** Drawn only on a burst's lead ping; trailing pings are bare rings. */
+  word: 'marco' | 'polo' | null;
   x: number;
   y: number;
   at: number;
@@ -24,12 +30,30 @@ export function onState(s: SessionState, msg: StateMessage): SessionState {
   return { ...s, latest: msg };
 }
 
+function addRipple(s: SessionState, ripple: Ripple, now: number): SessionState {
+  return { ...s, ripples: [...liveRipples(s.ripples, now), ripple] };
+}
+
 export function onEvent(s: SessionState, ev: GameEvent, now: number): SessionState {
   switch (ev.type) {
     case 'call':
-      return { ...s, ripples: [...liveRipples(s.ripples, now), { word: 'marco', x: ev.x, y: ev.y, at: now }] };
+      return addRipple(
+        s,
+        { kind: 'call', playerId: ev.playerId, word: ev.lead ? 'marco' : null, x: ev.x, y: ev.y, at: now },
+        now,
+      );
     case 'reply':
-      return { ...s, ripples: [...liveRipples(s.ripples, now), { word: 'polo', x: ev.x, y: ev.y, at: now }] };
+      return addRipple(
+        s,
+        { kind: 'reply', playerId: ev.playerId, word: ev.lead ? 'polo' : null, x: ev.x, y: ev.y, at: now },
+        now,
+      );
+    case 'splash':
+      return addRipple(
+        s,
+        { kind: 'splash', playerId: ev.playerId, word: null, x: ev.x, y: ev.y, at: now },
+        now,
+      );
     case 'roundEnd':
       return { ...s, roundEnd: ev };
     case 'roundStart':
@@ -38,5 +62,5 @@ export function onEvent(s: SessionState, ev: GameEvent, now: number): SessionSta
 }
 
 export function liveRipples(ripples: Ripple[], now: number): Ripple[] {
-  return ripples.filter((r) => now - r.at < RIPPLE_MS);
+  return ripples.filter((r) => now - r.at < (r.kind === 'splash' ? SPLASH_MS : RIPPLE_MS));
 }

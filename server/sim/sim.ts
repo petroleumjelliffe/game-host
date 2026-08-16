@@ -4,7 +4,10 @@
 
 import { TUNING, type GameEvent, type Role } from '../../protocol/game.js';
 
-export type SimEvent = Extract<GameEvent, { type: 'call' | 'reply' }>;
+export type SimEvent = Extract<GameEvent, { type: 'call' | 'reply' | 'splash' }>;
+
+/** Pings per shout burst — the lead ping plus the trailing ones. */
+const PINGS_PER_BURST = TUNING.replyBurstSeconds / TUNING.pingIntervalSeconds;
 
 export interface SimPlayer {
   id: string;
@@ -16,6 +19,8 @@ export interface SimPlayer {
   turboHeld: boolean;
   /** 0..1 */
   turbo: number;
+  /** `elapsed` at which this polo's next boost splash may fire. */
+  nextSplashAt: number;
 }
 
 export interface SimState {
@@ -25,8 +30,16 @@ export interface SimState {
   elapsed: number;
   /** Seconds until MARCO may be called again; 0 = ready. */
   callCooldown: number;
-  /** `elapsed` at which the forced polo replies fire, or null. */
-  replyDue: number | null;
+  /**
+   * A shout is a burst: the lead ping fires from `tryCall`, then trailing
+   * call pings track marco, and `replyDelaySeconds` later every polo pings
+   * `PINGS_PER_BURST` times, each stamped where they are at that moment.
+   * The cooldown (5s) outlasts the burst (<2s), so bursts never overlap.
+   */
+  nextCallPingAt: number | null;
+  callPingsLeft: number;
+  nextReplyPingAt: number | null;
+  replyPingsLeft: number;
   over:
     | { reason: 'catch'; caughtId: string }
     | { reason: 'timeout'; caughtId: null }
@@ -46,13 +59,23 @@ export function createRound(
   rng: () => number = Math.random,
 ): SimState {
   const players = playerIds.map((id): SimPlayer => {
-    const base = { id, tx: null, ty: null, turboHeld: false, turbo: 1 };
+    const base = { id, tx: null, ty: null, turboHeld: false, turbo: 1, nextSplashAt: 0 };
     if (id === marcoId) return { ...base, role: 'marco', x: 0, y: 0 };
     const angle = rng() * 2 * Math.PI;
     const r = 0.4 + 0.5 * rng();
     return { ...base, role: 'polo', x: r * Math.cos(angle), y: r * Math.sin(angle) };
   });
-  return { players, marcoId, elapsed: 0, callCooldown: 0, replyDue: null, over: null };
+  return {
+    players,
+    marcoId,
+    elapsed: 0,
+    callCooldown: 0,
+    nextCallPingAt: null,
+    callPingsLeft: 0,
+    nextReplyPingAt: null,
+    replyPingsLeft: 0,
+    over: null,
+  };
 }
 
 /**
@@ -78,8 +101,11 @@ export function tryCall(state: SimState): SimEvent | null {
   if (state.over || state.callCooldown > 0) return null;
   const marco = state.players.find((p) => p.id === state.marcoId)!;
   state.callCooldown = TUNING.callCooldownSeconds;
-  state.replyDue = state.elapsed + TUNING.replyDelaySeconds;
-  return { type: 'call', x: marco.x, y: marco.y };
+  state.nextCallPingAt = state.elapsed + TUNING.pingIntervalSeconds;
+  state.callPingsLeft = PINGS_PER_BURST - 1; // the lead ping is returned below
+  state.nextReplyPingAt = state.elapsed + TUNING.replyDelaySeconds;
+  state.replyPingsLeft = PINGS_PER_BURST;
+  return { type: 'call', playerId: state.marcoId, x: marco.x, y: marco.y, lead: true };
 }
 
 export function tick(state: SimState, dt: number): SimEvent[] {
@@ -114,13 +140,30 @@ export function tick(state: SimState, dt: number): SimEvent[] {
       p.x *= maxLen / len;
       p.y *= maxLen / len;
     }
+
+    // Sprinting costs stealth: a boosting polo leaves an audible wake.
+    if (p.role === 'polo' && boosting && state.elapsed >= p.nextSplashAt) {
+      events.push({ type: 'splash', playerId: p.id, x: p.x, y: p.y });
+      p.nextSplashAt = state.elapsed + TUNING.splashIntervalSeconds;
+    }
   }
 
-  if (state.replyDue !== null && state.elapsed >= state.replyDue) {
-    state.replyDue = null;
+  while (state.nextCallPingAt !== null && state.elapsed >= state.nextCallPingAt) {
+    const marco = state.players.find((p) => p.id === state.marcoId)!;
+    events.push({ type: 'call', playerId: state.marcoId, x: marco.x, y: marco.y, lead: false });
+    state.callPingsLeft -= 1;
+    state.nextCallPingAt =
+      state.callPingsLeft > 0 ? state.nextCallPingAt + TUNING.pingIntervalSeconds : null;
+  }
+
+  while (state.nextReplyPingAt !== null && state.elapsed >= state.nextReplyPingAt) {
+    const lead = state.replyPingsLeft === PINGS_PER_BURST;
     for (const p of state.players) {
-      if (p.role === 'polo') events.push({ type: 'reply', playerId: p.id, x: p.x, y: p.y });
+      if (p.role === 'polo') events.push({ type: 'reply', playerId: p.id, x: p.x, y: p.y, lead });
     }
+    state.replyPingsLeft -= 1;
+    state.nextReplyPingAt =
+      state.replyPingsLeft > 0 ? state.nextReplyPingAt + TUNING.pingIntervalSeconds : null;
   }
 
   const marco = state.players.find((p) => p.id === state.marcoId)!;
