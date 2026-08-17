@@ -10,7 +10,7 @@ Design: `docs/superpowers/specs/2026-08-14-marco-polo-design.md`.
 ## Run it
 
     npm install
-    npm run dev
+    npm run dev:all
 
 The server prints a LAN URL (`http://<your-ip>:5173`); phones on the same
 Wi-Fi open it, one creates a pool, the rest scan the QR. 3–8 players.

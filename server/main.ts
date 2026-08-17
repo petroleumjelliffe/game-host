@@ -19,7 +19,7 @@ httpServer.listen(port, () => {
     for (const a of addrs ?? []) {
       if (a.family === 'IPv4' && !a.internal) {
         console.log(`  phones (prod build): http://${a.address}:${port}`);
-        console.log(`  phones (npm run dev): http://${a.address}:<the port Vite prints>`);
+        console.log(`  phones (npm run dev:all): http://${a.address}:<the port Vite prints>`);
       }
     }
   }

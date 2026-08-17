@@ -8,10 +8,12 @@
   },
   "scripts": {
     "test": "vitest run",
-    "dev": "concurrently -k \"tsx watch server/main.ts\" \"vite\"",
+    "dev": "vite",
     "build": "vite build",
     "start": "tsx server/main.ts",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p client"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p client",
+    "dev:server": "tsx watch server/main.ts",
+    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:server\""
   },
   "keywords": [],
   "author": "",
