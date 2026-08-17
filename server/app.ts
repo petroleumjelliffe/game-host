@@ -17,7 +17,13 @@ export function createAppServer(): {
   stop(): Promise<void>;
 } {
   const app = express();
-  app.use(express.static(join(dirname(fileURLToPath(import.meta.url)), '../client/dist')));
+  // The client is built with base '/marcopolo/' (the proxy path the
+  // game-host repo's Caddyfile routes), so it's mounted there — and at the
+  // root too, so hitting the bare port still lands on the game: `/` serves
+  // index.html, whose asset URLs resolve via the prefixed mount.
+  const dist = join(dirname(fileURLToPath(import.meta.url)), '../client/dist');
+  app.use('/marcopolo', express.static(dist));
+  app.use(express.static(dist));
   const httpServer = createServer(app);
   const io = new SocketServer(httpServer);
 

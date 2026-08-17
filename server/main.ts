@@ -11,16 +11,30 @@ try {
   // no .env.local — fall through to the shell env or the default below
 }
 
-const port = Number(process.env.PORT ?? 3001);
-const { httpServer } = createAppServer();
+// 4003 is Marco Polo's slot in the cross-game port registry (the game-host
+// repo's PORTS.md); a shell/Render PORT still wins, per the loadEnvFile note.
+const port = Number(process.env.PORT ?? 4003);
+const { httpServer, stop } = createAppServer();
 httpServer.listen(port, () => {
   console.log(`marco-polo listening on ${port}`);
   for (const addrs of Object.values(networkInterfaces())) {
     for (const a of addrs ?? []) {
       if (a.family === 'IPv4' && !a.internal) {
-        console.log(`  phones (prod build): http://${a.address}:${port}`);
-        console.log(`  phones (npm run dev:all): http://${a.address}:<the port Vite prints>`);
+        console.log(`  phones (prod build): http://${a.address}:${port}/marcopolo/`);
+        console.log(`  phones (npm run dev:all): http://${a.address}:7933/marcopolo/`);
       }
     }
   }
 });
+
+// launchd/`brew services stop` speak SIGTERM, Ctrl-C speaks SIGINT. Nothing
+// is persisted here, so stop() is only an orderly socket close; a second
+// signal exits immediately.
+let closing = false;
+const shutdown = (): void => {
+  if (closing) process.exit(1);
+  closing = true;
+  void stop().then(() => { process.exit(0); });
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
