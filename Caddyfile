@@ -52,6 +52,7 @@ http:// {
 	# --- The menu: everything else is the flat game list -------------------
 	# `root` needs an absolute path when caddy runs as a service, which
 	# couples this file to where the repo is cloned — see README.md.
+	# {env.HOME} resolves at runtime, so no username is baked in here.
 	handle {
 		root * {env.HOME}/Developer/game-host/menu
 		file_server
