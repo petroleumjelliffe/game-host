@@ -36,25 +36,41 @@ http:// {
 		redir * /railbaron/
 	}
 
-	# --- Acquire: uncomment when its client serves under /acquire ----------
-	# handle /acquire/* {
-	# 	reverse_proxy localhost:7932
-	# }
-	# handle /acquire {
-	# 	redir * /acquire/
-	# }
+	# --- Acquire: one process on 4002 (start-acquire.sh). The path is the ---
+	# client's built base — its GitHub Pages repo path — because assets are
+	# requested under it and nothing rewrites them; the menu link hides it.
+	# (No hot-reload-behind-proxy option here: Acquire's dev base is '/'.)
+	handle /acquire-startups-m1/* {
+		reverse_proxy localhost:4002
+	}
+	handle /acquire-startups-m1 {
+		redir * /acquire-startups-m1/
+	}
 
-	# --- Marco Polo: uncomment when it exists ------------------------------
-	# handle /marcopolo/* {
-	# 	reverse_proxy localhost:7933
-	# }
+	# --- Marco Polo: one process on 4003 (start-marcopolo.sh) --------------
+	handle /marcopolo/* {
+		reverse_proxy localhost:4003
+	}
+	handle /marcopolo {
+		redir * /marcopolo/
+	}
+	# Marco Polo's client is origin-relative — io(window.location.origin),
+	# default socket path — so its sockets arrive here at the root
+	# /socket.io. Unclaimed by the other games (their clients connect
+	# straight to their server ports), so Marco Polo holds it until the
+	# origin-relative spec gives every game its own socket path.
+	handle /socket.io/* {
+		reverse_proxy localhost:4003
+	}
 
 	# --- The menu: everything else is the flat game list -------------------
-	# `root` needs an absolute path when caddy runs as a service, which
-	# couples this file to where the repo is cloned — see README.md.
-	# {env.HOME} resolves at runtime, so no username is baked in here.
+	# A fixed path, reached through the setup symlink (see README.md) so no
+	# username or clone location is baked in. Not {env.HOME}: Homebrew's
+	# caddy service sets HOME to its own storage dir (/opt/homebrew/var/lib),
+	# so that placeholder works under `caddy run` and silently 404s as a
+	# service — found the hard way 2026-08-17.
 	handle {
-		root * {env.HOME}/Developer/game-host/menu
+		root * /opt/homebrew/etc/game-host/menu
 		file_server
 	}
 }

@@ -17,6 +17,9 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 ```bash
 brew install caddy
 ln -sf ~/Developer/game-host/Caddyfile /opt/homebrew/etc/Caddyfile
+ln -sfn ~/Developer/game-host /opt/homebrew/etc/game-host   # menu root; the
+                               # Caddyfile can't use {env.HOME} — the brew
+                               # service overrides HOME to its storage dir
 brew services start caddy      # or `caddy run --config Caddyfile` to try it
 ```
 
