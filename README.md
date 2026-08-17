@@ -35,7 +35,9 @@ Online games persist on the host machine, one directory per title under
 game's server as an absolute path by its start script:
 
 ```bash
-./start-railbaron.sh    # runs Rail Baron's server with GAMES_DIR=saves/railbaron
+./start-railbaron.sh    # builds Rail Baron's client, then starts its server —
+                        # one process serving pages, assets and sockets on
+                        # 4001, saves in saves/railbaron
 ```
 
 Each game keeps a repo-local relative default so it boots standalone; the

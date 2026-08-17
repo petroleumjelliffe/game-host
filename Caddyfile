@@ -22,9 +22,12 @@
 # Any name this machine answers to on the LAN. `.local` covers the mDNS name
 # through renames; add a real domain here if subdomain routing ever lands.
 http:// {
-	# --- Rail Baron: Vite dev client on 7931 (server runs on 4001) ---------
+	# --- Rail Baron: one process on 4001 serves pages, assets and sockets --
+	# (start-railbaron.sh builds the client and starts the server.)
+	# For hot reload behind the proxy instead, point this at 7931 and run
+	# `npm run dev:all` in the game repo.
 	handle /railbaron/* {
-		reverse_proxy localhost:7931
+		reverse_proxy localhost:4001
 	}
 	handle /railbaron {
 		# The bare `*` matcher is required: redir's first argument is a

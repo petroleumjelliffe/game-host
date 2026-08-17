@@ -11,4 +11,6 @@ export GAMES_DIR
 
 mkdir -p "$GAMES_DIR"
 cd "$RAILBARON"
-exec npm run dev:server
+# `serve` builds the client then starts the server, which hosts pages,
+# assets and sockets from port 4001 as one process.
+exec npm run serve
