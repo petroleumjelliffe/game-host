@@ -13,11 +13,11 @@
 # says '/railbaron' — so nothing strips the prefix: `handle` + `reverse_proxy`
 # pass the path through untouched, and Vite/the router expect exactly that.
 #
-# Sockets deliberately do NOT go through this proxy. Each game's client
-# derives its server address as <page hostname>:<server port>, so socket
-# traffic goes straight to the 400N port on the LAN. Routing it here instead
-# would need the socket.io `path` option plumbed through the shared lobby's
-# connection — not worth it while the ports are reachable anyway.
+# Sockets ride each game's own `handle /<game>/*` route: every game mounts
+# socket.io under its base path (specs/2026-08-17-origin-relative-clients.md,
+# implemented 2026-08-18), so port 80 is the only exposure the games need.
+# The direct 400N ports remain reachable as a LAN convenience, not a
+# requirement.
 
 # Any name this machine answers to on the LAN. `.local` covers the mDNS name
 # through renames; add a real domain here if subdomain routing ever lands.
@@ -53,14 +53,6 @@ http:// {
 	}
 	handle /marcopolo {
 		redir * /marcopolo/
-	}
-	# Marco Polo's client is origin-relative — io(window.location.origin),
-	# default socket path — so its sockets arrive here at the root
-	# /socket.io. Unclaimed by the other games (their clients connect
-	# straight to their server ports), so Marco Polo holds it until the
-	# origin-relative spec gives every game its own socket path.
-	handle /socket.io/* {
-		reverse_proxy localhost:4003
 	}
 
 	# --- The menu: everything else is the flat game list -------------------

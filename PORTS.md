@@ -29,22 +29,22 @@ client 793N (7930 + N).
 The proxy path must equal the client's built base path, because assets are
 requested at `<base>/assets/…` and nothing rewrites them. Acquire's is its
 GitHub Pages path (`basePath.ts`: the repo name), hence the long one — the
-menu link hides it. Marco Polo also claims the root `/socket.io` on the
-proxy: its client is origin-relative (no port anywhere), and since the other
-games' sockets go straight to their ports, the default socket.io path is
-unclaimed at the front door. Retired when
-`specs/2026-08-17-origin-relative-clients.md` gives every game its own
-socket path.
+menu link hides it. Every game's sockets ride `/<game>/socket.io` through
+the front door (`specs/2026-08-17-origin-relative-clients.md`, implemented
+2026-08-18), so ports are machine-only knowledge now — no client names one.
+The one exception: a deployed build's `VITE_SERVER_URL` override, which
+names a whole origin, not a port.
 
 Known consumers, kept in agreement by hand:
 
 - `Caddyfile`, this repo — every number
-- Rail Baron: `src/config.ts` `DEFAULT_SERVER_PORT`, `server/index.ts` boot
-  default (both 4001), `vite.config.ts` `server.port` (7931)
-- Acquire: `server/index.ts` boot default and `src/net/connection.ts`
-  `DEV_SERVER_PORT` (both 4002), `vite.config.ts` `server.port` (7932).
-  Render is untouched: it injects `PORT`, and the Pages client sets
-  `VITE_SERVER_URL`, which wins over derivation.
-- Marco Polo: `server/main.ts` default and `vite.config.ts` `serverPort`
-  fallback (both 4003), `vite.config.ts` `server.port` (7933). No saves —
-  nothing is persisted server-side.
+- Rail Baron: `server/index.ts` boot default (4001), `vite.config.ts`
+  `server.port` (7931) and socket-proxy target (4001 — build tooling, the
+  port's only client-adjacent appearance)
+- Acquire: `server/index.ts` boot default (4002), `vite.config.ts`
+  `server.port` (7932) and socket-proxy targets (4002). Render is untouched:
+  it injects `PORT`, the Pages client sets `VITE_SERVER_URL` (which wins),
+  and the service sets `SOCKET_PATH=/socket.io`.
+- Marco Polo: `server/main.ts` default (4003), `vite.config.ts` `serverPort`
+  fallback and socket-proxy target (4003), `vite.config.ts` `server.port`
+  (7933). No saves — nothing is persisted server-side.

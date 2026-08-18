@@ -1,6 +1,6 @@
 # Origin-relative clients: no ports in game code
 
-**Status:** design, not yet implemented.
+**Status:** implemented 2026-08-18.
 **Home:** this repo, because the goal is a hosting property — every game
 behind the front door with zero addressing knowledge — even though the
 enforcing code change lands in the shared lobby. Written 2026-08-17, after
@@ -149,3 +149,23 @@ Per game, after adoption:
 4. The lobby's own wire tests (`clientOverWire`-style) run once with
    `socketPath` set, so the option is proven against a real server, not
    assumed from socket.io's docs.
+
+## As built (2026-08-18)
+
+Deltas from the design above:
+
+- **Render: `SOCKET_PATH` env override, not dual mounts.** socket.io mounts
+  at one path per `Server` instance, so "mount both" became: each server's
+  boot seam reads `SOCKET_PATH`, defaulting to `${BASE_PATH}/socket.io`. A
+  client given `VITE_SERVER_URL` keeps socket.io's default path, so Render
+  needed only the env var (`SOCKET_PATH=/socket.io` on the service, set
+  before any deploy — zero skew). Marco Polo skipped the knob entirely: no
+  remote deploy.
+- **Prefixed `/health` twins landed everywhere**, including Marco Polo's
+  first health route.
+- **Acquire's dev keeps base `'/'`**, so its dev server runs with
+  `SOCKET_PATH=/socket.io` (the `dev:server` script) and its Vite proxy
+  carries both path shapes; Rail Baron and Marco Polo need one proxy key
+  each.
+- **The lobby change landed as upstream PR #4**; all three games pinned to
+  its merge (`17da30d`).

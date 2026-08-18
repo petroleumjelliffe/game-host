@@ -35,8 +35,11 @@ The Caddyfile's menu `root` is an absolute path — Caddy as a service has no
 working directory to resolve a relative one from — so it assumes this repo
 is cloned at `~/Developer/game-host`. Cloned elsewhere, fix that one line.
 
-Design history: the tiers, the DNS story, and why sockets bypass the proxy
-are written up in the Rail Baron repo,
+Everything rides port 80: each game mounts socket.io under its base path,
+so pages, assets and sockets share the one `handle /<game>/*` route
+([specs/2026-08-17-origin-relative-clients.md](specs/2026-08-17-origin-relative-clients.md)).
+Design history — the tiers, the DNS story, and the direct-port-sockets
+deviation that spec retired — is written up in the Rail Baron repo,
 `docs/superpowers/specs/2026-08-16-lan-hosting-design.md`.
 
 ## Game servers as services
@@ -58,6 +61,15 @@ username. Stop one game: `launchctl bootout gui/$(id -u)/com.game-host.railbaron
 start it again: rerun the installer. Note a service and a by-hand start
 script fight over the same port — stop the service first if you want a
 foreground run.
+
+Smoke check — each game answers health under its prefix, through the front
+door:
+
+```bash
+curl http://localhost/railbaron/health
+curl http://localhost/acquire-startups-m1/health
+curl http://localhost/marcopolo/health
+```
 
 ## Save data
 
