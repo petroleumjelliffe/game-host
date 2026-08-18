@@ -1,5 +1,5 @@
 import type { GameEvent, StateMessage } from '../../../protocol/game';
-import { playerColor } from '../render/creatures';
+import { creatureFor, playerColor } from '../render/creatures';
 
 export function ScoreboardOverlay({
   snapshot,
@@ -19,26 +19,36 @@ export function ScoreboardOverlay({
 
   return (
     <div className="overlay">
-      <h2>
-        {roundEnd?.reason === 'catch'
-          ? `Caught! ${nameOf(roundEnd.caughtId!)} is Marco next.`
-          : roundEnd
-            ? `Time! The polos escaped — ${nameOf(roundEnd.nextMarcoId)} is Marco next.`
-            : 'Round over'}
-      </h2>
-      <ol className="scores">
-        {rows.map((p) => (
-          <li key={p.id}>
-            <span className="chip" style={{ background: playerColor(p.id) }} />
-            {p.name} — {snapshot.scores[p.id] ?? 0}
-          </li>
-        ))}
-      </ol>
-      {isHost ? (
-        <button className="big" onClick={onNext}>Next round</button>
-      ) : (
-        <p>Waiting for the host…</p>
-      )}
+      <div className="overlay__sheet tiled">
+        <span className="deck__label">
+          {roundEnd?.reason === 'catch' ? 'CAUGHT' : 'TIME'} · ROUND {snapshot.round}
+        </span>
+        <h2 className="overlay__headline">
+          {roundEnd?.reason === 'catch'
+            ? `${nameOf(roundEnd.caughtId!)} IS MARCO NEXT`
+            : roundEnd
+              ? `THE POLOS ESCAPED — ${nameOf(roundEnd.nextMarcoId)} IS MARCO NEXT`
+              : 'ROUND OVER'}
+        </h2>
+        <ol className="overlay__scores">
+          {rows.map((p) => (
+            <li key={p.id}>
+              <span className="overlay__creature" style={{ color: playerColor(p.id) }}>
+                {creatureFor(p.id, p.id === snapshot.marcoId)}
+              </span>
+              <span className="overlay__name">{p.name}</span>
+              <span className="overlay__score">{snapshot.scores[p.id] ?? 0}</span>
+            </li>
+          ))}
+        </ol>
+        {isHost ? (
+          <button className="btn btn--primary btn--center" onClick={onNext}>
+            NEXT ROUND<span className="btn__pip" />
+          </button>
+        ) : (
+          <p className="lobby__note">WAITING FOR THE HOST</p>
+        )}
+      </div>
     </div>
   );
 }

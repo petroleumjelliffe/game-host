@@ -5,6 +5,7 @@ import type { LobbyView } from '../../../vendor/lobby/client/view';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
 import { creatureFor } from '../render/creatures';
 import { drawIdlePool } from '../render/idle';
+import { navigateHome } from '../router';
 import { PoolBackdrop } from './PoolBackdrop';
 import { Deck, DECK_MIN_PX } from './Deck';
 
@@ -83,7 +84,16 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
             // The seat list went away with the redesign, and with it the only
             // way to give a seat back. In an eight-seat room a wrong-room
             // join otherwise locks somebody out until the server reaps it.
-            <button className="chip chip--light chip--action" onClick={() => lobby.leaveSeat()}>
+            <button
+              className="chip chip--light chip--action"
+              // Leaving excludes you from the roster broadcast that reflects
+              // it, so this screen would otherwise sit frozen on a seat you
+              // no longer hold. The arrow already promises home; go there.
+              onClick={() => {
+                lobby.leaveSeat();
+                navigateHome();
+              }}
+            >
               ← LEAVE
             </button>
           ) : (
