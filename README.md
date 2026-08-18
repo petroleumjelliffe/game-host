@@ -31,6 +31,26 @@ Design history: the tiers, the DNS story, and why sockets bypass the proxy
 are written up in the Rail Baron repo,
 `docs/superpowers/specs/2026-08-16-lan-hosting-design.md`.
 
+## Game servers as services
+
+The start scripts run fine by hand, but by-hand processes die with their
+terminals — a working menu over 502ing games means exactly that. To make
+every game as permanent as Caddy:
+
+```bash
+./install-services.sh           # installs the launchd/ plists and starts them
+./install-services.sh remove    # stops and uninstalls
+```
+
+Each game becomes a launchd user agent: starts at login, restarts on crash
+(but stays stopped after a clean `launchctl bootout`), logs to
+`/opt/homebrew/var/log/game-host.<game>.log`. The plists reach the start
+scripts through the `/opt/homebrew/etc/game-host` symlink, so they carry no
+username. Stop one game: `launchctl bootout gui/$(id -u)/com.game-host.railbaron`;
+start it again: rerun the installer. Note a service and a by-hand start
+script fight over the same port — stop the service first if you want a
+foreground run.
+
 ## Save data
 
 Online games persist on the host machine, one directory per title under
