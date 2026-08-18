@@ -2,6 +2,11 @@ import { useEffect, useRef } from 'react';
 import { createTileFloor, MAX_DPR, type TileMask, type TileSkin } from '../render/tiles';
 import { poolLayout, type PoolLayout } from '../render/scene';
 
+// The water is one continuous body across the whole session: phase is measured
+// from when the app started, not from when a screen mounted, so navigating
+// between screens does not snap the waves back to flat.
+const EPOCH = performance.now();
+
 export interface PoolBackdropProps {
   skin: TileSkin;
   mask: TileMask;
@@ -50,7 +55,6 @@ export function PoolBackdrop({ skin, mask, paint, children }: PoolBackdropProps)
     glCanvas.addEventListener('webglcontextrestored', onRestored);
 
     const ctx = scene.getContext('2d');
-    const started = performance.now();
     let raf = 0;
 
     const frame = () => {
@@ -60,8 +64,15 @@ export function PoolBackdrop({ skin, mask, paint, children }: PoolBackdropProps)
       const layout = poolLayout(w, h);
       const now = performance.now();
 
+      // Before layout settles there is no arena to draw into, and painters
+      // divide by its size.
+      if (w === 0 || h === 0) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
       floor?.resize(w, h, dpr);
-      floor?.render({ time: (now - started) / 1000, ...frameRef.current });
+      floor?.render({ time: (now - EPOCH) / 1000, ...frameRef.current });
 
       if (ctx) {
         const scale = Math.min(dpr, MAX_DPR);
