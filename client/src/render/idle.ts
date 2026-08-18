@@ -59,6 +59,8 @@ export interface IdleSwimmer {
   id: string;
   /** A seated player whose phone has dropped: still holding a seat, but gone. */
   asleep?: boolean;
+  /** Your own seat: the design marks it with a dot so you can find yourself. */
+  you?: boolean;
 }
 
 /** Paints a pool of drifting swimmers into the 2D layer. */
@@ -84,6 +86,15 @@ export function drawIdlePool(
       nowMs,
       seed: s.seat,
     });
+    if (s.you) {
+      ctx.fillStyle = playerColor(s.id);
+      ctx.strokeStyle = 'rgba(245,249,248,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(at.x - radius * 0.45, at.y + radius * 0.45, Math.max(2.5, radius * 0.22), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }

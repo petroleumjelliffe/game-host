@@ -20,7 +20,7 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
   const taken = view.seats.filter((s) => s.id !== null);
   // The swimmers in the water are the roster: seat index picks both the loop
   // and the creature, so the pool reads as "who is here".
-  const swimmers = taken.map((s) => ({ seat: s.index, id: s.id!, asleep: !s.connected }));
+  const swimmers = taken.map((s) => ({ seat: s.index, id: s.id!, asleep: !s.connected, you: s.isYou }));
 
   const share = async () => {
     const url = window.location.href;

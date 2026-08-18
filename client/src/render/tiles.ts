@@ -175,6 +175,10 @@ export function createTileFloor(canvas: HTMLCanvasElement): TileFloor | null {
       gl.deleteBuffer(buffer);
       gl.deleteTexture(textures.plain);
       gl.deleteTexture(textures.cut);
+      // A context outlives its deleted objects and sits on the detached canvas
+      // until GC. Browsers cap live contexts and evict the oldest, so leaking
+      // one per screen eventually kills the pool you are actually looking at.
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
     },
   };
 }
