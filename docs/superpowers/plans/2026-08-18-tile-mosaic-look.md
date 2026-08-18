@@ -52,7 +52,9 @@
 
 **Type** — display: `'Space Grotesk', system-ui, sans-serif`; mono: `'JetBrains Mono', ui-monospace, monospace`. Buttons: 700 weight, `letter-spacing: 0.2em`, uppercase, **square corners everywhere** (no `border-radius` survives this redesign except the swimmer rings).
 
-**Deck geometry** — height `clamp(180px, 27vh, 260px)`; face `#e8eeec` with a 24px grid of 2px `#c9d3d1` lines; a 12px `#f5f9f8` nosing across the top with `box-shadow: 0 1px 0 #c9d3d1`; the deck itself casts `0 -14px 22px rgba(6,40,70,0.22)` onto the water.
+**Deck geometry** — `min-height: clamp(180px, 27dvh, 260px)`, growing with its content; face `#e8eeec` with a 24px grid of 2px `#c9d3d1` lines; a 12px `#f5f9f8` nosing across the top with `box-shadow: 0 1px 0 #c9d3d1`; the deck itself casts `0 -14px 22px rgba(6,40,70,0.22)` onto the water.
+
+**The deck's height has exactly one source of truth: the deck element itself.** It is clamped in CSS *and* grows with its content, so no formula predicts it — the `Deck` component measures itself with a `ResizeObserver` and hands the number to whoever needs it. The swimmers' wall is that measurement. Never re-derive the deck height from viewport height.
 
 ---
 
@@ -183,6 +185,120 @@ The app will look broken until Task 7 — that is expected and fine.
 ```bash
 git add client/index.html client/src/styles.css
 git commit -m "style: design tokens, deck primitives, and the design's two typefaces"
+```
+
+---
+
+## Task 1b: Fixes from Task 1's review
+
+Task 1 landed exactly as written, and the review found three faults **in this plan** rather than in the code. Fix them here, before any screen is built on top of them.
+
+**Files:**
+- Modify: `client/src/styles.css`
+- Modify: `client/index.html`
+
+**Step 1: Let the deck grow, and stop pinning its footer**
+
+A deck fixed at `clamp(180px, …)` cannot hold the lobby's ~217px of controls: at the 180px floor (iPhone SE portrait, any short window) the content slides under the absolutely-positioned footer and spills onto the water. Make the deck a flex column that grows, and make the footer the last item in it.
+
+Replace the `.deck` and `.deck__footer` rules with:
+
+```css
+.deck {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  min-height: var(--deck-h);
+  display: flex; flex-direction: column;
+  box-shadow: 0 -14px 22px rgba(6, 40, 70, 0.22);
+  padding: 30px 20px 22px;
+}
+.deck__footer {
+  margin-top: auto; padding-top: 16px;
+  display: flex; justify-content: space-between; gap: 8px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; color: var(--slate);
+}
+```
+
+`.deck::before` and `.deck__label` are unchanged.
+
+**Step 2: Give the tile texture one home**
+
+The same six lines were about to be copy-pasted into the scoreboard sheet. Add the utility (and its geometry tokens), and drop the texture out of `.deck` — the component will carry both classes.
+
+Add to `:root`:
+
+```css
+  --tile: 24px;
+  --tile-line: 2px;
+```
+
+Add after the `.pool` block:
+
+```css
+/* Deck tiling: the slab under every pre-game control, and the score sheet. */
+.tiled {
+  background-color: var(--deck);
+  background-image:
+    linear-gradient(90deg, var(--grout) var(--tile-line), transparent var(--tile-line)),
+    linear-gradient(var(--grout) var(--tile-line), transparent var(--tile-line));
+  background-size: var(--tile) var(--tile);
+}
+```
+
+**Step 3: Add the tokens later tasks would otherwise hardcode**
+
+Add to `:root`:
+
+```css
+  --surface: #ffffff;
+  --night: #0b3a5c;
+  --error: #b1372f;
+```
+
+Then use them where Task 1 already typed literals: `body { background: var(--night); }` and `.btn--ghost { background: var(--surface); }`.
+
+**Step 4: Make the chip tappable when it is a control**
+
+The join screen's only way back is a `.chip`, which is ~16px tall. Add a modifier with a real tap target:
+
+```css
+.chip--action {
+  border: 0; min-height: 44px; display: inline-flex; align-items: center;
+  font: inherit; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em;
+  padding: 3px 10px; cursor: pointer;
+}
+```
+
+**Step 5: Stop the webfonts blocking first paint**
+
+`display=swap` governs when a *font file* swaps in; it does nothing about a blocking stylesheet request. On the network this game is actually played on — a LAN whose router black-holes outbound DNS rather than refusing it — that request stalls first paint until the connection times out. A blank screen at a party is worse than the fallback stack the plan already accepts. In `client/index.html`, make the stylesheet load asynchronously:
+
+```html
+<link
+  href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+  rel="stylesheet"
+  media="print"
+  onload="this.media='all'"
+/>
+```
+
+Leave both `preconnect` links as they are.
+
+**Step 6: Let the room code be copied**
+
+`user-select: none` on `body` blocks long-press-copy of the room code the lobby renders as text. Add:
+
+```css
+.selectable { -webkit-user-select: text; user-select: text; }
+```
+
+**Step 7: Verify and commit**
+
+Run: `npm run typecheck`
+Expected: PASS.
+
+```bash
+git add client/src/styles.css client/index.html
+git commit -m "style: deck grows with its content, tiling utility, tappable chips, async webfonts"
 ```
 
 ---
@@ -1629,36 +1745,68 @@ git commit -m "feat(render): drifting lobby swimmers that stay in the water"
 `client/src/screens/Deck.tsx`:
 
 ```tsx
+import { useEffect, useRef } from 'react';
+
+/** What the CSS clamps the deck to before it has measured itself. */
+export const DECK_MIN_PX = 180;
+
 /**
  * The pool deck: the tiled slab across the bottom that carries every control
  * before the game starts. It is also a wall — the lobby's swimmers bounce off
- * its edge — so its height is the one number the backdrop and the swimmers
- * both read. See `DECK_FRACTION`.
+ * its edge — so the water above it has to know exactly how tall it is. Since
+ * the deck is clamped by the viewport *and* grows with its contents, no
+ * formula predicts that: it measures itself and hands the number over.
  */
-export const DECK_FRACTION = 0.272;
+export function Deck({
+  onHeight,
+  children,
+}: {
+  onHeight?: (px: number) => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
 
-export function Deck({ children }: { children: React.ReactNode }) {
-  return <div className="deck">{children}</div>;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !onHeight) return;
+    const report = () => onHeight(el.getBoundingClientRect().height);
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onHeight]);
+
+  return (
+    <div className="deck tiled" ref={ref}>
+      {children}
+    </div>
+  );
 }
 ```
+
+Pass a **stable** `onHeight` — a `useState` setter is stable, so `onHeight={setDeckHeight}` is correct and an inline arrow is not.
 
 **Step 2: Rewrite `client/src/screens/HomeScreen.tsx`**
 
 Behaviour is unchanged — `createRoom`, the `onJoined` handler that saves the seat before navigating — only the shape is new. "Join a game" now routes to its own screen instead of an inline field.
 
 ```tsx
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { connection, identity } from '../net/singletons';
 import { navigateToJoin, navigateToRoom } from '../router';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
 import { drawIdlePool } from '../render/idle';
 import { PoolBackdrop } from './PoolBackdrop';
-import { Deck, DECK_FRACTION } from './Deck';
+import { Deck, DECK_MIN_PX } from './Deck';
 
 // Set dressing: three creatures in the water behind the opening screen.
 const DECOR = [{ seat: 0, id: 'p1' }, { seat: 3, id: 'p4' }, { seat: 6, id: 'p7' }];
 
 export function HomeScreen() {
+  // The deck is a wall the swimmers bounce off, and only the deck knows how
+  // tall it ended up.
+  const [deckHeight, setDeckHeight] = useState(DECK_MIN_PX);
+
   // createRoom's `joined` arrives while still on this screen; store the seat
   // so RoomScreen's useLobbyRoom rejoins with the token instead of taking a
   // second seat.
@@ -1684,7 +1832,7 @@ export function HomeScreen() {
           drawIdlePool(
             ctx,
             DECOR,
-            { left: 0, top: 0, right: width, bottom: height * (1 - DECK_FRACTION) },
+            { left: 0, top: 0, right: width, bottom: height - deckHeight },
             now,
             Math.max(18, width * 0.062),
           );
@@ -1694,7 +1842,7 @@ export function HomeScreen() {
           <span className="chip chip--light">ONLINE</span>
           <span className="chip chip--dark">EYES CLOSED. EARS OPEN.</span>
         </div>
-        <Deck>
+        <Deck onHeight={setDeckHeight}>
           <div className="deck__stack">
             <button
               className="btn btn--primary"
@@ -1794,7 +1942,7 @@ import { useRef, useState } from 'react';
 import { navigateHome, navigateToRoom } from '../router';
 import { drawIdlePool } from '../render/idle';
 import { PoolBackdrop } from './PoolBackdrop';
-import { Deck, DECK_FRACTION } from './Deck';
+import { Deck, DECK_MIN_PX } from './Deck';
 
 const CODE_LENGTH = 6;
 // The lobby's alphabet: no I, O, 0 or 1 to mistype across a room.
@@ -1803,6 +1951,7 @@ const DECOR = [{ seat: 1, id: 'p2' }, { seat: 4, id: 'p5' }, { seat: 7, id: 'p8'
 
 export function JoinScreen() {
   const [code, setCode] = useState('');
+  const [deckHeight, setDeckHeight] = useState(DECK_MIN_PX);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const boxes = Array.from({ length: CODE_LENGTH }, (_, i) => code[i] ?? null);
 
@@ -1820,19 +1969,19 @@ export function JoinScreen() {
           drawIdlePool(
             ctx,
             DECOR,
-            { left: 0, top: 0, right: width, bottom: height * (1 - DECK_FRACTION) },
+            { left: 0, top: 0, right: width, bottom: height - deckHeight },
             now,
             Math.max(18, width * 0.062),
           );
         }}
       >
         <div className="chips">
-          <button className="chip chip--light code__back" onClick={() => navigateHome()}>
+          <button className="chip chip--light chip--action" onClick={() => navigateHome()}>
             ← JOIN A GAME
           </button>
           <span className="chip chip--dark">CODE FROM HOST</span>
         </div>
-        <Deck>
+        <Deck onHeight={setDeckHeight}>
           <span className="deck__label">ROOM CODE</span>
           <div className="code" onClick={() => inputRef.current?.focus()}>
             <input
@@ -1892,8 +2041,7 @@ Append to `client/src/styles.css`:
   display: flex; justify-content: space-between; margin-top: 8px;
   font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; color: var(--slate);
 }
-.code__back { border: 0; cursor: pointer; }
-.deck__footer .btn { width: 100%; }
+.deck__footer .btn { flex: 1; }
 ```
 
 Note the deck footer holds the JOIN button here rather than the small print — that is what artboard `2c` shows.
@@ -1951,10 +2099,11 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
 import { creatureFor } from '../render/creatures';
 import { drawIdlePool } from '../render/idle';
 import { PoolBackdrop } from './PoolBackdrop';
-import { Deck, DECK_FRACTION } from './Deck';
+import { Deck, DECK_MIN_PX } from './Deck';
 
 export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomState }) {
   const [qr, setQr] = useState<string | null>(null);
+  const [deckHeight, setDeckHeight] = useState(DECK_MIN_PX);
   useEffect(() => {
     void QRCode.toDataURL(window.location.href, { margin: 1, width: 240 }).then(setQr);
   }, []);
@@ -1981,7 +2130,7 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
           drawIdlePool(
             ctx,
             swimmers,
-            { left: 0, top: 0, right: width, bottom: height * (1 - DECK_FRACTION) },
+            { left: 0, top: 0, right: width, bottom: height - deckHeight },
             now,
             Math.max(18, width * 0.062),
           );
@@ -1993,12 +2142,12 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
             {view.you?.isHost ? 'YOU START' : 'HOST STARTS'}
           </span>
         </div>
-        <Deck>
+        <Deck onHeight={setDeckHeight}>
           <div className="lobby__row">
             {qr && <img className="lobby__qr" src={qr} alt={`Join code ${view.code}`} />}
             <div className="lobby__code">
               <span className="deck__label">ROOM CODE</span>
-              <span className="lobby__code-value">{view.code}</span>
+              <span className="lobby__code-value selectable">{view.code}</span>
               <span className="lobby__hint">SCAN OR TYPE TO JOIN</span>
             </div>
             <div className="lobby__count">
@@ -2086,7 +2235,7 @@ SPECTATE is deliberately absent — the button returns when there is something b
   margin-top: 8px; font-family: var(--mono); font-size: 9px;
   letter-spacing: 0.16em; color: var(--slate);
 }
-.lobby__note--error { color: #b1372f; }
+.lobby__note--error { color: var(--error); }
 ```
 
 **Step 3: Verify**
@@ -2137,7 +2286,7 @@ export function ScoreboardOverlay({
 
   return (
     <div className="overlay">
-      <div className="overlay__sheet">
+      <div className="overlay__sheet tiled">
         <span className="deck__label">
           {roundEnd?.reason === 'catch' ? 'CAUGHT' : 'TIME'} · ROUND {snapshot.round}
         </span>
@@ -2205,11 +2354,6 @@ and
 }
 .overlay__sheet {
   width: 100%; padding: 30px 20px 24px;
-  background-color: var(--deck);
-  background-image:
-    linear-gradient(90deg, var(--grout) 2px, transparent 2px),
-    linear-gradient(var(--grout) 2px, transparent 2px);
-  background-size: 24px 24px;
   border-top: 12px solid var(--foam);
   color: var(--deep);
   display: flex; flex-direction: column; gap: 12px;
@@ -2230,7 +2374,7 @@ and
 .notice {
   height: 100%; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 16px; padding: 24px;
-  background: #0b3a5c;
+  background: var(--night);
   font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em;
 }
 .notice .btn { width: auto; background: #fff; }
