@@ -49,10 +49,14 @@ export function JoinScreen() {
               className="code__input"
               value={code}
               onChange={(e) => accept(e.target.value)}
+              onKeyDown={(e) => {
+                // The phone keyboard's Go key: the old screen submitted a
+                // form, and losing that cost a tap on every join.
+                if (e.key === 'Enter' && code.length === CODE_LENGTH) navigateToRoom(code);
+              }}
               inputMode="text"
               autoCapitalize="characters"
               autoComplete="one-time-code"
-              maxLength={CODE_LENGTH}
               aria-label="Room code"
               autoFocus
             />

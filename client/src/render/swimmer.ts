@@ -32,10 +32,13 @@ export function drawSwimmer(ctx: CanvasRenderingContext2D, o: SwimmerOpts): void
   ctx.stroke();
   ctx.restore();
 
-  const lead = o.radius * 2;
+  // Ring, head and lead are all pinned to the collision radius so a swimmer's
+  // drawn size never lies about what it can catch. The ratios come from the
+  // design's own artboards, where a 52px ring carries a 24px head 32px ahead.
+  const lead = o.radius * 1.63;
   const hx = o.x + o.heading.x * lead;
   const hy = o.y + o.heading.y * lead + bobOffset(o.nowMs, o.seed) * o.radius * 0.22;
-  const size = Math.round(o.radius * 2.6);
+  const size = Math.round(o.radius * 1.26);
   ctx.save();
   ctx.translate(hx, hy);
   // The creature glyphs face left; flip them when swimming right.
