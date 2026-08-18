@@ -12,10 +12,15 @@ Design: `docs/superpowers/specs/2026-08-14-marco-polo-design.md`.
     npm install
     npm run dev:all
 
-The server prints a LAN URL (`http://<your-ip>:5173`); phones on the same
-Wi-Fi open it, one creates a pool, the rest scan the QR. 3–8 players.
+The server prints a LAN URL (`http://<your-ip>:7933/marcopolo/`); phones on
+the same Wi-Fi open it, one creates a pool, the rest scan the QR. 3–8 players.
+Ports come from the cross-game registry in the sibling `game-host` repo's
+PORTS.md — Marco Polo's slots are server 4003, dev client 7933.
 
-Production-ish: `npm run build && npm start` (serves the built client on 3001).
+Hosted: `npm run build && npm start` — one process on 4003 serves pages,
+assets and sockets at `/marcopolo/` (and behind the game-host front door,
+`http://<host>/marcopolo/`). Health answers at `/health` and
+`/marcopolo/health`.
 
 ## Layout
 
