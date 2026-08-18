@@ -75,8 +75,14 @@ export interface TileFloor {
 }
 
 /** Two device pixels per CSS pixel is already past what the dither resolves. */
-const MAX_DPR = 2;
+export const MAX_DPR = 2;
 
+/**
+ * One floor per canvas: `getContext` hands back the same context for the same
+ * element, so a second floor on one canvas would silently hijack the first's
+ * program. A lost context takes every object here with it — do not try to
+ * revive a `TileFloor`, throw it away and make another.
+ */
 export function createTileFloor(canvas: HTMLCanvasElement): TileFloor | null {
   const gl = canvas.getContext('webgl', { antialias: false, alpha: false, depth: false });
   if (!gl) return null;
@@ -85,13 +91,23 @@ export function createTileFloor(canvas: HTMLCanvasElement): TileFloor | null {
     const s = gl.createShader(type)!;
     gl.shaderSource(s, src);
     gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn('tile shader failed to compile:', gl.getShaderInfoLog(s));
+    }
     return s;
   };
   const program = gl.createProgram()!;
-  gl.attachShader(program, compile(gl.VERTEX_SHADER, VERT));
-  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAG));
+  const vert = compile(gl.VERTEX_SHADER, VERT);
+  const frag = compile(gl.FRAGMENT_SHADER, FRAG);
+  gl.attachShader(program, vert);
+  gl.attachShader(program, frag);
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return null;
+  gl.deleteShader(vert);
+  gl.deleteShader(frag);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.warn('tile shader failed to link:', gl.getProgramInfoLog(program));
+    return null;
+  }
   gl.useProgram(program);
 
   // One oversized triangle covers the viewport with no index buffer.
@@ -126,12 +142,18 @@ export function createTileFloor(canvas: HTMLCanvasElement): TileFloor | null {
   gl.uniform2f(uniforms.grid, MASK_GRID.cols, MASK_GRID.rows);
   gl.uniform1i(uniforms.mask, 0);
 
+  // A canvas that has never been sized still reports 300×150, so matching
+  // those numbers must not be mistaken for "already sized" — that would skip
+  // the one call that sets uRes, and the shader would divide by zero.
+  let sized = false;
+
   return {
     resize(cssWidth, cssHeight, dpr) {
       const scale = Math.min(dpr, MAX_DPR);
       const w = Math.max(1, Math.round(cssWidth * scale));
       const h = Math.max(1, Math.round(cssHeight * scale));
-      if (canvas.width === w && canvas.height === h) return;
+      if (sized && canvas.width === w && canvas.height === h) return;
+      sized = true;
       canvas.width = w;
       canvas.height = h;
       gl.viewport(0, 0, w, h);
