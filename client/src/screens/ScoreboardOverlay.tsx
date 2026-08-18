@@ -1,5 +1,5 @@
 import type { GameEvent, StateMessage } from '../../../protocol/game';
-import { playerColor } from '../render/colors';
+import { playerColor } from '../render/creatures';
 
 export function ScoreboardOverlay({
   snapshot,

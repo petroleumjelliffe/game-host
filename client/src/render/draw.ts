@@ -5,7 +5,7 @@
 import { TUNING, type StateMessage } from '../../../protocol/game';
 import { RIPPLE_MS, SPLASH_MS, type Ripple } from '../game/sessionState';
 import { worldScale, worldToScreen } from '../game/camera';
-import { playerColor, playerRgba } from './colors';
+import { playerColor, playerRgba } from './creatures';
 
 export interface SceneOpts {
   size: number;
