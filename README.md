@@ -27,8 +27,14 @@ assets and sockets at `/marcopolo/` (and behind the game-host front door,
     protocol/      game half of the wire — constants, tuning, message types
     server/sim/    pure simulation: movement, turbo, shrink, calls, catches
     server/        rooms, role-filtered snapshots, socket handlers, app
-    client/        React + canvas: lobby, polo view, marco (sonar) view
+    client/        React + canvas: tile shader, swimmers, deck screens
     vendor/lobby   rooms/seats/tokens/presence — git submodule, compiled here
+
+The look comes from the Claude Design project *Minimalist Marco Polo game*
+(`Tile Concepts.dc.html`): a WebGL tile floor with four skins, ring-and-emoji
+swimmers, and a tiled "pool deck" carrying the controls before the game
+starts. The arena is still a circle drawn over the tiles; the tiles are only
+ever scenery.
 
 The one invariant to know: **Marco's phone is never sent polo positions.**
 Filtering happens in `server/snapshot.ts` and is asserted both at unit level
@@ -43,5 +49,6 @@ The vendor submodule's own tests run inside this repo's vitest, per its README.
 
 ## Not built yet (deliberately)
 
-Audio (first follow-up — the vibe needs it), obstacles, spectator screen,
+Audio (first follow-up — the vibe needs it), obstacles, spectator screen
+(the lobby's SPECTATE button is deliberately absent until there is one),
 client prediction for remote play, persistent scores.

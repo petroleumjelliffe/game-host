@@ -12,7 +12,7 @@
   --error: #b1372f;
   --display: 'Space Grotesk', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-  --deck-h: clamp(180px, 27vh, 260px);
+  --deck-h: clamp(180px, 27dvh, 260px);
   --tile: 24px;
   --tile-line: 2px;
 }
@@ -99,7 +99,11 @@ body {
 .btn--ghost { background: var(--surface); color: var(--blue); border: 2px solid var(--blue); }
 .btn--ghost .btn__pip { background: var(--blue); }
 .btn__pip { width: 10px; height: 10px; flex: none; }
-.btn:disabled { opacity: 0.45; }
+/* Links dressed as buttons: the deck's buttons never carry a rule under them. */
+a.btn { text-decoration: none; }
+/* Explicit, not translucent: fading the label into the deck reads as damage,
+   and START-below-3 and JOIN-below-6 are states players sit in for a while. */
+.btn:disabled { background: #8aa6bd; border-color: #8aa6bd; color: var(--foam); }
 .btn--center { justify-content: center; }
 
 /* --- game chrome ------------------------------------------------------- */

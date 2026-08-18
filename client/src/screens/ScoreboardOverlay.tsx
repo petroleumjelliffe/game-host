@@ -18,7 +18,12 @@ export function ScoreboardOverlay({
   );
 
   return (
-    <div className="overlay">
+    <div
+      className="overlay"
+      // Steering lives on the game screen's <main>, and this sheet is inside
+      // it — without this, dragging on the scoreboard swims your player.
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <div className="overlay__sheet tiled">
         <span className="deck__label">
           {roundEnd?.reason === 'catch' ? 'CAUGHT' : 'TIME'} · ROUND {snapshot.round}
