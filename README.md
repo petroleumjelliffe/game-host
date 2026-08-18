@@ -20,6 +20,14 @@ ln -sf ~/Developer/game-host/Caddyfile /opt/homebrew/etc/Caddyfile
 ln -sfn ~/Developer/game-host /opt/homebrew/etc/game-host   # menu root; the
                                # Caddyfile can't use {env.HOME} — the brew
                                # service overrides HOME to its storage dir
+ln -sfn ~/.local/share/fnm/aliases/default/bin ~/Developer/game-host/node-bin
+                               # (gitignored) the node the services run —
+                               # fnm's default alias here; point it at any
+                               # arm64 node's bin dir. The plists put it
+                               # first on PATH because launchd's bare PATH
+                               # otherwise finds whatever node is lying
+                               # around — an x86_64 leftover in
+                               # /usr/local/bin broke every native binding.
 brew services start caddy      # or `caddy run --config Caddyfile` to try it
 ```
 

@@ -12,11 +12,14 @@
 		<string>/bin/sh</string>
 		<string>/opt/homebrew/etc/game-host/start-marcopolo.sh</string>
 	</array>
-	<!-- launchd gives agents a bare PATH; npm and node live in homebrew. -->
+	<!-- launchd gives agents a bare PATH. node comes first from the repo's
+	     node-bin symlink (created in README setup, pointing at fnm's default
+	     alias) — NOT /usr/local/bin, where a leftover x86_64 node once broke
+	     every native binding (esbuild, rollup) under Rosetta, 2026-08-17. -->
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>PATH</key>
-		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<string>/opt/homebrew/etc/game-host/node-bin:/opt/homebrew/bin:/usr/bin:/bin</string>
 	</dict>
 	<key>RunAtLoad</key>
 	<true/>
