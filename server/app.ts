@@ -18,8 +18,10 @@ const BASE_PATH = '/marcopolo';
 /**
  * Where socket.io mounts: the same front-door route as pages and assets, so
  * one proxied prefix carries the whole game — this retires the root
- * /socket.io claim in game-host's Caddyfile. Exported for the wire suite —
- * its clients must ask for this path or hang on socket.io's bare default.
+ * /socket.io claim in game-host's Caddyfile. A constant, not a knob: Marco
+ * Polo has no remote deploy, so nothing needs to move it. Exported for the
+ * wire suite — its clients must ask for this path or hang on socket.io's
+ * bare default.
  */
 export const SOCKET_PATH = `${BASE_PATH}/socket.io`;
 
