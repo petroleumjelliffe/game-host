@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       allowedHosts: ['.local'],
       fs: { allow: ['..'] },
-      proxy: { '/socket.io': { target: `http://localhost:${serverPort}`, ws: true } },
+      proxy: { '/marcopolo/socket.io': { target: `http://localhost:${serverPort}`, ws: true } },
     },
     build: { outDir: 'dist' },
   };

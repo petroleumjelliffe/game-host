@@ -15,6 +15,10 @@ export function connection(): LobbyConnection {
   conn ??= createLobbyConnection({
     serverUrl: window.location.origin,
     protocolVersion: PROTOCOL_VERSION,
+    // '/marcopolo/socket.io' — base is '/marcopolo/' in dev and build alike,
+    // so no branching: whoever serves the page (Vite's proxy in dev, the
+    // game server itself hosted) answers at the prefixed path.
+    socketPath: `${import.meta.env.BASE_URL}socket.io`,
   });
   return conn;
 }
