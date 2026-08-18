@@ -37,7 +37,8 @@ names a whole origin, not a port.
 
 Known consumers, kept in agreement by hand:
 
-- `Caddyfile`, this repo — every number
+- `Caddyfile`, this repo — every server number (dev-client slots appear
+  only where a block's comment points hot reload at one)
 - Rail Baron: `server/index.ts` boot default (4001), `vite.config.ts`
   `server.port` (7931) and socket-proxy target (4001 — build tooling, the
   port's only client-adjacent appearance)
