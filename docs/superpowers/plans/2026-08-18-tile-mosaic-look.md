@@ -1210,9 +1210,11 @@ The shared shell: a WebGL layer, a 2D layer, and a render loop, with a CSS fallb
 - Create: `client/src/screens/PoolBackdrop.tsx`
 - Modify: `client/src/render/tiles.ts`
 
-**Step 0: Fix the resize guard in `tiles.ts` first**
+**Step 0: Four fixes to `tiles.ts` first**
 
-Task 3's review caught this: `resize()` returns early when the requested pixel size already matches `canvas.width`/`canvas.height`, but a canvas that has never been sized reports 300×150. If the first call happens to compute exactly that, `gl.viewport` and the `uRes` uniform are never set, `uRes` stays `(0,0)`, and every fragment divides by zero. This module gets its first real `resize` in this task, so fix it here. Add above the returned object:
+Task 3's review raised these; this task is the module's first consumer, so they land here.
+
+**(a) The resize guard.** `resize()` returns early when the requested pixel size already matches `canvas.width`/`canvas.height`, but a canvas that has never been sized reports 300×150. If the first call happens to compute exactly that, `gl.viewport` and the `uRes` uniform are never set, `uRes` stays `(0,0)`, and every fragment divides by zero. Add above the returned object:
 
 ```ts
   // A canvas that has never been sized still reports 300×150, so matching
@@ -1226,6 +1228,59 @@ and change the guard to:
 ```ts
       if (sized && canvas.width === w && canvas.height === h) return;
       sized = true;
+```
+
+**(b) Say why the shader failed.** A silent `null` becomes "the pool is flat on some phones" with nothing in the console — and `precision highp float` in a fragment shader is exactly the sort of thing that fails on a subset of mobile GPUs. Make `compile` check its own status, and report the link failure too:
+
+```ts
+  const compile = (type: number, src: string) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn('tile shader failed to compile:', gl.getShaderInfoLog(s));
+    }
+    return s;
+  };
+```
+
+and at the link check:
+
+```ts
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.warn('tile shader failed to link:', gl.getProgramInfoLog(program));
+    return null;
+  }
+```
+
+**(c) Delete the shaders deterministically.** `dispose()` deletes the program, buffer and textures but never the shaders, so they survive until GC — which is the one thing `dispose()` exists not to be. Flag each for deletion as soon as it is attached; the program keeps its own reference until it is itself deleted:
+
+```ts
+  const vert = compile(gl.VERTEX_SHADER, VERT);
+  const frag = compile(gl.FRAGMENT_SHADER, FRAG);
+  gl.attachShader(program, vert);
+  gl.attachShader(program, frag);
+  gl.linkProgram(program);
+  gl.deleteShader(vert);
+  gl.deleteShader(frag);
+```
+
+**(d) Export the DPR cap** so the 2D layer below does not hardcode the same 2:
+
+```ts
+/** Two device pixels per CSS pixel is already past what the dither resolves. */
+export const MAX_DPR = 2;
+```
+
+Also add this note above `createTileFloor`, because it is a real constraint the type cannot express:
+
+```ts
+/**
+ * One floor per canvas: `getContext` hands back the same context for the same
+ * element, so a second floor on one canvas would silently hijack the first's
+ * program. A lost context takes every object here with it — do not try to
+ * revive a `TileFloor`, throw it away and make another.
+ */
 ```
 
 **Step 1: Write it**
