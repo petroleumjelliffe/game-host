@@ -27,4 +27,26 @@ describe('creatures', () => {
   it('makes rgba from the same hue', () => {
     expect(playerRgba('p2', 0.5)).toBe('rgba(93,156,98,0.5)');
   });
+
+  it('marks marco with the shark itself, not merely with whatever the constant holds', () => {
+    expect(MARCO_EMOJI).toBe('🦈');
+  });
+
+  it('pairs every seat with the design’s own creature and ring', () => {
+    const design = [
+      ['p1', '🐬', '#6f93b4'],
+      ['p2', '🐢', '#5d9c62'],
+      ['p3', '🦩', '#ec87a9'],
+      ['p4', '🐙', '#b98fd6'],
+      ['p5', '🦭', '#8fa6b8'],
+      ['p6', '🐠', '#f0a04a'],
+      ['p7', '🦆', '#e8d36a'],
+      ['p8', '🐡', '#9fc4e0'],
+    ] as const;
+    // Both tables at once: nothing else observes a seat's creature and its
+    // ring together, so nothing else would notice them drifting apart.
+    for (const [id, creature, ring] of design) {
+      expect([creatureFor(id, false), playerColor(id)]).toEqual([creature, ring]);
+    }
+  });
 });

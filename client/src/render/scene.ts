@@ -35,7 +35,10 @@ export function segmentsLit(fraction: number, count: number): number {
  */
 export function lastCallLabel(cooldown: number | null, total: number): string {
   if (cooldown === null || cooldown <= 0) return 'CALL READY';
-  return `LAST CALL ${Math.round(total - cooldown)}s AGO`;
+  // The cooldown and the total it is measured against arrive from different
+  // places and can disagree; a negative age in front of a player is worse
+  // than a zero.
+  return `LAST CALL ${Math.max(0, Math.round(total - cooldown))}s AGO`;
 }
 
 const BOB_MS = 2400;
