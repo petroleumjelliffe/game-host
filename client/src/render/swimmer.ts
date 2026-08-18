@@ -28,6 +28,15 @@ function shadowSprite(radius: number, stroke: number): HTMLCanvasElement | null 
   sctx.beginPath();
   sctx.arc(side / 2, side / 2 - 5, radius, 0, Math.PI * 2);
   sctx.stroke();
+  // The ring was only ever a way to cast the shadow — punching it back out
+  // leaves the shadow alone, so the real coloured ring is not tinted by a
+  // black one bleeding through its antialiased edge (or, for Marco's
+  // translucent ring, through all of it).
+  sctx.shadowColor = 'transparent';
+  sctx.globalCompositeOperation = 'destination-out';
+  sctx.beginPath();
+  sctx.arc(side / 2, side / 2 - 5, radius, 0, Math.PI * 2);
+  sctx.stroke();
   shadows.set(key, sprite);
   return sprite;
 }
