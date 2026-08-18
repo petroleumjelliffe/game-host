@@ -607,12 +607,18 @@ export function createTileFloor(canvas: HTMLCanvasElement): TileFloor | null {
   gl.uniform2f(uniforms.grid, MASK_GRID.cols, MASK_GRID.rows);
   gl.uniform1i(uniforms.mask, 0);
 
+  // A canvas that has never been sized still reports 300×150, so matching
+  // those numbers must not be mistaken for "already sized" — that would skip
+  // the one call that sets uRes, and the shader would divide by zero.
+  let sized = false;
+
   return {
     resize(cssWidth, cssHeight, dpr) {
       const scale = Math.min(dpr, MAX_DPR);
       const w = Math.max(1, Math.round(cssWidth * scale));
       const h = Math.max(1, Math.round(cssHeight * scale));
-      if (canvas.width === w && canvas.height === h) return;
+      if (sized && canvas.width === w && canvas.height === h) return;
+      sized = true;
       canvas.width = w;
       canvas.height = h;
       gl.viewport(0, 0, w, h);
@@ -1202,6 +1208,25 @@ The shared shell: a WebGL layer, a 2D layer, and a render loop, with a CSS fallb
 
 **Files:**
 - Create: `client/src/screens/PoolBackdrop.tsx`
+- Modify: `client/src/render/tiles.ts`
+
+**Step 0: Fix the resize guard in `tiles.ts` first**
+
+Task 3's review caught this: `resize()` returns early when the requested pixel size already matches `canvas.width`/`canvas.height`, but a canvas that has never been sized reports 300×150. If the first call happens to compute exactly that, `gl.viewport` and the `uRes` uniform are never set, `uRes` stays `(0,0)`, and every fragment divides by zero. This module gets its first real `resize` in this task, so fix it here. Add above the returned object:
+
+```ts
+  // A canvas that has never been sized still reports 300×150, so matching
+  // those numbers must not be mistaken for "already sized" — that would skip
+  // the one call that sets uRes, and the shader would divide by zero.
+  let sized = false;
+```
+
+and change the guard to:
+
+```ts
+      if (sized && canvas.width === w && canvas.height === h) return;
+      sized = true;
+```
 
 **Step 1: Write it**
 
@@ -2398,6 +2423,15 @@ git commit -m "feat(client): scoreboard sheet and notices in the deck's language
 
 **Files:**
 - Modify: `README.md`
+
+**Step 0: Sweep up the deferred review findings**
+
+These were raised in earlier reviews and deliberately parked until the whole app existed:
+
+- `client/src/styles.css` — `--deck-h` uses `27vh`; change it to `27dvh`, which is what the reference section specifies. On mobile Safari `vh` is the *large* viewport, so the deck is currently sized against a taller screen than the one visible while the URL bar shows.
+- `client/src/styles.css` — the near-whites `#f2f8f6` (`.chip--dark` color) and `rgba(242,248,246,0.92)` (`.chip--light` background) sit next to `--foam: #f5f9f8` with no token. Only tokenize them if it does not change a rendered color; otherwise leave them and say so.
+- Check for any remaining hardcoded literal that now has a token: `#fff` → `var(--surface)`, `#0b3a5c` → `var(--night)`, the error red → `var(--error)`.
+- `.btn:disabled { opacity: 0.45 }` composites the label toward the deck; `.call-btn:disabled` instead uses explicit colors. Make the two consistent — prefer the explicit-color approach, since the disabled states users actually sit in (START below 3 players, JOIN below 6 characters) are common.
 
 **Step 1: Run everything**
 
