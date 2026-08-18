@@ -147,3 +147,24 @@ body {
 .hud-bottom--marco .turbo-btn__seg { background: rgba(159, 220, 247, 0.18); }
 .hud-bottom--marco .turbo-btn__seg--lit { background: var(--pale-blue); }
 .turbo-btn--held .turbo-btn__seg--lit { background: var(--pale-blue); }
+
+.deck__stack { display: flex; flex-direction: column; gap: 8px; }
+
+.code { position: relative; display: flex; gap: 6px; margin-top: 8px; }
+/* The real field, invisible over the boxes: keyboard and paste keep working. */
+.code__input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: 0; background: none; font: inherit; color: transparent;
+}
+.code__box {
+  flex: 1; height: 54px; background: var(--surface); border: 2px solid var(--blue);
+  display: grid; place-items: center;
+  font-family: var(--display); font-size: 26px; font-weight: 700; color: var(--blue);
+}
+.code__box--empty { border-color: rgba(20, 88, 143, 0.35); }
+.code__caret { width: 2px; height: 26px; background: var(--blue); }
+.code__hint {
+  display: flex; justify-content: space-between; margin-top: 8px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; color: var(--slate);
+}
+.deck__footer .btn { flex: 1; }
