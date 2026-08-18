@@ -14,7 +14,7 @@ import {
   type GameEventEnvelope,
   type StateMessage,
 } from '../protocol/game.js';
-import { createAppServer } from './app.js';
+import { createAppServer, SOCKET_PATH } from './app.js';
 
 function once<T>(socket: Socket, event: string): Promise<T> {
   return new Promise((resolve) => socket.once(event, resolve));
@@ -77,10 +77,18 @@ describe('over the wire', () => {
   });
 
   function client(): Socket {
-    const c = connect(url, { transports: ['websocket'] });
+    const c = connect(url, { path: SOCKET_PATH, transports: ['websocket'] });
     clients.push(c);
     return c;
   }
+
+  it('answers health at the root and under the base path', async () => {
+    for (const path of ['/health', '/marcopolo/health']) {
+      const res = await fetch(url + path);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, protocolVersion: PROTOCOL_VERSION });
+    }
+  });
 
   it('creates, joins, begins, filters, moves, calls', async () => {
     // Lobby: one creator, two joiners.

@@ -14,9 +14,11 @@ try {
 // 4003 is Marco Polo's slot in the cross-game port registry (the game-host
 // repo's PORTS.md); a shell/Render PORT still wins, per the loadEnvFile note.
 const port = Number(process.env.PORT ?? 4003);
-const { httpServer, stop } = createAppServer();
+const { httpServer, io, stop } = createAppServer();
 httpServer.listen(port, () => {
-  console.log(`marco-polo listening on ${port}`);
+  // io.path() is the effective mount — a client hanging at the wrong socket
+  // path is diagnosable from this line alone.
+  console.log(`marco-polo listening on ${port}, sockets at ${io.path()}`);
   for (const addrs of Object.values(networkInterfaces())) {
     for (const a of addrs ?? []) {
       if (a.family === 'IPv4' && !a.internal) {
