@@ -101,3 +101,49 @@ body {
 .btn__pip { width: 10px; height: 10px; flex: none; }
 .btn:disabled { opacity: 0.45; }
 .btn--center { justify-content: center; }
+
+/* --- game chrome ------------------------------------------------------- */
+/* Steering measures this element, and everything inside it is out of flow, so
+   without a box of its own it would collapse and hand the pool a size of 0. */
+.game { position: fixed; inset: 0; }
+
+.hud-top {
+  position: absolute; left: 24px; right: 24px; top: 24px;
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 10px 12px;
+}
+.hud-top--polo { background: rgba(247, 252, 250, 0.92); color: var(--deep); }
+.hud-top--marco { color: var(--pale-blue); }
+.hud-top__who { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; }
+.hud-top__clock { font-size: 16px; font-weight: 700; letter-spacing: 0.04em; }
+
+.hud-bottom {
+  position: absolute; left: 24px; right: 24px; bottom: 24px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.hud-line {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em;
+}
+.hud-bottom--polo .hud-line { color: var(--deep); }
+.hud-bottom--marco .hud-line { color: rgba(159, 220, 247, 0.75); }
+
+.call-btn {
+  width: 100%; border: 0; border-radius: 0;
+  padding: 18px 16px; background: var(--pale-blue); color: var(--ink);
+  font-family: var(--display); font-size: 16px; font-weight: 700; letter-spacing: 0.28em;
+  touch-action: manipulation;
+}
+.call-btn:disabled { background: rgba(159, 220, 247, 0.35); color: rgba(7, 34, 64, 0.6); }
+
+/* The turbo button IS the meter: sixteen tiles that charge left to right. */
+.turbo-btn {
+  width: 100%; border: 0; border-radius: 0; padding: 0; background: none;
+  display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px;
+  touch-action: manipulation;
+}
+.turbo-btn__seg { height: 14px; background: rgba(14, 70, 112, 0.28); }
+.turbo-btn__seg--lit { background: #1a6fa8; }
+.hud-bottom--marco .turbo-btn__seg { background: rgba(159, 220, 247, 0.18); }
+.hud-bottom--marco .turbo-btn__seg--lit { background: var(--pale-blue); }
+.turbo-btn--held .turbo-btn__seg--lit { background: var(--pale-blue); }
