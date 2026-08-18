@@ -74,6 +74,11 @@ Acquire's `src/net/connection.ts` — read it whole before writing yours.
   left unread is a refusal shown to no one. That includes the messages
   `useLobbyRoom` exposes but deliberately ranks below the roster ("only the
   host may begin") — they reach nobody unless a screen carries them.
+- **Behind a path proxy?** Pass `socketPath: '<base>/socket.io'` to
+  `createLobbyConnection` and mount the server's SocketServer at the same
+  path. Absent, both sides use socket.io's own `/socket.io` — right for a
+  server that owns its whole origin, wrong behind a front door that only
+  forwards your base path.
 - **Test the composition layer.** The no-mock rule here covers
   `connection.ts` — a stubbed-socket test of it restates the file. It does
   not cover *your* glue: lifecycle (how many sockets get made, who closes

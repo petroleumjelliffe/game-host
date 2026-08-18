@@ -15,6 +15,10 @@ export type ConnectionStatus = 'connecting' | 'open' | 'closed';
 export interface LobbyConnectionOptions {
   serverUrl: string;
   protocolVersion: number;
+  /** socket.io mount path, e.g. '/railbaron/socket.io', for a client served
+   *  behind a path proxy. Absent means socket.io's own '/socket.io' —
+   *  today's behaviour, and right for a server that owns its whole origin. */
+  socketPath?: string;
 }
 
 /**
@@ -55,6 +59,9 @@ export interface LobbyConnection {
 
 export function createLobbyConnection(opts: LobbyConnectionOptions): LobbyConnection {
   const socket: Socket = io(opts.serverUrl, {
+    // `undefined` here is socket.io's own default ('/socket.io'), so an
+    // absent option changes nothing for a server that owns its whole origin.
+    path: opts.socketPath,
     transports: ['websocket'],
     // Stated rather than inherited, so the reconnect behaviour is this file's
     // decision and not a dependency's default.
