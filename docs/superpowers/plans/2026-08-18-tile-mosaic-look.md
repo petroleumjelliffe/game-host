@@ -1287,7 +1287,7 @@ Also add this note above `createTileFloor`, because it is a real constraint the 
 
 ```tsx
 import { useEffect, useRef } from 'react';
-import { createTileFloor, type TileMask, type TileSkin } from '../render/tiles';
+import { createTileFloor, MAX_DPR, type TileMask, type TileSkin } from '../render/tiles';
 import { poolLayout, type PoolLayout } from '../render/scene';
 
 export interface PoolBackdropProps {
@@ -1318,8 +1318,25 @@ export function PoolBackdrop({ skin, mask, paint, children }: PoolBackdropProps)
     const host = hostRef.current!;
     const glCanvas = glRef.current!;
     const scene = sceneRef.current!;
-    const floor = createTileFloor(glCanvas);
+    let floor = createTileFloor(glCanvas);
     if (!floor) host.classList.add('pool--fallback');
+
+    // Backgrounding a tab or a GPU reset kills the context and every object
+    // in it, and a phone at a party does both. Nothing in a dead floor is
+    // salvageable, so the restore is to build another one; preventDefault on
+    // the loss is what makes the browser offer a restore at all.
+    const onLost = (e: Event) => {
+      e.preventDefault();
+      floor = null;
+      host.classList.add('pool--fallback');
+    };
+    const onRestored = () => {
+      floor = createTileFloor(glCanvas);
+      if (floor) host.classList.remove('pool--fallback');
+    };
+    glCanvas.addEventListener('webglcontextlost', onLost);
+    glCanvas.addEventListener('webglcontextrestored', onRestored);
+
     const ctx = scene.getContext('2d');
     const started = performance.now();
     let raf = 0;
@@ -1335,7 +1352,7 @@ export function PoolBackdrop({ skin, mask, paint, children }: PoolBackdropProps)
       floor?.render({ time: (now - started) / 1000, ...frameRef.current });
 
       if (ctx) {
-        const scale = Math.min(dpr, 2);
+        const scale = Math.min(dpr, MAX_DPR);
         const bw = Math.round(w * scale);
         const bh = Math.round(h * scale);
         if (scene.width !== bw || scene.height !== bh) {
@@ -1351,6 +1368,8 @@ export function PoolBackdrop({ skin, mask, paint, children }: PoolBackdropProps)
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
+      glCanvas.removeEventListener('webglcontextlost', onLost);
+      glCanvas.removeEventListener('webglcontextrestored', onRestored);
       floor?.dispose();
     };
   }, []);
