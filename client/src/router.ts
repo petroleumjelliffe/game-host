@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
 
-export type Route = { screen: 'home' } | { screen: 'room'; roomId: string };
+export type Route = { screen: 'home' } | { screen: 'join' } | { screen: 'room'; roomId: string };
 
 export function parseHash(hash: string): Route {
   const m = /^#\/room\/([A-Za-z2-9]+)$/.exec(hash);
-  return m ? { screen: 'room', roomId: m[1]!.toUpperCase() } : { screen: 'home' };
+  if (m) return { screen: 'room', roomId: m[1]!.toUpperCase() };
+  return hash === '#/join' ? { screen: 'join' } : { screen: 'home' };
 }
 
 export function navigateToRoom(roomId: string): void {
   window.location.hash = `#/room/${roomId}`;
+}
+
+export function navigateToJoin(): void {
+  window.location.hash = '#/join';
+}
+
+export function navigateHome(): void {
+  window.location.hash = '#/';
 }
 
 export function useHashRoute(): Route {

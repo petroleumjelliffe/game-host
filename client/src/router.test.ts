@@ -11,4 +11,8 @@ describe('parseHash', () => {
     expect(parseHash('#/')).toEqual({ screen: 'home' });
     expect(parseHash('#/room/')).toEqual({ screen: 'home' });
   });
+
+  it('routes #/join to the join screen', () => {
+    expect(parseHash('#/join')).toEqual({ screen: 'join' });
+  });
 });

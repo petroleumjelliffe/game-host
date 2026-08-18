@@ -1,42 +1,61 @@
-// One painter for both roles. The marco view is not a client-side secret:
-// polo positions are simply absent from `positions` (the server never sent
-// them), so the branches here are styling, not information control.
+// One painter for both roles, drawn over the tile floor. The marco view is not
+// a client-side secret: polo positions are simply absent from `positions` (the
+// server never sent them), so the branches here are styling, not information
+// control.
 
 import { TUNING, type StateMessage } from '../../../protocol/game';
 import { RIPPLE_MS, SPLASH_MS, type Ripple } from '../game/sessionState';
 import { worldScale, worldToScreen } from '../game/camera';
-import { playerColor, playerRgba } from './colors';
+import { creatureFor, playerColor, playerRgba } from './creatures';
+import { HeadingTracker, type PoolLayout } from './scene';
+import { drawSwimmer } from './swimmer';
 
 export interface SceneOpts {
-  size: number;
+  layout: PoolLayout;
   youId: string;
   snapshot: StateMessage;
   positions: Map<string, { x: number; y: number }>;
   ripples: Ripple[];
+  headings: HeadingTracker;
   now: number;
 }
 
 export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOpts): void {
-  const { size, snapshot } = o;
+  const { layout, snapshot } = o;
+  const size = layout.size;
   const marcoView = o.youId === snapshot.marcoId;
+
+  ctx.save();
+  ctx.translate(layout.offsetX, layout.offsetY);
   const center = worldToScreen(0, 0, size);
 
-  // water
-  ctx.fillStyle = marcoView ? '#04070c' : '#0b3556';
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = marcoView ? '#080f18' : '#11476f';
+  // Water outside the arena is scenery — push it back so the pool reads as
+  // the pool. The tiles beneath keep moving through the scrim.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-layout.offsetX, -layout.offsetY, size + layout.offsetX * 2, size + layout.offsetY * 2);
+  ctx.arc(center.x, center.y, worldScale(TUNING.arenaRadius, size), 0, Math.PI * 2, true);
+  ctx.fillStyle = marcoView ? 'rgba(2,6,12,0.78)' : 'rgba(6,40,70,0.45)';
+  ctx.fill('evenodd');
+  ctx.restore();
+
+  // The pool wall: the deck's nosing, continued round the water.
+  ctx.strokeStyle = marcoView ? 'rgba(159,220,247,0.22)' : '#f5f9f8';
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(center.x, center.y, worldScale(TUNING.arenaRadius, size), 0, Math.PI * 2);
-  ctx.fill();
+  ctx.stroke();
 
-  // shrink ring
-  ctx.strokeStyle = marcoView ? '#3a5b7a' : '#7fd4ff';
-  ctx.lineWidth = 3;
+  // The tide: the shrink ring, which is the only thing stopping a hider.
+  ctx.strokeStyle = marcoView ? 'rgba(159,220,247,0.45)' : '#9fdcf7';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]);
   ctx.beginPath();
   ctx.arc(center.x, center.y, worldScale(snapshot.ringRadius, size), 0, Math.PI * 2);
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  // ripples — one ring per ping, colored by whoever made the sound.
+  // Ripples — one ring per ping, colored by whoever made the sound.
   // Successive pings of a burst are stamped along the shouter's path, so a
   // moving swimmer trails rings; splashes are smaller and die faster.
   for (const r of o.ripples) {
@@ -59,40 +78,45 @@ export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOpts): void {
     }
     if (r.word) {
       ctx.fillStyle = ctx.strokeStyle;
-      ctx.font = `${Math.round(size / 22)}px system-ui`;
+      ctx.font = `700 ${Math.round(size / 26)}px 'JetBrains Mono', ui-monospace, monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText(r.word, at.x, at.y - worldScale(0.09, size) - age * 14);
+      ctx.letterSpacing = '0.24em';
+      ctx.fillText(r.word.toUpperCase(), at.x, at.y - worldScale(0.09, size) - age * 26);
+      ctx.letterSpacing = '0px';
     }
   }
 
-  // players — whatever positions the server let this viewer have. Identity
-  // is the fill color; the marco role reads as a red halo on top of it.
+  // Players — whatever positions the server let this viewer have.
+  o.headings.retain(new Set(snapshot.players.map((p) => p.id)));
   for (const p of snapshot.players) {
     const pos = o.positions.get(p.id);
     if (!pos) continue;
     const at = worldToScreen(pos.x, pos.y, size);
-    const r = worldScale(TUNING.avatarRadius, size);
-    ctx.fillStyle = playerColor(p.id);
-    ctx.beginPath();
-    ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
-    ctx.fill();
+    const heading = o.headings.update(p.id, pos.x, pos.y);
+    const isMarco = p.id === snapshot.marcoId;
+    drawSwimmer(ctx, {
+      x: at.x,
+      y: at.y,
+      radius: worldScale(TUNING.avatarRadius, size),
+      color: playerColor(p.id),
+      emoji: creatureFor(p.id, isMarco),
+      heading,
+      nowMs: o.now,
+      seed: Number.parseInt(p.id.slice(1), 10) || 0,
+      dimmed: marcoView,
+    });
+    // You are the one with a dot inside your ring — the design's own device
+    // for "find yourself in the water", carried over from the host's lobby.
     if (p.id === o.youId) {
-      ctx.strokeStyle = 'white';
+      const r = worldScale(TUNING.avatarRadius, size);
+      ctx.fillStyle = playerColor(p.id);
+      ctx.strokeStyle = 'rgba(245,249,248,0.9)';
       ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    if (p.id === snapshot.marcoId) {
-      ctx.strokeStyle = '#ff5a5a';
-      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(at.x, at.y, r + 4, 0, Math.PI * 2);
+      ctx.arc(at.x - r * 0.45, at.y + r * 0.45, Math.max(2.5, r * 0.22), 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
-    }
-    if (!marcoView) {
-      ctx.fillStyle = playerRgba(p.id, 0.9);
-      ctx.font = `${Math.round(size / 30)}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.fillText(p.name, at.x, at.y + r + 16);
     }
   }
+  ctx.restore();
 }

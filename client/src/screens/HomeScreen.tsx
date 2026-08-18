@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react';
 import { connection, identity } from '../net/singletons';
-import { navigateToRoom } from '../router';
+import { navigateToJoin, navigateToRoom } from '../router';
+import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
+import { drawIdlePool } from '../render/idle';
+import { PoolBackdrop } from './PoolBackdrop';
+import { Deck, DECK_MIN_PX } from './Deck';
+
+// Set dressing: three creatures in the water behind the opening screen.
+const DECOR = [{ seat: 0, id: 'p1' }, { seat: 3, id: 'p4' }, { seat: 6, id: 'p7' }];
 
 export function HomeScreen() {
-  const [code, setCode] = useState('');
+  // The deck is a wall the swimmers bounce off, and only the deck knows how
+  // tall it ended up.
+  const [deckHeight, setDeckHeight] = useState(DECK_MIN_PX);
 
   // createRoom's `joined` arrives while still on this screen; store the seat
   // so RoomScreen's useLobbyRoom rejoins with the token instead of taking a
@@ -20,30 +29,44 @@ export function HomeScreen() {
   }, []);
 
   return (
-    <main className="home">
-      <h1>Marco Polo</h1>
-      <p>One phone each. One of you is blind. Everyone makes noise.</p>
-      <button
-        className="big"
-        onClick={() => connection().createRoom(identity.rememberedName() ?? undefined)}
-      >
-        Start a pool
-      </button>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (code.trim()) navigateToRoom(code.trim());
+    <main>
+      <PoolBackdrop
+        skin="pale"
+        mask="cut"
+        paint={(ctx, layout, now) => {
+          const height = layout.size + layout.offsetY * 2;
+          const width = layout.size + layout.offsetX * 2;
+          drawIdlePool(
+            ctx,
+            DECOR,
+            { left: 0, top: 0, right: width, bottom: height - deckHeight },
+            now,
+            Math.max(18, width * 0.062),
+          );
         }}
       >
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="Room code"
-          maxLength={6}
-          autoCapitalize="characters"
-        />
-        <button type="submit">Join</button>
-      </form>
+        <div className="chips">
+          <span className="chip chip--light">ONLINE</span>
+          <span className="chip chip--dark">EYES CLOSED. EARS OPEN.</span>
+        </div>
+        <Deck onHeight={setDeckHeight}>
+          <div className="deck__stack">
+            <button
+              className="btn btn--primary"
+              onClick={() => connection().createRoom(identity.rememberedName() ?? undefined)}
+            >
+              HOST A GAME<span className="btn__pip" />
+            </button>
+            <button className="btn btn--ghost" onClick={() => navigateToJoin()}>
+              JOIN A GAME<span className="btn__pip" />
+            </button>
+          </div>
+          <div className="deck__footer">
+            <span>ONLINE · {MIN_PLAYERS}–{MAX_PLAYERS} BATHERS</span>
+            <span>MARCO POLO</span>
+          </div>
+        </Deck>
+      </PoolBackdrop>
     </main>
   );
 }

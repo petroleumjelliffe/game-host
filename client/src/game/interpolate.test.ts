@@ -28,4 +28,14 @@ describe('SnapshotBuffer', () => {
     buf.push([player('p2', 0.3)], 1000);
     expect(buf.at(1000).get('p2')!.x).toBe(0.3);
   });
+
+  it('drops a player whose coordinates stop arriving, rather than remembering them', () => {
+    // Becoming Marco strips every polo from the snapshot mid-stream. A buffer
+    // that fell back to the last known position here would leak exactly what
+    // the server refused to send.
+    const buffer = new SnapshotBuffer();
+    buffer.push([{ id: 'p1', name: 'a', role: 'polo', connected: true, x: 0.2, y: 0.2 }], 1000);
+    buffer.push([{ id: 'p1', name: 'a', role: 'polo', connected: true }], 1050);
+    expect(buffer.at(1150).has('p1')).toBe(false);
+  });
 });
