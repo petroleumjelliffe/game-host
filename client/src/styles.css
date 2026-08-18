@@ -168,3 +168,37 @@ body {
   font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; color: var(--slate);
 }
 .deck__footer .btn { flex: 1; }
+
+.lobby__row { display: flex; gap: 14px; align-items: flex-start; }
+.lobby__qr { width: 88px; height: 88px; flex: none; background: var(--surface); }
+.lobby__code { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.lobby__code-value {
+  font-family: var(--display); font-size: 34px; font-weight: 700;
+  letter-spacing: 0.08em; color: var(--blue); line-height: 1;
+}
+.lobby__hint { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; color: var(--slate); }
+.lobby__count {
+  width: 84px; flex: none; border: 3px solid var(--blue); background: var(--surface);
+  text-align: center; padding: 8px 4px 9px; display: flex; flex-direction: column;
+}
+.lobby__count-cap { font-family: var(--mono); font-size: 8px; letter-spacing: 0.16em; color: var(--blue); line-height: 1.4; }
+.lobby__count-rule { height: 2px; background: var(--blue); margin: 7px 6px; }
+.lobby__count-value { font-family: var(--display); font-size: 30px; font-weight: 700; color: var(--blue); line-height: 1; }
+.lobby__count-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.16em; color: var(--slate); margin-top: 3px; }
+
+.lobby__you { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.lobby__you-creature { font-size: 22px; line-height: 1; }
+.lobby__you-name {
+  flex: 1; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--blue);
+  background: var(--surface); border: 2px solid var(--blue); border-radius: 0; padding: 8px 10px;
+}
+.lobby__actions { display: flex; gap: 8px; margin-top: 12px; }
+.lobby__actions .btn { padding: 12px 10px; font-size: 12px; letter-spacing: 0.2em; }
+.lobby__start { flex: 1.5; }
+.lobby__actions .btn--ghost { flex: 1; }
+.lobby__note {
+  margin-top: 8px; font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.16em; color: var(--slate);
+}
+.lobby__note--error { color: var(--error); }
