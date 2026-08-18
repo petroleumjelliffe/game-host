@@ -11,6 +11,7 @@ import { Deck, DECK_MIN_PX } from './Deck';
 export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomState }) {
   const [qr, setQr] = useState<string | null>(null);
   const [deckHeight, setDeckHeight] = useState(DECK_MIN_PX);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     void QRCode.toDataURL(window.location.href, { margin: 1, width: 240 }).then(setQr);
   }, []);
@@ -18,12 +19,46 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
   const taken = view.seats.filter((s) => s.id !== null);
   // The swimmers in the water are the roster: seat index picks both the loop
   // and the creature, so the pool reads as "who is here".
-  const swimmers = taken.map((s) => ({ seat: s.index, id: s.id! }));
+  const swimmers = taken.map((s) => ({ seat: s.index, id: s.id!, asleep: !s.connected }));
 
-  const share = () => {
+  const share = async () => {
     const url = window.location.href;
-    if (navigator.share) void navigator.share({ title: 'Marco Polo', url }).catch(() => {});
-    else void navigator.clipboard?.writeText(url);
+    if (navigator.share) {
+      // The share sheet is its own acknowledgement; a cancel is not a failure.
+      try {
+        await navigator.share({ title: 'Marco Polo', url });
+      } catch {
+        // dismissed
+      }
+      return;
+    }
+    const note = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    };
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(url);
+        note();
+        return;
+      } catch {
+        // fall through to the old way
+      }
+    }
+    // Plain HTTP on a LAN is this game's usual home, and both modern paths
+    // are gated on a secure context — so the last resort is the old one.
+    const field = document.createElement('textarea');
+    field.value = url;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    try {
+      if (document.execCommand('copy')) note();
+    } finally {
+      field.remove();
+    }
   };
 
   return (
@@ -44,7 +79,16 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
         }}
       >
         <div className="chips">
-          <span className="chip chip--light">LOBBY</span>
+          {view.you && !view.you.isHost ? (
+            // The seat list went away with the redesign, and with it the only
+            // way to give a seat back. In an eight-seat room a wrong-room
+            // join otherwise locks somebody out until the server reaps it.
+            <button className="chip chip--light chip--action" onClick={() => lobby.leaveSeat()}>
+              ← LEAVE
+            </button>
+          ) : (
+            <span className="chip chip--light">LOBBY</span>
+          )}
           <span className="chip chip--dark">
             {view.you?.isHost ? 'YOU START' : 'HOST STARTS'}
           </span>
@@ -90,9 +134,16 @@ export function LobbyPanel({ view, lobby }: { view: LobbyView; lobby: LobbyRoomS
             >
               START<span className="btn__pip" />
             </button>
-            <button className="btn btn--ghost btn--center" onClick={share}>SHARE</button>
+            <button className="btn btn--ghost btn--center" onClick={() => void share()}>
+              {copied ? 'COPIED' : 'SHARE'}
+            </button>
           </div>
 
+          {taken.some((s) => !s.connected) && (
+            <p className="lobby__note">
+              {taken.filter((s) => !s.connected).length} ASLEEP — STILL HOLDING A SEAT
+            </p>
+          )}
           {view.beginBlocked === 'notEnoughPlayers' && (
             <p className="lobby__note">NEED {MIN_PLAYERS} SWIMMERS</p>
           )}

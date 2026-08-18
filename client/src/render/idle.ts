@@ -57,6 +57,8 @@ export interface IdleSwimmer {
   seat: number;
   /** Seat id when these are real players; used for color and creature. */
   id: string;
+  /** A seated player whose phone has dropped: still holding a seat, but gone. */
+  asleep?: boolean;
 }
 
 /** Paints a pool of drifting swimmers into the 2D layer. */
@@ -69,6 +71,9 @@ export function drawIdlePool(
 ): void {
   for (const s of swimmers) {
     const at = idleAt(s.seat, bounds, nowMs, radius * 2.6);
+    ctx.save();
+    // Still in their seat, still counted, but not really here.
+    if (s.asleep) ctx.globalAlpha = 0.35;
     drawSwimmer(ctx, {
       x: at.x,
       y: at.y,
@@ -79,5 +84,6 @@ export function drawIdlePool(
       nowMs,
       seed: s.seat,
     });
+    ctx.restore();
   }
 }
