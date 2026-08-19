@@ -17,7 +17,9 @@
     // stayed green.
     "paths": {
       "@game-host/lobby/*.js": ["./packages/lobby/*.ts"],
-      "@game-host/lobby/*": ["./packages/lobby/*.ts"]
+      "@game-host/lobby/*": ["./packages/lobby/*.ts"],
+      "@game-host/host/*.js": ["./packages/host/*.ts"],
+      "@game-host/host/*": ["./packages/host/*.ts"]
     }
   }
 }

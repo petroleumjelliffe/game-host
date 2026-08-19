@@ -4,7 +4,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "games/*"
+    "games/*",
+    "apps/*"
   ],
   "scripts": {
     "test": "node scripts/test-all.mjs",
