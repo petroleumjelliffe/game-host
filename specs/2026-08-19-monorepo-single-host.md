@@ -4,9 +4,13 @@
 day (Phase 0 in the three source repos, then
 [`docs/plans/2026-08-19-monorepo-one-repo.md`](../docs/plans/2026-08-19-monorepo-one-repo.md)
 — one repo, four workspaces, one toolchain, 1548 tests in one command).
-Steps 6–8 are planned in
-[`docs/plans/2026-08-19-composition-one-process.md`](../docs/plans/2026-08-19-composition-one-process.md)
-and not yet started; steps 9–11, the two cutovers, have no plan yet.
+Steps 6–8 are built too
+([`docs/plans/2026-08-19-composition-one-process.md`](../docs/plans/2026-08-19-composition-one-process.md)):
+`apps/host` runs all three games in one process on port 4000, with a generated
+menu, an aggregate `/health` and a per-game error boundary — but nothing is
+*deployed* that way yet, so both arrangements work at once. Steps 9–11, the
+two cutovers, have no plan yet and are what make the composed process the
+thing anyone actually reaches.
 **Home:** this repo, which becomes the monorepo. The hosting properties this
 spec buys are the ones game-host already owns — a single address, a path per
 game, a port registry — so the repo that enforces them is the repo that

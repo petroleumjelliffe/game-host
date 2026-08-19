@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** complete, 2026-08-19. Every box below is ticked; see "As built" for what the implementation found that the design did not know.
+
 **Goal:** One Node process serves all three games at once — one Express app, one HTTP server, three socket.io servers — behind a generated menu, with every existing per-game suite still passing untouched and no deployment changed.
 
 **Architecture:** Each game grows a `mount(ctx)` that adds its routes and its socket server to an app it does not own. Its existing exported boot function stays, byte-for-byte compatible from the outside, and becomes a thin standalone wrapper over `mount` — which is what keeps 145 test files from needing to know any of this happened. A new `apps/host` creates the app, calls three mounts, generates the menu from what came back, and listens on one port. A new `packages/host` holds the contract they all speak and the error boundary that keeps one game's throw from ending the other two.
@@ -81,7 +83,7 @@ Nothing composes yet. This task produces the two pieces every later task imports
 - Consumes: `express`, `socket.io`, `@game-host/lobby/protocol/protocol.js` (for the `rejected` event name).
 - Produces: `HostContext`, `MountedGame`, `guardSocket`, `guardTick`.
 
-- [ ] **Step 1: The package, resolved the same way the lobby is**
+- [x] **Step 1: The package, resolved the same way the lobby is**
 
   Copy `packages/lobby/package.json`'s shape exactly — raw TypeScript, no build step, `exports` mapping both `"./*.js"` and `"./*"` to `"./*.ts"`. That dual mapping is what lets NodeNext callers (Marco Polo, Acquire) write `@game-host/host/contract.js` and bundler-resolution callers (Rail Baron) write `@game-host/host/contract`, from one package with no compile step. It is proven — 65 imports across 50 files already ride it — so do not invent a second scheme here.
 
@@ -89,7 +91,7 @@ Nothing composes yet. This task produces the two pieces every later task imports
 
   Create the `apps/host` package **skeleton** here too — `package.json`, `tsconfig.json`, `vitest.config.ts`, and nothing else. Task 5 writes its real contents. It exists this early because Task 3 needs somewhere to put a test that imports two games at once, and neither game's own package can own that test without depending on the other. `apps/host` is the one package allowed to depend on all three; that is its whole job.
 
-- [ ] **Step 2: `contract.ts`, verbatim from the spec**
+- [x] **Step 2: `contract.ts`, verbatim from the spec**
 
 ```ts
 export interface HostContext {
@@ -120,7 +122,7 @@ export type Mount = (ctx: HostContext) => Promise<MountedGame>;
 
   The scoped equivalent is `io.disconnectSockets(true)` followed by `io.engine.close()`. `engine.close()` closes only that engine's own clients and its own `ws` server (`cleanup()` in `engine.io/build/server.js`), and each attached engine has its own — so it is per-game by construction. **Exactly one thing closes the shared `httpServer`: whoever created it.** That is the host in composition, and the standalone wrapper on its own, in both cases after every `MountedGame.close()` has resolved.
 
-- [ ] **Step 3: `guardSocket` — the boundary**
+- [x] **Step 3: `guardSocket` — the boundary**
 
 ```ts
 /**
@@ -144,7 +146,7 @@ export function guardSocket(socket: Socket, game: string): Socket
 
   Guard `once` as well as `on`. Rebind through a captured `socket.on.bind(socket)`, never `this`.
 
-- [ ] **Step 4: `guardTick` — the boundary's other half**
+- [x] **Step 4: `guardTick` — the boundary's other half**
 
   A socket guard covers everything that arrives on a socket. Marco Polo's simulation does not arrive on a socket: `gameHandlers.ts` runs a `setInterval` per active room at `TUNING.tickHz = 20`, and a throw inside a timer callback reaches nothing but the top of the stack. It is the highest-frequency code in the composed process and the only scheduled entry point in any game, so leaving it outside the boundary would leave the boundary's most likely trigger outside it.
 
@@ -156,7 +158,7 @@ export function guardTick<A extends unknown[]>(
 
   Log and swallow. A tick that throws twenty times a second will say so twenty times a second, which is the correct amount of noise for a game that is now broken.
 
-- [ ] **Step 5: `guard.test.ts` — against a real server, not a fake socket**
+- [x] **Step 5: `guard.test.ts` — against a real server, not a fake socket**
 
   A hand-rolled `{ on() {} }` stub cannot tell you whether the patch survives socket.io's actual `Socket`. Boot a real `SocketServer` on an ephemeral port, connect a real client, and assert:
 
@@ -188,7 +190,7 @@ First because it is the smallest, has no saves, no `cors`, and already has a fac
 - Consumes: `HostContext`, `guardSocket`, `guardTick`.
 - Produces: `mount(ctx): Promise<MountedGame>`; `createAppServer()` unchanged from the outside.
 
-- [ ] **Step 1: Split `createAppServer` at the seam**
+- [x] **Step 1: Split `createAppServer` at the seam**
 
   `mount(ctx)` takes `ctx.app` and `ctx.httpServer` instead of creating them, and registers:
 
@@ -199,17 +201,17 @@ First because it is the smallest, has no saves, no `cors`, and already has a fac
 
   Everything else moves to the wrapper. Return `{ basePath: BASE_PATH, title: 'Marco Polo', version: () => ({ protocolVersion: PROTOCOL_VERSION }), io, close }`.
 
-- [ ] **Step 2: `destroyUpgrade: false`, with the comment that explains it**
+- [x] **Step 2: `destroyUpgrade: false`, with the comment that explains it**
 
   This is the single most important line in the plan and the one most likely to be deleted by someone tidying up, because nothing visibly breaks when it goes. Copy the reasoning from spec §1 into the code: engine.io's `attach` caches and chains `request` listeners, but installs `upgrade` listeners additively with no chaining, so **every** attached engine sees **every** websocket upgrade, and the ones whose path does not match schedule a 1-second timer that ends the socket unless it has written bytes. The handshake normally wins that race by a mile, which is exactly why its absence would surface as sockets failing rarely, under load, on the slowest phone at the table.
 
   Set it in the standalone path too. One code path, not two — a flag that is only set when composed is a flag that is only tested when composed.
 
-- [ ] **Step 3: `serveClient: false`**
+- [x] **Step 3: `serveClient: false`**
 
   No client loads socket.io from the server; all three bundle it. Three servers each serving their own copy of `socket.io.js` is dead weight in a process that now has three of everything — and it is not only weight: `initEngine` calls `attachServe(srv)` when the option is on, which splices into the **shared** server's `request` listeners. Three games each patching the host's listener chain to serve a file none of their clients ask for is a cost with no benefit on the other side.
 
-- [ ] **Step 4: The wrapper keeps what only a lone process can have**
+- [x] **Step 4: The wrapper keeps what only a lone process can have**
 
 ```ts
 export function createAppServer(): { httpServer; io; stop() } {
@@ -227,7 +229,7 @@ export function createAppServer(): { httpServer; io; stop() } {
 
   `createAppServer` is currently synchronous and `mount` is async. Making the wrapper async would change its signature and break `main.ts` and `wire.test.ts`, which violates the unchanged-tests constraint. Marco Polo's mount has nothing to await — no restore, no store — so give it a synchronous core and have `mount` return `Promise.resolve(...)` of it. If that turns out awkward, the fallback is for the wrapper to keep constructing synchronously and expose the mount separately; do not change `createAppServer`'s signature.
 
-- [ ] **Step 5: Guard the tick and the connection**
+- [x] **Step 5: Guard the tick and the connection**
 
   `io.on('connection', socket => { guardSocket(socket, 'marcopolo'); game.attach(socket); wiring.attach(socket); })`.
 
@@ -235,7 +237,7 @@ export function createAppServer(): { httpServer; io; stop() } {
 
   In `gameHandlers.ts`, wrap the `setInterval` callback in `guardTick('marcopolo', …)`.
 
-- [ ] **Step 6: Compose it alone, before two other games copy this shape**
+- [x] **Step 6: Compose it alone, before two other games copy this shape**
 
   `mount()` is otherwise dead code until Task 5 — three tasks of a contract nobody calls, whose first real exercise would come after Rail Baron and Acquire had already copied whatever is wrong with it. So end this task with the smallest possible proof: a new test that creates a bare `express()` and `http.Server`, mounts Marco Polo into them, listens on port 0, and asserts a client connects at `/marcopolo/socket.io`, the prefixed health twin answers, and `close()` leaves the HTTP server still listening.
 
@@ -243,7 +245,7 @@ export function createAppServer(): { httpServer; io; stop() } {
 
   This test lives in `games/marcopolo/server/mount.test.ts` — a new file, which the unchanged-tests constraint permits. It duplicates a little of what Task 6 will do properly with three games; that is the point.
 
-- [ ] **Step 7: Run the suite**
+- [x] **Step 7: Run the suite**
 
   89 existing tests / 14 files, unchanged, with no edits to any test file, plus step 6's new file. If `wire.test.ts` needs an edit, the seam is in the wrong place — go back to step 1.
 
@@ -268,37 +270,37 @@ npm run typecheck
 - Consumes: `HostContext`, `guardSocket`.
 - Produces: `mount(ctx)`; `startServer(opts)` unchanged from the outside.
 
-- [ ] **Step 1: `mount(ctx)` takes its save directory from `ctx.dataDir`**
+- [x] **Step 1: `mount(ctx)` takes its save directory from `ctx.dataDir`**
 
   `startServer`'s `opts.gamesDir` is required and absolute by discipline. `mount` reads `ctx.dataDir`, which the host has already created (Task 5). `mount` throws if it is absent — Rail Baron cannot run without somewhere to save, and a silent fallback to a relative path is the exact failure the `GAMES_DIR` note in `CLAUDE.md` exists to prevent.
 
-- [ ] **Step 2: Move the restore inside `mount`**
+- [x] **Step 2: Move the restore inside `mount`**
 
   `startServer` currently awaits `rooms.restore()` before `listen`, with the comment that no socket can race the restore because none can connect yet. Composed, the host awaits all three mounts before it listens, so the property is preserved for free — but it is preserved *because* the restore is inside `mount`, not in the boot block. Keep the comment and extend it to say so.
 
-- [ ] **Step 3: Scope `cors()` to the base path**
+- [x] **Step 3: Scope `cors()` to the base path**
 
   `app.use(cors())` at the root is harmless in a process with one game and wrong in a process with three: composed, it would apply Rail Baron's `origin: '*'` policy to Marco Polo's routes and to the menu, neither of which ever had it. `app.use(BASE_PATH, cors())` inside `mount` keeps each game's policy the size of each game. socket.io's own `cors` option is separate and unaffected.
 
   Tightening `origin: '*'` itself is deliberately deferred (spec's deferred list); this step only stops it leaking sideways.
 
-- [ ] **Step 4: `destroyUpgrade: false`, `serveClient: false`, `guardSocket`**
+- [x] **Step 4: `destroyUpgrade: false`, `serveClient: false`, `guardSocket`**
 
   As Task 2, steps 2, 3 and 5. Rail Baron has no tick.
 
   Preserve the `opts.socketPath` seam: `mount` uses `SOCKET_PATH` unconditionally, and the wrapper keeps the option. The comment on that option — that the env read lives in the boot block so no ambient env can move a test server's mount — is still true and still load-bearing.
 
-- [ ] **Step 5: The wrapper**
+- [x] **Step 5: The wrapper**
 
   `startServer(opts)` keeps its exact signature and its `RunningServer` return: creates app and server, registers the bare `/health`, calls `mount`, listens with the `once('error', reject)` dance intact, prints the same banner, returns `{ port, close }` where `close` delegates to the mounted game's.
 
-- [ ] **Step 6: The unhandled-rejection question, answered here rather than in the host**
+- [x] **Step 6: The unhandled-rejection question, answered here rather than in the host**
 
   `handlers.ts` does `void rooms.persist(room)` — a floating promise. Alone in a process, a rejection there takes down Rail Baron, which restores from disk on restart; the cost is a page refresh. Composed, it takes down a live Marco Polo round, which persists nothing and cannot be restored at all. Same line of code, much larger blast radius — which is spec §3's argument applied to the one path the socket guard does not cover.
 
   Attach a `.catch` that logs at each `void rooms.persist(...)` site, in Rail Baron and in Acquire. Do this rather than installing a process-level `unhandledRejection` handler in `apps/host`: a global handler changes the failure semantics of every dependency in the process, which is a much bigger decision than this plan should make on its own, and it silences rejections that ought to be loud.
 
-- [ ] **Step 7: Two games, one server — the first composition that is actually one**
+- [x] **Step 7: Two games, one server — the first composition that is actually one**
 
   `apps/host/twoGames.test.ts`. Mount Marco Polo *and* Rail Baron into one bare app and one bare HTTP server, listen on port 0, and assert:
 
@@ -327,31 +329,31 @@ Largest suite, most seams already present. `createServer(options)` already retur
 **Files:**
 - Modify: `games/acquire/server/index.ts`, `games/acquire/package.json`
 
-- [ ] **Step 1: `mount(ctx)` builds the store from `ctx.dataDir`**
+- [x] **Step 1: `mount(ctx)` builds the store from `ctx.dataDir`**
 
   `createFileStore(ctx.dataDir)` when present, `createNullStore()` when not — matching `createServer`'s existing default, which is what lets a bare test server boot with no disk. Leave `gamesDir()` and its four tests exactly as they are: it is the *boot block's* env fallback, it is exported precisely so the fallback is testable, and the cutover plan replaces its caller, not it.
 
-- [ ] **Step 2: Move the restore inside `mount`, and keep the settle-either-way shape**
+- [x] **Step 2: Move the restore inside `mount`, and keep the settle-either-way shape**
 
   The boot block currently does `rooms.restore().then(…).catch(…).finally(listen)`, with a comment explaining that a restore failure must never keep the server from booting. Inside `mount` the same rule holds with more force — a failed Acquire restore must not stop Marco Polo and Rail Baron from mounting. `await` it inside a try/catch that logs and continues; the host's `listen` then plays the part `.finally` played.
 
-- [ ] **Step 3: `devSeed` stays exactly where it is**
+- [x] **Step 3: `devSeed` stays exactly where it is**
 
   `registerDevSeed` mounts at `${BASE_PATH}/dev/rooms` — already prefixed, no collision, nothing to move. The `NODE_ENV === 'development'` read stays inside the factory, for the reason its comment gives: ambient env is the real input to that decision, and `devSeed.test.ts` exercises it by setting `NODE_ENV` around the constructor. Hoisting it to the boot seam would move the decision somewhere no test can reach.
 
   Do not add `devSeed` to `MountedGame` — it is not in the contract and Acquire is the only game with one. Keep the boot banner reporting it in the wrapper, and have `apps/host` print it too (Task 5, step 6). That banner is the four-day lesson from 2026-08-19 and the composed process needs it just as much.
 
-- [ ] **Step 4: Scope `cors()`, set `destroyUpgrade: false` and `serveClient: false`, guard the connection**
+- [x] **Step 4: Scope `cors()`, set `destroyUpgrade: false` and `serveClient: false`, guard the connection**
 
   As Task 3. Acquire's `socket.on('ping-settle')` is registered inside `io.on('connection')` and must be registered *after* `guardSocket` like everything else — the settle primitive that hundreds of tests depend on for ordering belongs inside the boundary, not outside it.
 
-- [ ] **Step 5: The wrapper is `createServer`, unchanged from outside**
+- [x] **Step 5: The wrapper is `createServer`, unchanged from outside**
 
   Same name, same `ServerOptions`, same `ServerHandle` including `devSeed`. `socketHarness.ts` calls it and must not change; nor must `versioning.test.ts`, which asserts both the bare and the prefixed health routes and is the closest thing the repo has to a test *of* the twin arrangement.
 
   `createServer` is synchronous today and `mount` is async — the same tension as Marco Polo, and sharper here because the restore genuinely awaits. Resolve it the same way: the wrapper stays synchronous by constructing the mount's synchronous core and starting the restore without awaiting it — which is what the boot block does today, so this is not new behaviour for the standalone path — while `mount` awaits it properly. Write the comment that says why the two paths differ, because the difference is real: composed, the restore finishes before anyone can connect; standalone, it races `listen` exactly as it does now.
 
-- [ ] **Step 6: `.catch` on every `void rooms.persist(...)`**
+- [x] **Step 6: `.catch` on every `void rooms.persist(...)`**
 
   As Task 3, step 6.
 
@@ -377,7 +379,7 @@ npm run typecheck
 - Consumes: all three `mount`s, `MountedGame`.
 - Produces: `createHost(opts): Promise<{ app, httpServer, games, close() }>` — the seam the Task 6 suite boots on port 0.
 
-- [ ] **Step 1: `createHost`, and the route order that is now a cross-package invariant**
+- [x] **Step 1: `createHost`, and the route order that is now a cross-package invariant**
 
   In this order, and the order is the point:
 
@@ -387,7 +389,7 @@ npm run typecheck
 
   Each game's SPA fallback is `app.use(BASE_PATH, …)` and so is already prefix-scoped. That was an accident of each game being alone in its process; Task 6 makes it something a test asserts.
 
-- [ ] **Step 2: Aggregate `/health`**
+- [x] **Step 2: Aggregate `/health`**
 
   Built from each `MountedGame.version()`:
 
@@ -400,7 +402,7 @@ npm run typecheck
 
   (Illustrative numbers — read the real ones from each protocol module.) One curl now answers "what is deployed" for all three, which is strictly more than any game could say alone — and that question cost a trip to the Render dashboard on 2026-08-07, which is why the per-game endpoints exist at all. Each game's prefixed twin keeps answering for itself; this is an addition, not a replacement.
 
-- [ ] **Step 3: `DATA_DIR`, allocated and created by the host**
+- [x] **Step 3: `DATA_DIR`, allocated and created by the host**
 
   One env var replaces three. `${DATA_DIR}/railbaron` and `${DATA_DIR}/acquire` are created before the mounts that need them; Marco Polo is passed no `dataDir` at all, because it persists nothing and an unused directory is a question someone will ask later.
 
@@ -408,17 +410,17 @@ npm run typecheck
 
   No default. An unset `DATA_DIR` is a hard failure with a message naming the variable, not a relative path that quietly resolves to wherever the process happened to start — the `GAMES_DIR` lesson, which cost the discovery that every saved room appeared to vanish.
 
-- [ ] **Step 4: The generated menu**
+- [x] **Step 4: The generated menu**
 
   From `MountedGame[]`: `basePath` and `title`, nothing else. Adding a game becomes "write the package, add one import".
 
   Keep it a single self-contained HTML string in `menu.ts` with no assets — the host serves one page and does not need a build step for it. Take the visual shape from `menu/index.html` — `<title>Game Night</title>`, an `<h1>GAME NIGHT</h1>`, and a `<ul>` of links whose text is exactly the three `title`s — so the LAN menu does not change appearance on cutover day. But do **not** import or read that file: it lives behind the `/opt/homebrew/etc/game-host` symlink on the host machine and is deliberately outside this plan's blast radius.
 
-- [ ] **Step 5: `PORTS.md` claims 4000**
+- [x] **Step 5: `PORTS.md` claims 4000**
 
   One row added, above the game-server block: the composed host, port 4000, path `/`. It is outside the 4001+ block on purpose — it is not a game — and it collides with nothing the registry knows. Do not delete the three server rows: 4001/4002/4003 are still real, still in the Caddyfile, and still what the three launchd agents run. The registry's existing paragraph already says they collapse "when the composition plan lands"; amend it to say the composed host now exists and the collapse happens at cutover.
 
-- [ ] **Step 6: `main.ts` — the boot block**
+- [x] **Step 6: `main.ts` — the boot block**
 
   `PORT ?? 4000`, `DATA_DIR` required, SIGTERM/SIGINT with the two-signal escape hatch all three games already implement.
 
@@ -450,17 +452,17 @@ The tests that could not have existed before, covering the properties no per-gam
 - Create: `apps/host/compose.test.ts`, `apps/host/routes.test.ts`, `apps/host/boundary.test.ts`, `apps/host/saves.test.ts`
 - Modify: `scripts/test-all.mjs`
 
-- [ ] **Step 1: `compose.test.ts` — simultaneous play, the load-bearing test**
+- [x] **Step 1: `compose.test.ts` — simultaneous play, the load-bearing test**
 
   Boot `createHost` on port 0 with a temp `DATA_DIR`. Connect real clients to all three socket paths **at once**, with `transports: ['websocket']` so the upgrade path is actually exercised — a polling-only client would never touch the `destroyUpgrade` hazard this test exists to catch. Then run a Marco Polo round *while* an Acquire turn commits and a Rail Baron event appends, and assert all three land.
 
   This is the regression guard for two failures at once — the upgrade race from spec §1 and cross-game event-loop interference from §4 — and neither is visible to any per-game suite, because a per-game suite only ever has one engine attached.
 
-- [ ] **Step 2: Try to make it fail — remove `destroyUpgrade: false` and watch**
+- [x] **Step 2: Try to make it fail — remove `destroyUpgrade: false` and watch**
 
   Before trusting step 1, confirm it can fail. Temporarily delete `destroyUpgrade: false` from one game and run the suite under load (repeat the connect fifty times). Record what you observe in an "As built" section — including, honestly, "it still passed", because the handshake wins that race in the overwhelming majority of runs and a test that cannot demonstrate the failure is weaker evidence than it looks. If it cannot be made to fail, say so and leave the option in with its comment: the reasoning from engine.io's source stands on its own, and this step corroborates it rather than justifying it.
 
-- [ ] **Step 3: `routes.test.ts` — isolation**
+- [x] **Step 3: `routes.test.ts` — isolation**
 
   With fake dist directories for all three games:
 
@@ -473,17 +475,17 @@ The tests that could not have existed before, covering the properties no per-gam
 
   Give each fake dist a distinguishable marker string. A test that asserts "200" cannot tell you *which* game answered, and answering-with-the-wrong-game is the entire failure mode here. The `__PWA_BASE__` incident is the precedent: an SPA fallback answered a broken asset path with 200 text/html, so a status-code-only check passed while the page was broken.
 
-- [ ] **Step 4: `boundary.test.ts` — one game's throw does not end the others**
+- [x] **Step 4: `boundary.test.ts` — one game's throw does not end the others**
 
   This needs an injectable throw. Do not add a "throw on demand" event to a game's protocol for testing — it would ship. Instead mount a fourth, test-only game defined inside the test file (the contract is a plain interface; a fake implementing it is a dozen lines) whose handler throws on a known event. Assert: the process survives, the throwing socket receives `rejected`, and Marco Polo and Acquire clients connected *before* the throw still exchange messages after it.
 
   Then the same for `guardTick`: a fake mount whose interval throws, with a Marco Polo round still ticking correctly beside it.
 
-- [ ] **Step 5: `saves.test.ts` — across a restart, from host-allocated paths**
+- [x] **Step 5: `saves.test.ts` — across a restart, from host-allocated paths**
 
   With a temp `DATA_DIR`: create a Rail Baron room and an Acquire room, play a move in each, close the host, boot a second host on the same `DATA_DIR`, and assert both rooms come back. Then assert the directories are where the host said: `${DATA_DIR}/railbaron` and `${DATA_DIR}/acquire` exist, and `${DATA_DIR}/marcopolo` does not.
 
-- [ ] **Step 6: Teach `scripts/test-all.mjs` about the two new packages, and run everything**
+- [x] **Step 6: Teach `scripts/test-all.mjs` about the two new packages, and run everything**
 
   It spawns `vitest run --root <package>` per package and bounds concurrency to three worker pools deliberately: four full-machine-sized pools in contention pushed a Rail Baron test past its timeout with no code change behind it. `packages/host` is light and belongs with lobby and marcopolo; `apps/host` boots three games per test file and is **not** light — group it with the heavy pair rather than assuming its file count reflects its cost.
 
@@ -495,6 +497,81 @@ npm run typecheck
 **Stop condition:** if step 1 cannot be made to pass, the composition does not work and nothing below it matters. Report rather than working around it.
 
 ---
+
+## As built
+
+Recorded here rather than by rewriting the tasks above, per the repo's docs
+convention: what the implementation found that the design did not know.
+
+**`destroyUpgrade: false` could not be shown to matter, and the option stays
+anyway.** Task 6 step 2 asked for an attempt to make the composition suite
+fail with the option removed. It was removed from all three games and the
+suite run five times (`compose.test.ts` + `twoGames.test.ts`, 11 tests each
+run), then a purpose-built stress file connected 60 clients at once across the
+three paths, three rounds, three times — 540 concurrent websocket upgrades in
+all. **Every run passed.**
+
+The reason is visible in `engine.io/build/server.js`, and it sharpens the
+original argument rather than undermining it: the timer a non-matching engine
+arms does not destroy unconditionally, it destroys only if
+`socket.bytesWritten <= 0` when it fires a second later. On loopback the
+matching engine writes its 101 response in microseconds, so the check always
+finds bytes and does nothing. The option earns its place only when the
+handshake response is delayed past a *full second* — a blocked event loop, a
+very slow link — which is precisely the "rarely, under load, on the slowest
+phone at the table" shape, and precisely what a localhost test cannot
+manufacture.
+
+So the line stays, justified by the source rather than by a test, and the
+stress file was deleted rather than kept: a test that cannot detect the thing
+it is aimed at is theatre, and `compose.test.ts` already exercises concurrent
+upgrades for the ordinary case.
+
+**What the suite *can* demonstrate, verified by breaking the code:**
+
+- Removing `closeSockets`'s scoping (using `io.close()` instead) fails exactly
+  one test — `twoGames.test.ts`'s "closing one game leaves the other serving
+  and connected" — and no others.
+- Unscoping Rail Baron's SPA fallback (`app.use(handler)` rather than
+  `app.use(BASE_PATH, handler)`) fails **six** tests in `routes.test.ts`,
+  including the menu ones: Rail Baron's `index.html` swallows `/` and every
+  unclaimed path.
+
+**Two test-design errors worth recording, both caught by running it:**
+
+- The first draft hardcoded socket event names and used `'event'` where Marco
+  Polo's protocol says `'gameEvent'`. It failed loudly only because the round
+  never started. Every event name and protocol version is now imported from
+  the game's own module.
+- The first draft asserted a Marco Polo snapshot count taken the instant Rail
+  Baron's and Acquire's turns finished, and got 0 — correctly. Both turns
+  completed in under 60 ms, barely one tick at 20 Hz, so that count measured
+  how fast they were rather than whether the loop survived them. It now waits
+  for three further snapshots *after* the other games act.
+
+**Acquire cannot drain in-flight saves on shutdown; Rail Baron can.**
+`createRooms` in Rail Baron exposes `settled()` and its `close()` awaits it;
+Acquire's `createRoomRegistry` has no equivalent, so `MountedGame.close()`
+returns while a write may still be in flight. Found by a test cleanup racing a
+late write into `ENOTEMPTY`. The consequence is bounded — the store writes to
+a temp file and renames, so an interrupted write leaves the previous record
+intact and the cost is the last move, not corruption — and it is pre-existing
+rather than something composition created. But composition sharpens it: every
+deploy now restarts all three games, so shutdown happens more often. Left
+undone deliberately, and it belongs with the deferred shared `packages/room-store`,
+which would give Acquire `settled()` and Rail Baron `quarantine()` in one move.
+
+**Every game gained an `exports` map.** `apps/host` imports games by name, and
+a deep import of a `.ts` file through a package with no `exports` field does
+not resolve. All three now carry the lobby's `"./*.js" → "./*.ts"` pair.
+
+**`closeSockets` lives in `packages/host`** rather than being written out
+three times — the plan implied three copies of a subtle rule, which is how the
+third copy gets it wrong.
+
+**`apps/host` needed `testTimeout: 20000`.** A test that boots three games and
+seats seven players across three lobbies is slow by construction, and vitest's
+5 s default is a unit-test budget.
 
 ## Deliberately not in this plan
 
@@ -509,16 +586,16 @@ npm run typecheck
 
 ## Done when
 
-- [ ] `npm run start:host` with `DATA_DIR` set serves all three games and a generated menu from one process on one port.
-- [ ] Every game has a `mount(ctx)`, and every game's original boot function still exists with its original signature.
-- [ ] **No existing test file was modified.** 1548 tests still pass; the additions are new files.
-- [ ] The composition suite proves: three simultaneous socket connections over websockets, a Marco Polo round ticking beside an Acquire commit, route isolation with distinguishable markers, a contained throw, and saves across a restart from host-allocated directories.
-- [ ] `destroyUpgrade: false` and `serveClient: false` on all three socket servers, each with the comment explaining what deleting it would cost.
-- [ ] **No game calls `io.close()`.** `grep -rn 'io\.close()' games/ apps/` finds it only where a wrapper owns the server it is closing. Exactly one thing closes the shared `httpServer`, and it is whoever created it.
-- [ ] Composition was exercised at every step, not only at the end: one game into a borrowed app (Task 2), two games sharing one server (Task 3), three games and a menu (Task 6).
-- [ ] Bare `/health` aggregates three games; each prefixed twin still answers for itself.
-- [ ] `DATA_DIR` is required, allocated per game, and absent for Marco Polo.
-- [ ] `PORTS.md` claims 4000 for the host and still lists 4001–4003 as real.
-- [ ] `Caddyfile`, `menu/`, `launchd/`, `saves/` and the `start-*.sh` scripts are untouched; all three launchd services would still start.
-- [ ] Acquire's build still emits `/acquire-startups-m1/`; `gh-pages`, `.env.production` and the deploy script are still present.
-- [ ] Nothing is deployed differently. `apps/host` runs only when someone runs it.
+- [x] `npm run start:host` with `DATA_DIR` set serves all three games and a generated menu from one process on one port.
+- [x] Every game has a `mount(ctx)`, and every game's original boot function still exists with its original signature.
+- [x] **No existing test file was modified.** 1548 tests still pass; the additions are new files.
+- [x] The composition suite proves: three simultaneous socket connections over websockets, a Marco Polo round ticking beside an Acquire commit, route isolation with distinguishable markers, a contained throw, and saves across a restart from host-allocated directories.
+- [x] `destroyUpgrade: false` and `serveClient: false` on all three socket servers, each with the comment explaining what deleting it would cost.
+- [x] **No game calls `io.close()`.** `grep -rn 'io\.close()' games/ apps/` finds it only where a wrapper owns the server it is closing. Exactly one thing closes the shared `httpServer`, and it is whoever created it.
+- [x] Composition was exercised at every step, not only at the end: one game into a borrowed app (Task 2), two games sharing one server (Task 3), three games and a menu (Task 6).
+- [x] Bare `/health` aggregates three games; each prefixed twin still answers for itself.
+- [x] `DATA_DIR` is required, allocated per game, and absent for Marco Polo.
+- [x] `PORTS.md` claims 4000 for the host and still lists 4001–4003 as real.
+- [x] `Caddyfile`, `menu/`, `launchd/`, `saves/` and the `start-*.sh` scripts are untouched; all three launchd services would still start.
+- [x] Acquire's build still emits `/acquire-startups-m1/`; `gh-pages`, `.env.production` and the deploy script are still present.
+- [x] Nothing is deployed differently. `apps/host` runs only when someone runs it.

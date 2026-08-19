@@ -13,5 +13,13 @@ export default defineConfig({
     // process-level signal handlers, and a pool that reuses a worker across
     // files would let one file's half-closed server meet the next file's.
     pool: 'forks',
+    // Well above vitest's 5s default. A test here boots three whole games,
+    // seats seven players across three lobbies and plays a round — the
+    // composition suite is slow by construction, and 5s is the budget for a
+    // unit test. Generous rather than tight on purpose: a timeout that
+    // sometimes fires under machine load is a flake, and a flake in the suite
+    // that guards composition is worse than no suite, because it teaches you
+    // to re-run rather than to read.
+    testTimeout: 20000,
   },
 });
