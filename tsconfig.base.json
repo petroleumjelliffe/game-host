@@ -6,6 +6,11 @@
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@game-host/lobby/*.js": ["./packages/lobby/*.ts"],
+      "@game-host/lobby/*": ["./packages/lobby/*.ts"]
+    }
   }
 }

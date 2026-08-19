@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createIdentityStore } from './identity';
 
 describe('identity namespace', () => {
