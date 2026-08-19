@@ -51,8 +51,9 @@ game-host/
     contract.ts                   #   HostContext, MountedGame, Mount
     guard.ts                      #   guardSocket, guardTick
     guard.test.ts
-  apps/host/                      # NEW — the composed process
-    package.json                  #   @game-host/apps-host
+  apps/host/                      # NEW — the composed process; skeleton in Task 1,
+    package.json                  #   contents in Task 5. The only package allowed
+    twoGames.test.ts              #   to depend on all three games.
     main.ts                       #   boot: env, listen, signals
     host.ts                       #   createHost(): app, mounts, menu, /health
     menu.ts                       #   generated from MountedGame[]
@@ -61,6 +62,7 @@ game-host/
     boundary.test.ts
     saves.test.ts
   games/marcopolo/server/app.ts   # MODIFIED — mount() + wrapper
+  games/marcopolo/server/mount.test.ts   # NEW — one game, a borrowed app
   games/railbaron/server/index.ts # MODIFIED — mount() + wrapper
   games/acquire/server/index.ts   # MODIFIED — mount() + wrapper
 ```
@@ -83,7 +85,9 @@ Nothing composes yet. This task produces the two pieces every later task imports
 
   Copy `packages/lobby/package.json`'s shape exactly — raw TypeScript, no build step, `exports` mapping both `"./*.js"` and `"./*"` to `"./*.ts"`. That dual mapping is what lets NodeNext callers (Marco Polo, Acquire) write `@game-host/host/contract.js` and bundler-resolution callers (Rail Baron) write `@game-host/host/contract`, from one package with no compile step. It is proven — 65 imports across 50 files already ride it — so do not invent a second scheme here.
 
-  Add the matching `paths` pair to `tsconfig.base.json` alongside the lobby's, and `"apps/*"` to the root `workspaces` array (needed in Task 5, harmless now).
+  Add the matching `paths` pair to `tsconfig.base.json` alongside the lobby's, and `"apps/*"` to the root `workspaces` array.
+
+  Create the `apps/host` package **skeleton** here too — `package.json`, `tsconfig.json`, `vitest.config.ts`, and nothing else. Task 5 writes its real contents. It exists this early because Task 3 needs somewhere to put a test that imports two games at once, and neither game's own package can own that test without depending on the other. `apps/host` is the one package allowed to depend on all three; that is its whole job.
 
 - [ ] **Step 2: `contract.ts`, verbatim from the spec**
 
@@ -109,6 +113,12 @@ export type Mount = (ctx: HostContext) => Promise<MountedGame>;
   `title` is new information — no game holds a display name today, because until now nothing needed one. Marco Polo is `Marco Polo`, Rail Baron `Rail Baron`, Acquire `Acquire`. Take them from `menu/index.html` so the generated menu and the static one agree.
 
   `close()` returns a promise because Rail Baron's does real work: `rooms.settled()` drains in-flight saves before the sockets go, or a room comes back a move behind. Marco Polo's clears its tick intervals. Neither is optional.
+
+  **`close()` must never call `io.close()`, and this is the second `destroyUpgrade`.** Verified in `node_modules/socket.io/dist/index.js`: `initEngine` stores the server it attached to (`this.httpServer = srv`, line 303) on *every* attachment path, and `Server.close()` ends with `this.httpServer.close(...)` (line 499). Composed, that server is the host's. So the first game to close would close the listener out from under the other two — an entire process going dark because one game shut down.
+
+  Rail Baron's existing `close()` comment already states the mechanism — "io.close() disconnects every socket and closes the http server it was attached to" — as a *convenience*, which is exactly what it is with one game in the process and exactly what makes it dangerous with three.
+
+  The scoped equivalent is `io.disconnectSockets(true)` followed by `io.engine.close()`. `engine.close()` closes only that engine's own clients and its own `ws` server (`cleanup()` in `engine.io/build/server.js`), and each attached engine has its own — so it is per-game by construction. **Exactly one thing closes the shared `httpServer`: whoever created it.** That is the host in composition, and the standalone wrapper on its own, in both cases after every `MountedGame.close()` has resolved.
 
 - [ ] **Step 3: `guardSocket` — the boundary**
 
@@ -197,7 +207,7 @@ First because it is the smallest, has no saves, no `cors`, and already has a fac
 
 - [ ] **Step 3: `serveClient: false`**
 
-  No client loads socket.io from the server; all three bundle it. Three servers each serving their own copy of `socket.io.js` at their own path is dead weight in a process that now has three of everything.
+  No client loads socket.io from the server; all three bundle it. Three servers each serving their own copy of `socket.io.js` is dead weight in a process that now has three of everything — and it is not only weight: `initEngine` calls `attachServe(srv)` when the option is on, which splices into the **shared** server's `request` listeners. Three games each patching the host's listener chain to serve a file none of their clients ask for is a cost with no benefit on the other side.
 
 - [ ] **Step 4: The wrapper keeps what only a lone process can have**
 
@@ -225,13 +235,21 @@ export function createAppServer(): { httpServer; io; stop() } {
 
   In `gameHandlers.ts`, wrap the `setInterval` callback in `guardTick('marcopolo', …)`.
 
-- [ ] **Step 6: Run the suite**
+- [ ] **Step 6: Compose it alone, before two other games copy this shape**
 
-  89 tests / 14 files, unchanged, with no edits to any test file. If `wire.test.ts` needs an edit, the seam is in the wrong place — go back to step 1.
+  `mount()` is otherwise dead code until Task 5 — three tasks of a contract nobody calls, whose first real exercise would come after Rail Baron and Acquire had already copied whatever is wrong with it. So end this task with the smallest possible proof: a new test that creates a bare `express()` and `http.Server`, mounts Marco Polo into them, listens on port 0, and asserts a client connects at `/marcopolo/socket.io`, the prefixed health twin answers, and `close()` leaves the HTTP server still listening.
+
+  That last assertion is the `io.close()` hazard, caught at the cheapest possible moment: one game, one file, no other game to confuse the diagnosis.
+
+  This test lives in `games/marcopolo/server/mount.test.ts` — a new file, which the unchanged-tests constraint permits. It duplicates a little of what Task 6 will do properly with three games; that is the point.
+
+- [ ] **Step 7: Run the suite**
+
+  89 existing tests / 14 files, unchanged, with no edits to any test file, plus step 6's new file. If `wire.test.ts` needs an edit, the seam is in the wrong place — go back to step 1.
 
 **Verification:**
 ```bash
-npm test --workspace @game-host/marcopolo   # 89 / 14, no test file modified
+npm test --workspace @game-host/marcopolo   # 89 existing + new mount.test.ts, none modified
 git diff --stat games/marcopolo             # app.ts, gameHandlers.ts, package.json
 npm run build --workspace @game-host/marcopolo
 npm run typecheck
@@ -280,9 +298,21 @@ npm run typecheck
 
   Attach a `.catch` that logs at each `void rooms.persist(...)` site, in Rail Baron and in Acquire. Do this rather than installing a process-level `unhandledRejection` handler in `apps/host`: a global handler changes the failure semantics of every dependency in the process, which is a much bigger decision than this plan should make on its own, and it silences rejections that ought to be loud.
 
+- [ ] **Step 7: Two games, one server — the first composition that is actually one**
+
+  `apps/host/twoGames.test.ts`. Mount Marco Polo *and* Rail Baron into one bare app and one bare HTTP server, listen on port 0, and assert:
+
+  - both socket paths accept a client **at the same time**, over `transports: ['websocket']`
+  - each prefixed `/health` answers with its own versions, not the other's
+  - closing Rail Baron leaves Marco Polo's client connected and its route serving — the `io.close()` hazard, now with a second game present to actually be harmed by it
+  - closing both, then the HTTP server, exits cleanly with no open handles
+
+  This is the earliest point in the plan where two engine.io instances share one server, which means it is the earliest point where `destroyUpgrade: false` is doing real work and where the shared-`httpServer` close would bite. Finding either here rather than in Task 6 saves discovering it with three games and a menu in the way.
+
 **Verification:**
 ```bash
 npm test --workspace @game-host/railbaron   # 593 / 49, no test file modified
+npm test --workspace @game-host/apps-host   # step 7's two-game test
 npm run typecheck
 ```
 
@@ -382,7 +412,7 @@ npm run typecheck
 
   From `MountedGame[]`: `basePath` and `title`, nothing else. Adding a game becomes "write the package, add one import".
 
-  Keep it a single self-contained HTML string in `menu.ts` with no assets — the host serves one page and does not need a build step for it. Take the visual shape from `menu/index.html` so the LAN menu does not change appearance on cutover day, but do **not** import or read that file: it lives behind the `/opt/homebrew/etc/game-host` symlink on the host machine and is deliberately outside this plan's blast radius.
+  Keep it a single self-contained HTML string in `menu.ts` with no assets — the host serves one page and does not need a build step for it. Take the visual shape from `menu/index.html` — `<title>Game Night</title>`, an `<h1>GAME NIGHT</h1>`, and a `<ul>` of links whose text is exactly the three `title`s — so the LAN menu does not change appearance on cutover day. But do **not** import or read that file: it lives behind the `/opt/homebrew/etc/game-host` symlink on the host machine and is deliberately outside this plan's blast radius.
 
 - [ ] **Step 5: `PORTS.md` claims 4000**
 
@@ -390,9 +420,15 @@ npm run typecheck
 
 - [ ] **Step 6: `main.ts` — the boot block**
 
-  `PORT ?? 4000`, `DATA_DIR` required, SIGTERM/SIGINT with the two-signal escape hatch all three games already implement. One banner line naming the port, and one line per mounted game naming its base path and its socket path — a client hanging at the wrong socket path is diagnosable from that line alone, which is why all three games print it today, and the composed process needs it three times over. Include Acquire's `devSeed` state on its line, for the reason its own comment gives.
+  `PORT ?? 4000`, `DATA_DIR` required, SIGTERM/SIGINT with the two-signal escape hatch all three games already implement.
+
+  Shutdown order is `await Promise.all(games.map(g => g.close()))`, **then** `httpServer.close()` — the host created the server, so the host is the only thing that closes it (Task 1, step 2). `Promise.all`, not sequential: three independent drains have no ordering between them, and Rail Baron's `rooms.settled()` should not be waiting behind Marco Polo's interval teardown while launchd counts down to `SIGKILL`. Use `allSettled` if any game's close proves able to reject — one game failing to drain must not strand the other two.
+
+  One banner line naming the port, and one line per mounted game naming its base path and its socket path — a client hanging at the wrong socket path is diagnosable from that line alone, which is why all three games print it today, and the composed process needs it three times over. Include Acquire's `devSeed` state on its line, for the reason its own comment gives.
 
   Add root scripts: `dev:host` (`tsx watch apps/host/main.ts`) and `start:host` (`tsx apps/host/main.ts`). Neither replaces anything; the three per-game `dev:server` scripts stay, because the three launchd agents still run them. **Restart any running dev server after this step** — a `tsx watch` never reloads its environment, and `DATA_DIR` is a new one.
+
+  One thing `dev:host` does *not* do: serve a Vite dev client. All three `vite.config.ts` files proxy `<base>/socket.io` to their own game's `400N`, so `npm run dev` still develops a client against that game's standalone server, and that keeps working untouched. Developing a client against the *composed* host means pointing that proxy at 4000, which is a change to three files that are also read by the Caddyfile-era setup — so it belongs to the cutover plan, with the port collapse it is part of. Say so in `apps/host`'s comment rather than leaving the next person to discover that `dev:host` plus `npm run dev` talk past each other.
 
 **Verification:**
 ```bash
@@ -478,6 +514,8 @@ npm run typecheck
 - [ ] **No existing test file was modified.** 1548 tests still pass; the additions are new files.
 - [ ] The composition suite proves: three simultaneous socket connections over websockets, a Marco Polo round ticking beside an Acquire commit, route isolation with distinguishable markers, a contained throw, and saves across a restart from host-allocated directories.
 - [ ] `destroyUpgrade: false` and `serveClient: false` on all three socket servers, each with the comment explaining what deleting it would cost.
+- [ ] **No game calls `io.close()`.** `grep -rn 'io\.close()' games/ apps/` finds it only where a wrapper owns the server it is closing. Exactly one thing closes the shared `httpServer`, and it is whoever created it.
+- [ ] Composition was exercised at every step, not only at the end: one game into a borrowed app (Task 2), two games sharing one server (Task 3), three games and a menu (Task 6).
 - [ ] Bare `/health` aggregates three games; each prefixed twin still answers for itself.
 - [ ] `DATA_DIR` is required, allocated per game, and absent for Marco Polo.
 - [ ] `PORTS.md` claims 4000 for the host and still lists 4001–4003 as real.
