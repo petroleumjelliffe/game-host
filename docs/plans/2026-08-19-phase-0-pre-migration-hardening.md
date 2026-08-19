@@ -10,6 +10,21 @@
 
 **Spec:** [`specs/2026-08-19-monorepo-single-host.md`](../../specs/2026-08-19-monorepo-single-host.md) — Phase 0 section. Read it first; this plan argues from it.
 
+## Status
+
+**Tasks 1 and 3–6 are complete** — done directly in the Acquire repo on
+2026-08-19, ahead of this plan being written. Verified in place: the flag is
+on in `tsconfig.json`, `.github/workflows/ci.yml` exists, `npm run typecheck`
+exits 0, `tsc --noUncheckedIndexedAccess` reports 0 residual errors, and
+`npm run test:run` passes 864 tests across 82 files. The two source batches
+this plan separated (Tasks 3 and 4) landed as one `refactor:` commit, which
+is fine — the split existed for reviewability, and the review happened.
+
+Acquire commits: `42af86b` (CI), `9ede8fe` (source), `3136274` (tests),
+`70ba7db` (flag on).
+
+**Remaining: Task 2, Task 7, Task 8.**
+
 ## Global Constraints
 
 - **These changes land in the three game repos, not in game-host.** `~/Developer/personal/acquire-startups-m1` and `~/Developer/personal/railbaron`. This plan lives in game-host because game-host becomes the monorepo; the work does not.
@@ -21,7 +36,7 @@
 
 ---
 
-## Task 1: Acquire — CI workflow
+## ✅ DONE — Task 1: Acquire — CI workflow
 
 The safety net comes first. Acquire has no workflow at all, and Tasks 3–6 change several hundred lines across 42 files. Rail Baron's `deploy.yml` is the only existing workflow in any repo and is the pattern to copy — in particular its `submodules: recursive`, without which every `vendor/lobby` import fails to resolve and the run goes red for the wrong reason.
 
@@ -32,7 +47,7 @@ The safety net comes first. Acquire has no workflow at all, and Tasks 3–6 chan
 - Consumes: nothing.
 - Produces: a green CI run on push and PR, gating every later task in this plan.
 
-- [ ] **Step 1: Confirm the two commands pass locally first**
+- [x] **Step 1: Confirm the two commands pass locally first**
 
 A workflow that codifies a failing command teaches you nothing about the workflow.
 
@@ -43,7 +58,7 @@ npm run typecheck && npm run test:run
 
 Expected: both pass. `test:run` is `vitest run` (the bare `test` script is watch mode and would hang CI).
 
-- [ ] **Step 2: Write the workflow**
+- [x] **Step 2: Write the workflow**
 
 Create `.github/workflows/ci.yml`:
 
@@ -78,7 +93,7 @@ jobs:
       - run: npm run test:run
 ```
 
-- [ ] **Step 3: Verify the workflow is valid YAML and references real scripts**
+- [x] **Step 3: Verify the workflow is valid YAML and references real scripts**
 
 ```bash
 cd ~/Developer/personal/acquire-startups-m1
@@ -87,7 +102,7 @@ node -e "console.log(Object.keys(require('./package.json').scripts))" | grep -o 
 
 Expected: both `typecheck` and `test:run` appear.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd ~/Developer/personal/acquire-startups-m1
@@ -103,7 +118,7 @@ directory checks out empty and every import fails to resolve, which is a
 red run about the wrong thing."
 ```
 
-- [ ] **Step 5: Push and confirm the run is green**
+- [x] **Step 5: Push and confirm the run is green**
 
 ```bash
 git push && gh run watch
@@ -246,7 +261,7 @@ Express app."
 
 ---
 
-## Task 3: Acquire — remove unchecked index access in `engine/` source
+## ✅ DONE — Task 3: Acquire — remove unchecked index access in `engine/` source
 
 The flag is **not** turned on until Task 6. Every fix below is valid TypeScript today, so `npm run typecheck` stays green after every commit and the work lands in reviewable batches instead of one 633-error wall.
 
@@ -268,7 +283,7 @@ This task covers `engine/` **source only** (not `engine/**/*.test.ts`, which is 
 - Consumes: Task 1's CI.
 - Produces: zero flag-errors in `engine/` source. No public signature changes.
 
-- [ ] **Step 1: List exactly what to fix**
+- [x] **Step 1: List exactly what to fix**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 \
@@ -277,7 +292,7 @@ npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 \
 
 Expected: a file:line list. Work top to bottom.
 
-- [ ] **Step 2: Fix each site, deciding which kind it is**
+- [x] **Step 2: Fix each site, deciding which kind it is**
 
 Two kinds, and telling them apart is the whole value of this task.
 
@@ -308,7 +323,7 @@ Prefer destructuring where it reads better and needs no `!`:
 
 **Never** silence a site by widening a type or adding `as`. If a fix is not obviously one of the two shapes above, stop and leave that site for a human — note it in the commit body.
 
-- [ ] **Step 3: Confirm the countdown moved and nothing else broke**
+- [x] **Step 3: Confirm the countdown moved and nothing else broke**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep "^engine/" | grep -v "\.test\.ts" | wc -l
@@ -317,7 +332,7 @@ npm run typecheck && npm run test:run
 
 Expected: first number `0`; typecheck green; suite green. The suite must be green **without the flag**, which is what proves these fixes are behaviour-preserving.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add engine/
@@ -335,7 +350,7 @@ guarded, and called out below if there were any."
 
 ---
 
-## Task 4: Acquire — remove unchecked index access in `server/` and `src/` source
+## ✅ DONE — Task 4: Acquire — remove unchecked index access in `server/` and `src/` source
 
 Same method as Task 3, different tree. Kept separate because a reviewer can meaningfully reject the engine work while approving this, and because `server/` is where a wrong `!` has the widest blast radius.
 
@@ -346,18 +361,18 @@ Same method as Task 3, different tree. Kept separate because a reviewer can mean
 - Consumes: Task 3.
 - Produces: zero flag-errors in `server/`, `src/`, `session/` source.
 
-- [ ] **Step 1: List the sites**
+- [x] **Step 1: List the sites**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 \
   | grep -E "^(server|src|session)/" | grep -v "\.test\." | tee /tmp/task4.txt | wc -l
 ```
 
-- [ ] **Step 2: Fix each site using the two shapes from Task 3 Step 2**
+- [x] **Step 2: Fix each site using the two shapes from Task 3 Step 2**
 
 Assert only where a guard already proves it; otherwise add the guard. In `server/`, prefer the explicit throw over `!` — a wrong assertion here takes down a process that will soon be hosting three games.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep -E "^(server|src|session)/" | grep -v "\.test\." | wc -l
@@ -366,7 +381,7 @@ npm run typecheck && npm run test:run
 
 Expected: `0`, then green, then green.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/ src/ session/
@@ -379,7 +394,7 @@ games, so reachable sites get a throw naming the invariant rather than a !."
 
 ---
 
-## Task 5: Acquire — remove unchecked index access in test files
+## ✅ DONE — Task 5: Acquire — remove unchecked index access in test files
 
 520 of the 633 sites live in `.test.ts`. They are mechanical — a fixture index the test itself just built — and they are separated from Tasks 3 and 4 precisely so that the source review is not buried under them.
 
@@ -390,7 +405,7 @@ games, so reachable sites get a throw naming the invariant rather than a !."
 - Consumes: Tasks 3 and 4.
 - Produces: zero flag-errors anywhere in the repo.
 
-- [ ] **Step 1: Confirm only test files remain**
+- [x] **Step 1: Confirm only test files remain**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep "error TS" | grep -vc "\.test\."
@@ -398,7 +413,7 @@ npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep "error 
 
 Expected: `0`. If not, finish Tasks 3 and 4 first.
 
-- [ ] **Step 2: Fix the test sites**
+- [x] **Step 2: Fix the test sites**
 
 In a test, `!` is usually right: the test built the fixture two lines above and an out-of-range index should fail the test loudly anyway.
 
@@ -414,7 +429,7 @@ Where the index is the actual subject of the assertion, assert existence first s
     expect(first!.cash).toBe(6000);
 ```
 
-- [ ] **Step 3: Verify the count is zero and the suite is green**
+- [x] **Step 3: Verify the count is zero and the suite is green**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep -c "error TS"
@@ -423,7 +438,7 @@ npm run test:run
 
 Expected: `0`, then green.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .
@@ -437,7 +452,7 @@ buried under them."
 
 ---
 
-## Task 6: Acquire — turn on `noUncheckedIndexedAccess`
+## ✅ DONE — Task 6: Acquire — turn on `noUncheckedIndexedAccess`
 
 The count is already zero, so this commit is one line and cannot break anything. That is the point of doing it last.
 
@@ -448,7 +463,7 @@ The count is already zero, so this commit is one line and cannot break anything.
 - Consumes: Tasks 3–5 (count must be zero).
 - Produces: Acquire matching Rail Baron and Marco Polo, which both already have the flag.
 
-- [ ] **Step 1: Confirm zero before flipping**
+- [x] **Step 1: Confirm zero before flipping**
 
 ```bash
 npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep -c "error TS"
@@ -456,7 +471,7 @@ npx tsc -p tsconfig.json --noEmit --noUncheckedIndexedAccess 2>&1 | grep -c "err
 
 Expected: `0`. If not, do not proceed.
 
-- [ ] **Step 2: Add the flag**
+- [x] **Step 2: Add the flag**
 
 In `tsconfig.json`, beside `"strict": true`:
 
@@ -465,7 +480,7 @@ In `tsconfig.json`, beside `"strict": true`:
     "noUncheckedIndexedAccess": true,
 ```
 
-- [ ] **Step 3: Verify the plain typecheck now enforces it**
+- [x] **Step 3: Verify the plain typecheck now enforces it**
 
 ```bash
 npm run typecheck && npm run test:run
@@ -473,7 +488,7 @@ npm run typecheck && npm run test:run
 
 Expected: both green — and now `npm run typecheck` alone catches any regression, with no extra flag needed.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tsconfig.json
