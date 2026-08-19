@@ -774,10 +774,11 @@ checked."
 
 ## Done when
 
-- [ ] Acquire CI is green on `main`.
-- [ ] `npm run typecheck` in Acquire enforces `noUncheckedIndexedAccess` with no extra flag.
-- [ ] Acquire's dev and build serve at the same base; `SOCKET_PATH` appears in no Acquire script.
-- [ ] `POST ${BASE_PATH}/dev/rooms` is absent unless `NODE_ENV === 'development'`, and present when it is.
+- [x] Acquire CI is green on `main` (`42af86b`). The `phase0/dev-seed-and-base` branch is not merged yet, so its CI run gates the merge, not this line.
+- [x] `npm run typecheck` in Acquire enforces `noUncheckedIndexedAccess` with no extra flag — verified 0 residual errors under the flag.
+- [x] Acquire's dev and build serve at the same base (`base: BASE_PATH`, unconditional); `SOCKET_PATH` appears in no Acquire script.
+- [x] `POST ${BASE_PATH}/dev/rooms` is absent unless `NODE_ENV === 'development'`, and present when it is — covered by a test that genuinely fails if the guard is reverted.
 - [x] Rail Baron's NodeNext split is explicitly deferred to the migration plan — Rail Baron is untouched by Phase 0.
-- [ ] Marco Polo is untouched.
-- [ ] The Acquire Pages deploy still serves from `/acquire-startups-m1/` — nothing in Phase 0 moves it.
+- [x] Marco Polo is untouched by this plan. Its flag was already on before Phase 0 began (`85b36bf`); working tree clean.
+- [x] The Acquire Pages deploy still serves from `/acquire-startups-m1/` — `BASE_PATH` unchanged, build asset paths verified byte-identical.
+- [ ] **The owed manual browser check above** — the one thing still open before merge.
