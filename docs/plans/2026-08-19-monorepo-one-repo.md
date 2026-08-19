@@ -19,7 +19,24 @@
 - **Do not move `Caddyfile`, `launchd/`, `menu/`, `saves/`, or the `start-*.sh` scripts.** The spec's `infra/` layout is deferred to the cutover plan: the live game machine reaches these through `/opt/homebrew/etc/game-host` symlinks, and moving them breaks Caddy and all three services the moment that machine pulls. This plan only *adds* directories.
 - **Do not compose anything into one process.** No `apps/host`, no `mount()`, no shared Express app. That is the next plan.
 - **Every task ends green:** the repo installs, typechecks, and passes every game's full suite.
-- **Baselines to preserve** (measure before you start, compare after): Acquire 866 tests / 82 files; Rail Baron and Marco Polo — record their counts in Task 1 and never let them drop.
+- **Baselines to preserve** — and the correction discovered in Task 3. All
+  three games' pre-migration suites *collect the vendored lobby's own tests*
+  through `vendor/lobby/**` globs in their vitest configs, so each game's
+  pre-migration number double-counts the lobby's 31 tests / 5 files. Once the
+  lobby is a package with a suite of its own (Task 2), each game's suite drops
+  by exactly that much. Expected per-package counts after migration:
+
+  | Package | Pre-migration | Own tests after | Files after |
+  | --- | --- | --- | --- |
+  | Marco Polo | 120 / 19 | **89** | **14** |
+  | Rail Baron | 624 / 54 | **593** | **49** |
+  | Acquire | 866 / 82 | **835** | **77** |
+  | lobby | (never ran alone) | **31** | **5** |
+  | repo total | — | **1548** | **145** |
+
+  A game landing on its "own tests after" number is correct. A game landing on
+  its pre-migration number means it is still collecting the lobby's tests and
+  the `vendor/lobby/**` globs were not removed.
 - **Node 26.7.0, npm 11.19.0.** Workspaces are npm-native; do not introduce pnpm, yarn, turbo, or nx.
 - **A `tsx watch` reloads code but never its environment.** Any step that changes an environment variable or a script must say "restart your dev servers" — Phase 0 lost four days to exactly this.
 
@@ -418,7 +435,7 @@ npm test --workspace @game-host/marcopolo
 npm run typecheck --workspace @game-host/marcopolo
 ```
 
-Expected: the test count matches the Task 1 baseline exactly. A *lower* count means a file stopped being collected — investigate; do not accept it.
+Expected: **89 tests / 14 files**. That is 31 tests / 5 files below Marco Polo's pre-migration 120/19, and the difference is exactly the vendored lobby's suite, which now runs under `@game-host/lobby` instead of being collected here. Delete the `vendor/lobby/{protocol,server,client}` globs from `vitest.config.ts` — do not repoint them at `packages/lobby`, or the lobby's tests run three times over. Any *other* shortfall is a real regression: investigate it.
 
 - [ ] **Step 7: Commit**
 
@@ -519,7 +536,7 @@ npm test --workspace @game-host/railbaron
 npm run typecheck --workspace @game-host/railbaron
 ```
 
-Expected: the count matches the Task 1 baseline.
+Expected: **593 tests / 49 files** — 31/5 below the pre-migration 624/54, that difference being the vendored lobby's suite, which now runs under `@game-host/lobby`. Delete the `vendor/lobby/**` test globs from `vite.config.ts` (they are in its vitest `projects` blocks); do not repoint them. Any other shortfall is a real regression.
 
 - [ ] **Step 7: Commit**
 
@@ -650,7 +667,7 @@ npm run typecheck --workspace @game-host/acquire
 npm run build --workspace @game-host/acquire
 ```
 
-Expected: **866 tests / 82 files**, typecheck silent, build succeeds. Then confirm the build output still targets the live Pages path:
+Expected: **835 tests / 77 files**, typecheck silent, build succeeds. That is 31/5 below the pre-migration 866/82 — the vendored lobby's suite, which now runs under `@game-host/lobby`. Delete the `vendor/lobby/**` test globs from `vite.config.ts`; do not repoint them. Then confirm the build output still targets the live Pages path:
 
 ```bash
 grep -o '"/acquire-startups-m1/[^"]*"' games/acquire/dist/index.html | head -3
@@ -672,7 +689,9 @@ job, and doing it here would break a running deployment for no gain.
 Its tsconfig.server.json NodeNext override survives untouched: it is the
 split the other two are being brought toward, not something to flatten.
 
-866 tests / 82 files, unchanged. Build output still resolves under
+835 tests / 77 files — the pre-migration 866/82 less the lobby's own suite,
+which now runs under its own package instead of being collected here. Build
+output still resolves under
 /acquire-startups-m1/, verified against what Pages serves."
 ```
 
@@ -745,7 +764,7 @@ Fix each failure at its cause. Do **not** pin a package back to an older version
 
 - [ ] **Step 6: Confirm counts against the baselines**
 
-All four suites green, and each game's count equal to its Task 1 baseline (Acquire 866/82). A dropped count means files stopped being collected.
+All four suites green at their post-migration counts: Marco Polo 89/14, Rail Baron 593/49, Acquire 835/77, lobby 31/5. A drop below those means files stopped being collected.
 
 - [ ] **Step 7: Commit**
 
@@ -815,7 +834,7 @@ npm test
 npm run typecheck
 ```
 
-Expected: every package's tests run in one invocation; the total equals the sum of the four baselines. Record that total.
+Expected: every package's tests run in one invocation, totalling **1548 tests across 145 files**. Record it.
 
 - [ ] **Step 4: Add CI**
 
@@ -893,7 +912,7 @@ changes."
 ## Done when
 
 - [ ] `npm install` at the root links four workspaces; `npm test` runs all four suites in one command.
-- [ ] Every game's test count equals its pre-migration baseline (Acquire 866 / 82).
+- [ ] Every package hits its post-migration count: Marco Polo 89/14, Rail Baron 593/49, Acquire 835/77, lobby 31/5 — 1548 tests across 145 files in total, which is the pre-migration sum with the lobby counted once instead of three times.
 - [ ] The lobby has its own suite that runs without a consumer.
 - [ ] `grep -rn "vendor/lobby" games/` returns nothing; no `.gitmodules` anywhere.
 - [ ] `git log --follow` reaches pre-migration history for a file in each of the four merged trees.
