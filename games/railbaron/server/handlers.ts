@@ -24,6 +24,24 @@ export function attachGameHandlers(
     io.to(room.id).emit(GAME_SERVER_EVENTS.log, msg);
   }
 
+  /**
+   * Save without waiting — a player should not wait on a disk — but not
+   * without handling the failure.
+   *
+   * A bare `void rooms.persist(room)` is a floating promise, and an unhandled
+   * rejection ends the process. Alone that cost Rail Baron a restart it
+   * recovers from, since the rooms are on disk. Composed it ends a live Marco
+   * Polo round, which persists nothing and cannot be restored at all — the
+   * same line of code with a much larger blast radius.
+   *
+   * `settled()` still sees the save, so `close()` drains it either way.
+   */
+  function save(room: GameRoom): void {
+    void rooms.persist(room).catch((error: unknown) => {
+      console.error('[railbaron] save failed', error);
+    });
+  }
+
   return (socket: Socket) => {
     const refused = (code: string, message: string): void => {
       socket.emit(LOBBY_SERVER_EVENTS.rejected, { code, message });
@@ -67,7 +85,7 @@ export function attachGameHandlers(
         return;
       }
       here.room.log.push(msg.event);
-      void rooms.persist(here.room);
+      save(here.room);
       broadcastLog(here.room);
       // No roster send: the lifecycle only changes at Begin, which broadcasts
       // its own roster. Nothing a client may append moves a room out of the
@@ -86,7 +104,7 @@ export function attachGameHandlers(
       // the game's own undo() owns that rule, and asking it here is what keeps
       // the wire agreeing with pass-and-play about what a turn is.
       here.room.log = undo(here.room.log);
-      void rooms.persist(here.room);
+      save(here.room);
       broadcastLog(here.room);
     });
   };

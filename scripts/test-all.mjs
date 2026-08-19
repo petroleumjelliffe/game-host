@@ -26,6 +26,7 @@ const packages = [
   ['marcopolo', 'games/marcopolo'],
   ['railbaron', 'games/railbaron'],
   ['acquire', 'games/acquire'],
+  ['apps-host', 'apps/host'],
 ];
 
 // Weight is measured in worker-pool contention, not file count. `host` boots
