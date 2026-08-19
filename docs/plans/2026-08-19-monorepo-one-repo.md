@@ -762,14 +762,26 @@ Expect failures here — that is what this task is for. Two known-likely sources
 
 Fix each failure at its cause. Do **not** pin a package back to an older version to make a suite pass — that defeats the task. If a genuine incompatibility makes unification impossible for one tool, stop and report it rather than working around it silently.
 
-- [ ] **Step 6: Confirm counts against the baselines**
+- [ ] **Step 6: Remove the `as any` that only existed because versions differed**
+
+`games/railbaron/vite.config.ts` line ~79 reads `plugins: [react(), pagesFallback()] as any`. Task 4 added it because Vite 8 (Rail Baron) and Vite 6 (Marco Polo) were both installed under npm hoisting, giving two nominally different `Plugin`/`PluginOption` types. Unifying to one Vite makes those types identical again and the cast becomes dead weight hiding real errors.
+
+Delete the cast and its explanatory comment, then confirm the typecheck still passes:
+
+```bash
+npm run typecheck --workspace @game-host/railbaron
+```
+
+Expected: silent. If it is not, the versions have not actually unified — check `npm ls vite --workspaces` before reaching for the cast again.
+
+- [ ] **Step 7: Confirm counts against the baselines**
 
 All four suites green at their post-migration counts: Marco Polo 89/14, Rail Baron 593/49, Acquire 835/77, lobby 31/5. A drop below those means files stopped being collected.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add package.json games/*/package.json packages/lobby/package.json package-lock.json
+git add package.json games/*/package.json packages/lobby/package.json games/railbaron/vite.config.ts package-lock.json
 git commit -m "build: one Vite, one vitest, one TypeScript
 
 Three toolchains become one, at the highest version already in use — so
