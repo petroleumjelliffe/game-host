@@ -100,6 +100,12 @@ game's server as an absolute path by its start script:
                         # 4001, saves in saves/railbaron
 ```
 
+The `start-*.sh` scripts still `cd` into the sibling checkouts
+(`~/Developer/railbaron` and friends) rather than this repo's `games/`
+directories — deliberately frozen until the LAN cutover retires those
+checkouts, so this does not contradict the games having moved into
+`game-host` above.
+
 Each game keeps a repo-local relative default so it boots standalone; the
 absolute path matters here because a service's working directory is not the
 game repo, and a relative default would silently resolve to a different,

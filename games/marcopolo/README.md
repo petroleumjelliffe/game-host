@@ -45,7 +45,7 @@ and over a real socket in `server/wire.test.ts`.
     npm test           # vitest: node project (sim/server) + jsdom project (client)
     npm run typecheck  # both tsconfigs (server half and client half)
 
-The vendor submodule's own tests run inside this repo's vitest, per its README.
+The lobby has its own suite, run separately: `npm test --workspace @game-host/lobby`.
 
 ## Not built yet (deliberately)
 

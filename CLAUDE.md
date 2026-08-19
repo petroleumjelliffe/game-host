@@ -74,16 +74,23 @@ as its own top-level `vitest run --root <dir>` sidesteps the whole problem —
 each invocation resolves its own nested projects the normal, single-level
 way.
 
-`scripts/test-all.mjs` runs all four **in parallel**, buffers each one's
-output, and prints it as a single block once that package finishes — so
-concurrent suites don't interleave their output, but still finish in roughly
-the slowest package's time rather than the sum of all four. Critically, it
-lets every package run **regardless of another's outcome** — a plain `&&`
-chain would stop at the first failure, hiding whatever the remaining three
-packages would have said and turning every fix into its own separate
-discovery cycle. The script's own exit code is non-zero if *any* package
-failed, so CI still gates correctly; the printed summary (one line per
-package: pass/fail, exit code, test/file counts) says which one(s).
+`scripts/test-all.mjs` does not spawn all four at once: each vitest process
+sizes its own worker pool to the whole machine, so four full-machine-sized
+pools contending together oversubscribe by roughly 4x, which was enough to
+push railbaron's slowest test past its timeout on contention alone, no code
+change behind it. Lobby and marcopolo (the two light suites) run together;
+railbaron and acquire (the two heavy ones) run one after the other — at most
+three full-machine-sized pools contending at once, never four. Each
+package's output is buffered and printed as a single block once that
+package finishes, so concurrent suites don't interleave their output but a
+fast package's block still shows up before a slower one still running.
+Critically, every package runs **regardless of another's outcome** — a
+plain `&&` chain would stop at the first failure, hiding whatever the
+remaining three packages would have said and turning every fix into its own
+separate discovery cycle. The script's own exit code is non-zero if *any*
+package failed, so CI still gates correctly; the printed summary (one line
+per package: pass/fail, exit code, test/file counts, and — distinctly — how
+many of those tests failed when the run wasn't clean) says which one(s).
 
 ## Git history after the subtree merge
 

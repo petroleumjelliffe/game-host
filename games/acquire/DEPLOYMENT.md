@@ -22,8 +22,9 @@ server owns its whole origin.
 **Server — Render**, service `srv-d3klnhnfte5s73diht90`
 (`https://acquire-multiplayer.onrender.com`), plan **`starter`** (paid — it
 does not sleep, whatever older notes say). Start command runs
-`tsx server/index.ts`; `npm run build:server` is only the submodule guard, so
-clone with `--recurse-submodules`. Environment on the service:
+`tsx server/index.ts`. The lobby is the `@game-host/lobby` workspace package,
+resolved by `npm install` at the `game-host` repo root — no separate clone or
+submodule step. Environment on the service:
 
 - `PORT` — injected by Render; wins over the 4002 default.
 - `GAMES_DIR=/var/data/games` — a 1 GB disk (`dsk-d9rafvlbedkc73coe2k0`) is

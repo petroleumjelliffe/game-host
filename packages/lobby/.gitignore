@@ -1,7 +1,3 @@
-# There is no build tooling here on purpose — this repo is compiled by its
-# consumers. But a consumer's checkout lives at `vendor/lobby` inside a real
-# JS project, and one stray `npm` run in the wrong directory leaves a
-# node_modules/ here that makes the whole submodule report dirty in the game
-# that contains it. Which is confusing exactly when submodule state is already
-# the confusing part.
+# npm workspaces hoist deps to the repo root; a local node_modules/ here
+# would only appear from a stray `npm install` run inside this package.
 node_modules/

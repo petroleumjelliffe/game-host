@@ -1,8 +1,8 @@
-# multiplayer-game-lobby
+# @game-host/lobby
 
 Rooms, seats, join/rejoin tokens, presence, rename and leave — game-agnostic,
-shared by [Acquire](https://github.com/petroleumjelliffe/acquire-startups-m1)
-and [Rail Baron](https://github.com/petroleumjelliffe/railbaron).
+shared by [Acquire](../../games/acquire), [Rail Baron](../../games/railbaron)
+and [Marco Polo](../../games/marcopolo).
 
 ```
 protocol/   wire types, node-safe
@@ -11,18 +11,27 @@ client/     headless React: identity, connection, useLobbyRoom, view
 ```
 
 Extracted from `acquire-startups-m1` at `64a533b` on 2026-08-13, with history —
-`git log` here reaches back to the commit that first split the wire in two.
+`git log` here reaches back to the commit that first split the wire in two —
+and folded into this npm workspace monorepo as `packages/lobby` when Acquire,
+Rail Baron and Marco Polo were unified into `game-host`.
 
 ## Two rules for a consumer
 
-**Shared as source, not as a package.** Acquire and Rail Baron are on different
-React versions, and a built artifact would bake one React's JSX runtime and hook
-types into both. Each consumer compiles these files with its own toolchain, as a
-git submodule at `vendor/lobby`.
+**It's a workspace package, not a copy.** `npm install` at the repo root
+hoists `react` once for every workspace and links `@game-host/lobby` for
+each consumer via `package.json`'s `"@game-host/lobby": "*"` dependency.
+Resolution goes through the package's `exports` map (`./*` and `./*.js` both
+point at the matching `.ts` file, so plain and extension-qualified imports
+alike land on source) plus a `paths` entry in the shared `tsconfig.base.json`
+— there is no build step and no dist output to go stale. `react` is a
+`peerDependency` here rather than a direct one, so the one hoisted copy at
+the repo root is what every consumer's JSX and hooks actually run against;
+this package carries no React version opinion of its own.
 
-**Include only what you use.** A game with no server must keep `server/` out of
-its `tsconfig` include — it imports `socket.io`, and the fix for the resulting
-error is not to install `socket.io` but to stop compiling code you do not run.
+**Include only what you use.** A game with no server must keep `server/` out
+of its `tsconfig` include — it imports `socket.io`, and the fix for the
+resulting error is not to install `socket.io` but to stop compiling code you
+do not run.
 
 ## What this is not
 
@@ -89,8 +98,14 @@ Acquire's `src/net/connection.ts` — read it whole before writing yours.
 
 ## Tests
 
-There is no build tooling here on purpose: this repo is compiled by its
-consumers, and its tests run in theirs. Point your vitest globs at
-`vendor/lobby/protocol/**`, `vendor/lobby/server/**` (node) and
-`vendor/lobby/client/**` (jsdom). A consumer that does not run these will not
-notice when a submodule bump breaks it.
+This package has its own suite, and it runs on its own — no consumer needed:
+
+```bash
+npm test --workspace @game-host/lobby   # 31 tests / 5 files
+```
+
+It's also part of the root `npm test` (`scripts/test-all.mjs` runs it, along
+with the three games, as its own `vitest run --root packages/lobby`
+invocation). A consumer's own suite covers its glue code against this
+package's real types, not a mock of them — see the integration checklist
+above.
