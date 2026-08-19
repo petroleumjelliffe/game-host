@@ -1,0 +1,12 @@
+{
+  "name": "game-host",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "games/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  }
+}
