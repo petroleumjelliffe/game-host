@@ -20,21 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # `vendor/lobby` is a submodule, and checkout does not fetch one unless
-      # told to. Without this the directory is present but empty, every import
-      # of it fails to resolve, and `npm run typecheck` below stops the deploy.
-      #
-      # It was harmless for exactly as long as nothing imported the lobby —
-      # which is why six green runs went past after the submodule landed. The
-      # green was honest and vacuous: CI was compiling a tree with no shared
-      # code in it.
-      #
-      # `recursive` rather than `true`: the lobby has no nested submodules
-      # today, so the two are identical, and one of them stays correct if it
-      # ever gains one.
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-node@v4
         with:
           node-version: 24

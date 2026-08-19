@@ -5,7 +5,7 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/pro
 import { join } from 'node:path';
 import { RB_SAVE_VERSION } from '../session/protocol';
 import { isGameEvent, type GameEvent } from '../src/state/events';
-import type { SeatHolder } from '../vendor/lobby/server/rooms';
+import type { SeatHolder } from '@game-host/lobby/server/rooms';
 
 export interface SavedRoom {
   roomId: string;

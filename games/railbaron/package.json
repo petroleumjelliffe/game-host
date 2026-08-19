@@ -1,5 +1,5 @@
 {
-  "name": "railbaron",
+  "name": "@game-host/railbaron",
   "version": "1.0.1",
   "private": true,
   "type": "module",
@@ -9,7 +9,6 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "serve": "npm run build && tsx server/index.ts",
     "start:server": "tsx server/index.ts",
-    "build:server": "test -f vendor/lobby/protocol/protocol.ts || { echo 'ERROR: vendor/lobby is empty. The server imports it at runtime and tsx compiles nothing at build time — without this check the build goes green and the process dies at boot. Run: git submodule update --init --recursive'; exit 1; }",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -21,6 +20,7 @@
     "outline:build": "node scripts/build-outline.mjs --write"
   },
   "dependencies": {
+    "@game-host/lobby": "*",
     "cors": "^2.8.6",
     "d3-geo": "^3.1.1",
     "express": "^5.2.1",

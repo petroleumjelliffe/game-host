@@ -10,8 +10,8 @@ import {
 import { isGameEvent, SEATS, type SeatId } from '../src/state/events';
 import { undo } from '../src/state/game';
 import { appendLegality, undoLegality } from '../src/state/legal';
-import { LOBBY_SERVER_EVENTS } from '../vendor/lobby/protocol/protocol';
-import type { LobbyWiring } from '../vendor/lobby/server/handlers';
+import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol';
+import type { LobbyWiring } from '@game-host/lobby/server/handlers';
 import type { GameRoom, Rooms } from './rooms';
 
 const asSeat = (id: string): SeatId | undefined => SEATS.find((s) => s === id);

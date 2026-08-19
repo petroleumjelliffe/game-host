@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LobbyConnection } from '../../vendor/lobby/client/connection';
-import { createIdentityStore } from '../../vendor/lobby/client/identity';
-import { useLobbyRoom, type LobbyPhase, type LobbyRoomState } from '../../vendor/lobby/client/useLobbyRoom';
+import type { LobbyConnection } from '@game-host/lobby/client/connection';
+import { createIdentityStore } from '@game-host/lobby/client/identity';
+import { useLobbyRoom, type LobbyPhase, type LobbyRoomState } from '@game-host/lobby/client/useLobbyRoom';
 import { SEATS, type GameEvent, type SeatId } from '../state/events';
 import { getConnection } from './connection';
 import { createGameTransport, type GameTransport } from './transport';

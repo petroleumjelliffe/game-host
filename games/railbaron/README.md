@@ -6,7 +6,6 @@ the physical board; the app rolls each baron's next destination and works out th
 
 ```bash
 npm install
-git submodule update --init --recursive   # vendor/lobby, needed by the server
 
 npm run dev        # client only, http://localhost:7931/railbaron/
 npm run dev:all    # client + game server, for online mode

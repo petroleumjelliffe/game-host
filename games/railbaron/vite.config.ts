@@ -68,7 +68,15 @@ export default defineConfig({
     // tooling, not shipped code.
     proxy: { [`${BASE_PATH}/socket.io`]: { target: 'http://localhost:4001', ws: true } },
   },
-  plugins: [react(), pagesFallback()],
+  // Two `vite` majors coexist under npm workspace hoisting: this game's own
+  // devDependency is vite@8, but the shared root vitest (used by every game)
+  // resolves its own `vite` peer to whichever major a sibling game pinned
+  // first — currently 6 — so `defineConfig`'s expected `PluginOption` type
+  // and `react()`'s returned `Plugin` type come from two separately
+  // installed copies of the same package. Real, structurally identical
+  // plugin objects at runtime; a type-identity clash between installed
+  // copies, not a real type error.
+  plugins: [react(), pagesFallback()] as any,
   test: {
     globals: true,
     // No setupFiles here, deliberately: vitest 4 merges a root-level setup
@@ -89,9 +97,7 @@ export default defineConfig({
             'engine/**/*.test.ts',
             'session/**/*.test.ts',
             'server/**/*.test.ts',
-            PURE_STATE_TESTS,
-            'vendor/lobby/protocol/**/*.test.ts',
-            'vendor/lobby/server/**/*.test.ts'
+            PURE_STATE_TESTS
           ]
         }
       },
@@ -100,10 +106,7 @@ export default defineConfig({
         test: {
           name: 'app',
           environment: 'jsdom',
-          // The shared lobby's client half runs here too. A consumer that
-          // does not run the shared tests will not notice when a submodule
-          // bump breaks it.
-          include: ['src/**/*.test.{ts,tsx}', 'vendor/lobby/client/**/*.test.{ts,tsx}'],
+          include: ['src/**/*.test.{ts,tsx}'],
           // Spread the defaults back: supplying `exclude` replaces them, and
           // dropping them would set vitest scanning node_modules.
           exclude: [...configDefaults.exclude, PURE_STATE_TESTS],

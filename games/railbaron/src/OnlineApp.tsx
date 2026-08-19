@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { lobbyView, type LobbyLimits } from '../vendor/lobby/client/view';
+import { lobbyView, type LobbyLimits } from '@game-host/lobby/client/view';
 import { Board } from './board/Board';
 import {
   joinRoom as joinRoomScreen, onlineLobby, roomGone, roomRefused, staleClient,

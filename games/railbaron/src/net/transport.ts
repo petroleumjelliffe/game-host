@@ -5,7 +5,7 @@ import {
   GAME_CLIENT_EVENTS, GAME_SERVER_EVENTS,
   type AppendMessage, type LogMessage,
 } from '../../session/protocol';
-import type { LobbyConnection } from '../../vendor/lobby/client/connection';
+import type { LobbyConnection } from '@game-host/lobby/client/connection';
 import type { GameEvent } from '../state/events';
 
 export interface GameTransport {

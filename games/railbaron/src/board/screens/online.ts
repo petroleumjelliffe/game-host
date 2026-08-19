@@ -1,4 +1,4 @@
-import type { LobbyView } from '../../../vendor/lobby/client/view';
+import type { LobbyView } from '@game-host/lobby/client/view';
 import { SEATS } from '../../state/events';
 import { SEAT_COLORS } from '../../game/tokens';
 import { padRows, type Row, type ScreenDef } from '../types';

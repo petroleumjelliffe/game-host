@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lobbyView, type LobbySnapshot } from '../../../vendor/lobby/client/view';
+import { lobbyView, type LobbySnapshot } from '@game-host/lobby/client/view';
 import { BOARD_ROWS } from '../types';
 import { joinRoom, onlineLobby, roomGone } from './online';
 

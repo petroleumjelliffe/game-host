@@ -25,7 +25,6 @@ win condition) and Phase 3 (online multiplayer) are ahead.
 
 ```bash
 npm install
-git submodule update --init --recursive  # vendor/lobby — the server imports it at runtime
 
 npm run dev        # Vite dev server, http://localhost:7931/railbaron/
 npm run dev:server  # game server (online mode), port 4001
@@ -34,7 +33,6 @@ npm test            # vitest run — every project, once
 npm run test:watch  # vitest, watch mode
 npm run typecheck   # tsc --noEmit
 npm run build        # vite build, production bundle to dist/
-npm run build:server # a guard, not a build: fails if vendor/lobby is empty
 npm run preview      # serve the production build locally
 npm run serve        # build, then one process hosting client + sockets on 4001
 
@@ -234,9 +232,8 @@ Two owner rulings are encoded rather than derivable: any *seated* player may rep
 roll for first player (`orderRolled` is the one event exempt from seat-matching), and undo
 belongs to the seat whose action would be popped.
 
-`vendor/lobby` is a git submodule and the server imports it at runtime — `npm run
-build:server` exists only to fail loudly when it is empty, because `tsx` compiles nothing
-ahead of time and the process would otherwise die at boot after a green build.
+The lobby is the `@game-host/lobby` workspace package — an unresolvable workspace
+dependency fails at `npm install`, so there is no separate boot-time guard for it.
 
 ## What Phase 1 owes Phase 3
 

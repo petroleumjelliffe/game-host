@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LobbyPhase } from '../../vendor/lobby/client/useLobbyRoom';
+import type { LobbyPhase } from '@game-host/lobby/client/useLobbyRoom';
 import { rankPhase, type RoomPhase } from './useRoom';
 
 /**

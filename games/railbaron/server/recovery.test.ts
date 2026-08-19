@@ -8,7 +8,7 @@ import {
   type LogMessage,
 } from '../session/protocol';
 import type { GameEvent } from '../src/state/events';
-import type { JoinedMessage } from '../vendor/lobby/protocol/protocol';
+import type { JoinedMessage } from '@game-host/lobby/protocol/protocol';
 import { SOCKET_PATH, startServer, type RunningServer } from './index';
 
 /**

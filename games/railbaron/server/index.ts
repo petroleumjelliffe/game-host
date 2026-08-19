@@ -13,7 +13,7 @@ import {
   GAME_SERVER_EVENTS, RB_PROTOCOL_VERSION, RB_SAVE_VERSION,
   type LogMessage,
 } from '../session/protocol';
-import { createLobbyHandlers } from '../vendor/lobby/server/handlers';
+import { createLobbyHandlers } from '@game-host/lobby/server/handlers';
 import { attachGameHandlers } from './handlers';
 import { createRooms, type GameRoom } from './rooms';
 import { createFileStore } from './store';

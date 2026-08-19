@@ -24,7 +24,7 @@ import { describe, expect, it, vi } from 'vitest';
  */
 const { made } = vi.hoisted(() => ({ made: [] as { closed: number }[] }));
 
-vi.mock('../../vendor/lobby/client/connection', () => ({
+vi.mock('@game-host/lobby/client/connection', () => ({
   createLobbyConnection: () => {
     const record = { closed: 0 };
     made.push(record);

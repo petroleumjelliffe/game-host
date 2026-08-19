@@ -12,7 +12,7 @@ import {
 } from '../session/protocol';
 import type { GameEvent } from '../src/state/events';
 import { replay } from '../src/state/game';
-import type { JoinedMessage } from '../vendor/lobby/protocol/protocol';
+import type { JoinedMessage } from '@game-host/lobby/protocol/protocol';
 import { SOCKET_PATH, startServer, type RunningServer } from './index';
 
 /**

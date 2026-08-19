@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
  *  these tests are about identity and lifecycle, not socket mechanics. */
 const { made } = vi.hoisted(() => ({ made: [] as { closed: number }[] }));
 
-vi.mock('../../vendor/lobby/client/connection', () => ({
+vi.mock('@game-host/lobby/client/connection', () => ({
   createLobbyConnection: () => {
     const record = { closed: 0 };
     made.push(record);
