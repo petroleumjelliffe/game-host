@@ -68,15 +68,7 @@ export default defineConfig({
     // tooling, not shipped code.
     proxy: { [`${BASE_PATH}/socket.io`]: { target: 'http://localhost:4001', ws: true } },
   },
-  // Two `vite` majors coexist under npm workspace hoisting: this game's own
-  // devDependency is vite@8, but the shared root vitest (used by every game)
-  // resolves its own `vite` peer to whichever major a sibling game pinned
-  // first — currently 6 — so `defineConfig`'s expected `PluginOption` type
-  // and `react()`'s returned `Plugin` type come from two separately
-  // installed copies of the same package. Real, structurally identical
-  // plugin objects at runtime; a type-identity clash between installed
-  // copies, not a real type error.
-  plugins: [react(), pagesFallback()] as any,
+  plugins: [react(), pagesFallback()],
   test: {
     globals: true,
     // No setupFiles here, deliberately: vitest 4 merges a root-level setup
