@@ -30,9 +30,35 @@ radius reaches `src/state/` because Rail Baron's server imports its game
 rules from client-land. That `src/state/` boundary is getting looked at
 during the migration anyway, so the two are cheaper together than apart.
 
-**Remaining in this plan: Task 2, then Task 7.** They are coupled — Task 7
-edits the same `devSeed.ts` line Task 2 moves, and both touch `dev:server`
-— so run them in order.
+**Tasks 2 and 7 are complete**, on branch `phase0/dev-seed-and-base` in the
+Acquire repo: `0299691` (dev seed), `f675da8` (dev base), `1b9a86e` (final
+review fixes). Verified: typecheck clean, 865 tests across 82 files, build
+asset paths unchanged, `npm run verify:layout` passing.
+
+The final whole-branch review caught a **Critical defect the automated
+checks missed**, worth recording because it is the reason Task 7 step 7
+exists. Making `base` uniform meant `vite.config.ts`'s `__PWA_BASE__`
+substitution *doubled* the prefix — Vite's `devHtmlHook` already prepends
+`base` to root-relative hrefs — so dev's manifest and icon links pointed at
+`/acquire-startups-m1/acquire-startups-m1/…`, which the SPA fallback
+answered with **200 `text/html`** rather than a 404. A status-code-only
+check would have passed it. The fix is to substitute a bare `/` and let Vite
+apply the base exactly once; the build was unaffected throughout.
+
+### ⚠️ Still owed: Task 7 step 7's manual browser check
+
+Not done — it needs a human at a browser, and it was not faked. The final
+review mechanically covered the prefixed dev URL, the manifest and icon
+hrefs, the socket handshake and the dev-seeded link, so what remains is
+narrow:
+
+1. `npm run dev:all`, open `http://localhost:7932/acquire-startups-m1/` —
+   React actually renders (not a blank page).
+2. Create a room — the socket connects through the single-key proxy.
+3. Install the PWA from that URL — it carries the right name and icons.
+
+Do this before merging the branch. The automated set is exactly what missed
+the Critical above.
 
 ## Global Constraints
 
@@ -137,7 +163,7 @@ Expected: the `check` job passes. Do not start Task 2 until it does.
 
 ---
 
-## Task 2: Acquire — dev seed fails closed and moves under the base path
+## ✅ DONE — Task 2: Acquire — dev seed fails closed and moves under the base path
 
 `server/devSeed.ts` registers `POST /dev/rooms` — a route that installs arbitrary prepared game state — guarded by `process.env.NODE_ENV !== 'production'`. That guard **fails open**: any value that is not exactly `production`, including unset, registers the route. Nothing is exposed today because Render sets `NODE_ENV=production`, but the protection should come from the code rather than from an environment variable staying set — and after the migration this route sits at the root of an app shared by three games.
 
@@ -153,7 +179,7 @@ Expected: the `check` job passes. Do not start Task 2 until it does.
 - Consumes: Task 1's CI.
 - Produces: `registerDevSeed(app, rooms)` registering `POST ${BASE_PATH}/dev/rooms`, called only when `NODE_ENV === 'development'`.
 
-- [ ] **Step 1: Write the failing test — unset NODE_ENV must not register the route**
+- [x] **Step 1: Write the failing test — unset NODE_ENV must not register the route**
 
 The existing suite passes `'development'` or `'production'` explicitly in every case, so the fail-open gap is untested. Add this case to the `describe('POST /dev/rooms')` block in `server/devSeed.test.ts`:
 
@@ -174,7 +200,7 @@ The existing suite passes `'development'` or `'production'` explicitly in every 
   });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```bash
 cd ~/Developer/personal/acquire-startups-m1
@@ -183,7 +209,7 @@ npx vitest run server/devSeed.test.ts -t 'fails closed'
 
 Expected: FAIL — `expected 200 to be 404`. The route registers today because `undefined !== 'production'`.
 
-- [ ] **Step 3: Invert the guard**
+- [x] **Step 3: Invert the guard**
 
 In `server/index.ts`, change the registration line:
 
@@ -194,7 +220,7 @@ In `server/index.ts`, change the registration line:
   if (process.env.NODE_ENV === 'development') registerDevSeed(app, rooms);
 ```
 
-- [ ] **Step 4: Make dev set NODE_ENV, or the guard turns the tool off**
+- [x] **Step 4: Make dev set NODE_ENV, or the guard turns the tool off**
 
 In `package.json`, the `dev:server` script must now declare the environment it is:
 
@@ -202,7 +228,7 @@ In `package.json`, the `dev:server` script must now declare the environment it i
     "dev:server": "NODE_ENV=development SOCKET_PATH=/socket.io tsx watch server/index.ts",
 ```
 
-- [ ] **Step 5: Run the whole dev-seed suite**
+- [x] **Step 5: Run the whole dev-seed suite**
 
 ```bash
 npx vitest run server/devSeed.test.ts
@@ -210,7 +236,7 @@ npx vitest run server/devSeed.test.ts
 
 Expected: all pass, including the new case and the existing `does not exist at all in production`.
 
-- [ ] **Step 6: Move the route under the base path**
+- [x] **Step 6: Move the route under the base path**
 
 At the root of a shared app, `/dev/rooms` is the one route in the system that ignores the prefixing discipline every other route follows. In `server/devSeed.ts`, import the base path and prefix the route:
 
@@ -222,7 +248,7 @@ import { BASE_PATH } from '../basePath.js';
   app.post(`${BASE_PATH}/dev/rooms`, express.json(), (req, res) => {
 ```
 
-- [ ] **Step 7: Point the test helper at the prefixed route**
+- [x] **Step 7: Point the test helper at the prefixed route**
 
 In `server/devSeed.test.ts`, add the import and update `seed`:
 
@@ -240,7 +266,7 @@ function seed(port: number, body: unknown): Promise<Response> {
 }
 ```
 
-- [ ] **Step 8: Run the suite and the typecheck**
+- [x] **Step 8: Run the suite and the typecheck**
 
 ```bash
 npx vitest run server/devSeed.test.ts && npm run typecheck
@@ -248,7 +274,7 @@ npx vitest run server/devSeed.test.ts && npm run typecheck
 
 Expected: all pass.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add server/devSeed.ts server/devSeed.test.ts server/index.ts package.json
@@ -511,7 +537,7 @@ array index returns an element."
 
 ---
 
-## Task 7: Acquire — make the dev base symmetric
+## ✅ DONE — Task 7: Acquire — make the dev base symmetric
 
 `vite.config.ts` ends with `base: command === 'build' || isPreview ? BASE_PATH : "/"`. That single asymmetry is the sole cause of three separate workarounds, and Rail Baron's config states the contrast plainly: *"One key suffices because `base` is BASE_PATH in dev and build alike."*
 
@@ -527,7 +553,7 @@ array index returns an element."
 - Consumes: Task 2 (owns `devSeed.ts` and `dev:server`).
 - Produces: dev and build serving at the same base, `SOCKET_PATH` no longer set in dev, one socket proxy key.
 
-- [ ] **Step 1: Make the base unconditional**
+- [x] **Step 1: Make the base unconditional**
 
 ```ts
   // One base, dev and build alike. The asymmetry this replaces was the sole
@@ -536,7 +562,7 @@ array index returns an element."
   base: BASE_PATH,
 ```
 
-- [ ] **Step 2: Collapse the socket proxy to one key**
+- [x] **Step 2: Collapse the socket proxy to one key**
 
 The two-key proxy existed only because dev asked for `/socket.io` while build asked for `${BASE_PATH}/socket.io`. Replace both keys with:
 
@@ -546,7 +572,7 @@ The two-key proxy existed only because dev asked for `/socket.io` while build as
     },
 ```
 
-- [ ] **Step 3: Stop overriding the socket path in dev**
+- [x] **Step 3: Stop overriding the socket path in dev**
 
 In `package.json`, `dev:server` keeps the `NODE_ENV` from Task 2 and drops `SOCKET_PATH`, so the server uses its own prefixed default:
 
@@ -554,7 +580,7 @@ In `package.json`, `dev:server` keeps the `NODE_ENV` from Task 2 and drops `SOCK
     "dev:server": "NODE_ENV=development tsx watch server/index.ts",
 ```
 
-- [ ] **Step 4: Simplify `__PWA_BASE__`, keeping `order: 'pre'`**
+- [x] **Step 4: Simplify `__PWA_BASE__`, keeping `order: 'pre'`**
 
 The substitution no longer varies by command. **Do not remove `order: "pre"`** — that fix is about the placeholder being unsubstituted when Vite's `devHtmlHook` runs, which is independent of the value.
 
@@ -562,11 +588,11 @@ The substitution no longer varies by command. **Do not remove `order: "pre"`** �
             .replaceAll("__PWA_BASE__", `${BASE_PATH}/`),
 ```
 
-- [ ] **Step 5: Delete the dev manifest rewrite**
+- [x] **Step 5: Delete the dev manifest rewrite**
 
 The plugin branch that rewrites the manifest in dev exists because the generated manifest carried the prod `start_url`/`scope` while dev served at `/`. Dev now serves at `BASE_PATH`, so the generated manifest is correct as-is. Remove that branch and its comment.
 
-- [ ] **Step 6: Prefix the dev seed's returned path**
+- [x] **Step 6: Prefix the dev seed's returned path**
 
 `devSeed.ts` builds `path` from `room.id` and the seat `p`, and it worked only because dev served at `/`. It must now carry the base or every seeded link 404s. The existing comment there — *"Origin-free on purpose: the server does not know where the client is being served from"* — still holds: a base path is a path, not an origin, so leave that comment in place.
 
@@ -585,7 +611,7 @@ Update the matching assertion in `devSeed.test.ts`:
       );
 ```
 
-- [ ] **Step 7: Verify by hand — this is the task automated tests cover least**
+- [x] **Step 7: Verify by hand — this is the task automated tests cover least**
 
 ```bash
 npm run typecheck && npm run test:run
@@ -598,7 +624,7 @@ Then check all four, because each is one of the workarounds being removed:
 3. Creating a room connects — the single-key proxy carries the socket to 4002.
 4. `curl -s -X POST localhost:4002/acquire-startups-m1/dev/rooms -H 'content-type: application/json' -d '{"goldenId":"G2"}' | head -c 200` returns a body whose `path` starts with `/acquire-startups-m1/room/`, and opening that URL lands in the seeded room.
 
-- [ ] **Step 8: Verify the production build is unchanged**
+- [x] **Step 8: Verify the production build is unchanged**
 
 The Pages deploy must not move. `command === 'build'` already resolved to `BASE_PATH`, so this should be a no-op for the build:
 
@@ -608,7 +634,7 @@ npm run build && grep -o '"/acquire-startups-m1/[^"]*"' dist/index.html | head
 
 Expected: asset URLs still under `/acquire-startups-m1/`, exactly as before.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add vite.config.ts package.json server/devSeed.ts server/devSeed.test.ts
