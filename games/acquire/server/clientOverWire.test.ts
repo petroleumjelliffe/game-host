@@ -15,9 +15,9 @@ import {
 } from './socketHarness.js';
 import { createNetworkSession, type NetworkSession } from '../src/net/NetworkSession.js';
 import { createSocketTransport } from '../src/net/transport.js';
-import { createLobbyHandlers } from '../vendor/lobby/server/handlers.js';
-import { createLobbyConnection } from '../vendor/lobby/client/connection.js';
-import type { JoinedMessage } from '../vendor/lobby/protocol/protocol.js';
+import { createLobbyHandlers } from '@game-host/lobby/server/handlers.js';
+import { createLobbyConnection } from '@game-host/lobby/client/connection.js';
+import type { JoinedMessage } from '@game-host/lobby/protocol/protocol.js';
 
 let server: TestServer;
 

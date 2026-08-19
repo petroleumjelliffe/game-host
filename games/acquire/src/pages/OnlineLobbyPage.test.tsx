@@ -4,7 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import { OnlineLobbyPage } from './OnlineLobbyPage';
 import type { Connection } from '../net/connection';
-import type { JoinedMessage, RejectedMessage } from '../../vendor/lobby/protocol/protocol';
+import type { JoinedMessage, RejectedMessage } from '@game-host/lobby/protocol/protocol';
 
 // `CreateRoomPage.test.tsx`'s coverage, carried here when that page was
 // deleted: the Lobby Flow design has no name form in front of a room, so

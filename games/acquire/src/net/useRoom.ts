@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { RosterMessage } from '../../vendor/lobby/protocol/protocol';
-import { useLobbyRoom } from '../../vendor/lobby/client/useLobbyRoom';
+import type { RosterMessage } from '@game-host/lobby/protocol/protocol';
+import { useLobbyRoom } from '@game-host/lobby/client/useLobbyRoom';
 import { getConnection, type Connection, type ConnectionStatus } from './connection';
 import { createNetworkSession, type NetworkSession } from './NetworkSession';
 import { acquireIdentity, loadIdentity } from './identity';

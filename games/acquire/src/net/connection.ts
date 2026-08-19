@@ -1,8 +1,8 @@
 import { PROTOCOL_VERSION } from '../../session/protocol';
-import { createLobbyConnection, type LobbyConnection } from '../../vendor/lobby/client/connection';
+import { createLobbyConnection, type LobbyConnection } from '@game-host/lobby/client/connection';
 import { createSocketTransport, type RoomTransport } from './transport';
 
-export type { ConnectionStatus } from '../../vendor/lobby/client/connection';
+export type { ConnectionStatus } from '@game-host/lobby/client/connection';
 
 // `window` is read at module scope here, which throws on import in an
 // environment with no `window` — a node test, most concretely. Safe today:

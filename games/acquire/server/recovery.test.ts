@@ -17,7 +17,7 @@ import { createFileStore } from './store.js';
 import { buildFixture } from '../engine/golden/fixtures.js';
 import { connectPlayer, settleSocket, SOCKET_PATH } from './socketHarness.js';
 import { PROTOCOL_VERSION } from '../session/protocol.js';
-import { LOBBY_CLIENT_EVENTS, LOBBY_SERVER_EVENTS, type RejectedMessage } from '../vendor/lobby/protocol/protocol.js';
+import { LOBBY_CLIENT_EVENTS, LOBBY_SERVER_EVENTS, type RejectedMessage } from '@game-host/lobby/protocol/protocol.js';
 
 let dir: string;
 

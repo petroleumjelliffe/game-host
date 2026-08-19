@@ -1,6 +1,6 @@
 import type { GameState } from '../engine/gameTypes';
 import type { Intent, IllegalIntentCode } from '../engine/intents';
-import type { LobbyRejectionCode } from '../vendor/lobby/protocol/protocol';
+import type { LobbyRejectionCode } from '@game-host/lobby/protocol/protocol';
 
 /**
  * `Omit` does not distribute over a union: `Omit<Intent, 'playerId'>` collapses

@@ -6,7 +6,7 @@ import { StaleClient } from '../game/lobby/StaleClient';
 import { ConnectionStrip } from '../game/lobby/ConnectionStrip';
 import { RoomRefused } from '../game/lobby/RoomRefused';
 import { seatEmoji } from '../game/online/seatEmoji';
-import { lobbyView } from '../../vendor/lobby/client/view';
+import { lobbyView } from '@game-host/lobby/client/view';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../engine/startups';
 import { useRoom } from '../net/useRoom';
 import { forceUpdateAndReload } from '../pwa/update';

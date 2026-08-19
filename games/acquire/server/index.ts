@@ -25,8 +25,8 @@ import {
   type WireIntent,
   isWireIntent,
 } from '../session/protocol.js';
-import { LOBBY_SERVER_EVENTS } from '../vendor/lobby/protocol/protocol.js';
-import { createLobbyHandlers } from '../vendor/lobby/server/handlers.js';
+import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol.js';
+import { createLobbyHandlers } from '@game-host/lobby/server/handlers.js';
 
 export interface ServerHandle {
   app: express.Express;

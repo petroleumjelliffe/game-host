@@ -155,7 +155,7 @@ before starting work.
 | `src/game/` | The new component layer (Phase 1b). Pure, props-in, styled through `tokens.ts`. |
 | `src/game/catalog/` | `/catalog` route — every component state, mostly replayed from golden games. The acceptance surface. Also `/scenarios`: any golden-game state, playable on from that point. Both lazily routed so the golden data stays out of the main chunk. |
 | `session/` | Shared between client and server (Phase 3a). `GameSession` — the local draft/session model — and `protocol.ts`'s wire types (`WireIntent`, `StateMessage`, …). No React, no transport. |
-| `vendor/lobby/` | **A git submodule**, not this repo's code — [multiplayer-game-lobby](https://github.com/petroleumjelliffe/multiplayer-game-lobby), shared with Rail Baron. `protocol/` is the wire half (node-safe; `session/protocol.ts` imports from it, never the reverse). `server/` is seating, tokens, join/rejoin/reclaim, presence and roster broadcast behind `onBegin`/`onSeated`, generic over the room via `LobbyRoomLike`. `client/` is headless React — `createIdentityStore`, `createLobbyConnection`, `useLobbyRoom`, and `lobbyView`, which hands a game its seats (empty ones included), `canBegin` and terminal state as data. It carries **no UI and no badge**: decoration is derived by the game from the seat. Left Acquire on 2026-08-13 with all fifteen commits, via `git filter-repo`. |
+| `@game-host/lobby` | **The `packages/lobby` workspace package**, not this repo's code — shared with Rail Baron, and originally extracted from Acquire itself (2026-08-13, via `git filter-repo`, all fifteen commits). `protocol/` is the wire half (node-safe; `session/protocol.ts` imports from it, never the reverse). `server/` is seating, tokens, join/rejoin/reclaim, presence and roster broadcast behind `onBegin`/`onSeated`, generic over the room via `LobbyRoomLike`. `client/` is headless React — `createIdentityStore`, `createLobbyConnection`, `useLobbyRoom`, and `lobbyView`, which hands a game its seats (empty ones included), `canBegin` and terminal state as data. It carries **no UI and no badge**: decoration is derived by the game from the seat. |
 | `src/game/lobby/` | Acquire's *own* lobby screens — `RoomLobby`, `JoinRoomCard`, `LobbyCard`, `ConnectionStrip`, `RoomGone`, `RoomRefused`, `StaleClient`, `ShareRoomButton`. These used to live in `src/lobby/ui/` and be described as a themeable kit; they are not one, and Rail Baron draws its lobby as a split-flap departures board instead. |
 | `src/net/` | Now the game's thin layer on top of the lobby. `NetworkSession` — a `GameSession` whose authority is the server: six intents apply optimistically, three (`endTurn`, `tradeInDeadTiles`, `drawTurnOrderTile`) wait on a `correction`. The game transport and its wrappers: `useRoom` ranking `gone`/`stale` above `playing`, the `acquire` identity instantiation, and the composed connection. |
 | `server/` | Express + Socket.io. Authoritative over intents as of Phase 3a — runs `applyIntent`, projects state per player before broadcast, rejects out-of-turn/illegal intents. `store.ts` (Phase 4) persists a room's roster, rejoin tokens and last committed state; `rooms.restore()` seats them at boot, before `listen`, forcing every seat disconnected. `recovery.test.ts` kills a server and reboots it against the same store. The XState layer is deleted. |
@@ -228,13 +228,8 @@ npm run verify:layout  # drives a real Chrome over CDP — see the caveat below
 
 ## Working rules
 
-- **`vendor/lobby` is a submodule, and changing it takes two commits.** Commit and **push inside
-  `vendor/lobby` first**, then commit the bumped pointer here. The other order commits a gitlink to
-  a SHA that exists on one machine, and the repo becomes unclonable for everyone else — the failure
-  is invisible where you made it and total everywhere else. Clones need `--recurse-submodules`, or
-  `git submodule update --init --recursive` after the fact; CI needs `actions/checkout` with
-  `submodules: true`. `npm run build:server` fails loudly if the submodule is empty, because `tsx`
-  compiles nothing at build time and the server would otherwise die at boot with a green build log.
+- **The lobby is the `@game-host/lobby` workspace package** — an unresolvable workspace
+  dependency fails at `npm install`, so there is no separate boot-time guard for it.
 - **Derive from the engine, never hardcode.** Every price, total and board position in the UI comes
   from replayed state. Phase 0 shipped a wrong-number bug from a copied figure; the catalog exists so
   that cannot recur.

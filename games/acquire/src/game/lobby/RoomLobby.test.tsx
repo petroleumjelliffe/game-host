@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RoomLobby } from './RoomLobby';
-import { lobbyView } from '../../../vendor/lobby/client/view';
+import { lobbyView } from '@game-host/lobby/client/view';
 
 const noop = () => {};
 

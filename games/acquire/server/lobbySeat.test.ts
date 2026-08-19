@@ -20,7 +20,7 @@ import {
   type JoinedMessage,
   type RejectedMessage,
   type RosterMessage,
-} from '../vendor/lobby/protocol/protocol.js';
+} from '@game-host/lobby/protocol/protocol.js';
 
 let server: TestServer;
 

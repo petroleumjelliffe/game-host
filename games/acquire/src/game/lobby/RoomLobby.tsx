@@ -3,7 +3,7 @@
 // already in the room it names, and the list holds everybody. Its Join Room
 // twin is `JoinRoomCard`; both are drawn by `LobbyCard`.
 
-import type { LobbyView } from '../../../vendor/lobby/client/view';
+import type { LobbyView } from '@game-host/lobby/client/view';
 import { LobbyCard, SeatRow } from './LobbyCard';
 import { ShareRoomButton } from './ShareRoomButton';
 

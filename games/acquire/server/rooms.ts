@@ -2,7 +2,7 @@ import type { GameState } from '../engine/gameTypes.js';
 import { createGameRoom, type GameRoom, type RoomPlayer } from './room.js';
 import { createNullStore, SAVE_VERSION, type RoomStore, type SavedRoom } from './store.js';
 import { PROTOCOL_VERSION } from '../session/protocol.js';
-import { createLobbyRegistry, seatPlayer, type SeatHolder } from '../vendor/lobby/server/rooms.js';
+import { createLobbyRegistry, seatPlayer, type SeatHolder } from '@game-host/lobby/server/rooms.js';
 import { MAX_PLAYERS } from '../engine/startups.js';
 
 /**

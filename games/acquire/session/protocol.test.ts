@@ -9,8 +9,8 @@ import {
   toWire,
   isWireIntent,
 } from './protocol';
-import type { CreateRoomMessage, JoinRoomMessage } from '../vendor/lobby/protocol/protocol';
-import { LOBBY_CLIENT_EVENTS, LOBBY_SERVER_EVENTS } from '../vendor/lobby/protocol/protocol';
+import type { CreateRoomMessage, JoinRoomMessage } from '@game-host/lobby/protocol/protocol';
+import { LOBBY_CLIENT_EVENTS, LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol';
 
 /**
  * Compile-time exhaustiveness. If `Intent` gains a member this Record stops

@@ -9,7 +9,7 @@ import {
   type JoinedMessage,
   type JoinRoomMessage,
   type RejectedMessage,
-} from '../../vendor/lobby/protocol/protocol';
+} from '@game-host/lobby/protocol/protocol';
 
 function fakeConnection() {
   let joined: ((m: JoinedMessage) => void) | null = null;

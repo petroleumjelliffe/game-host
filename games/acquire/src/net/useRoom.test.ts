@@ -4,7 +4,7 @@ import type { Socket } from 'socket.io-client';
 import { useRoom } from './useRoom';
 import type { Connection, ConnectionStatus } from './connection';
 import type { StateMessage } from '../../session/protocol';
-import type { JoinedMessage, RejectedMessage, RosterMessage } from '../../vendor/lobby/protocol/protocol';
+import type { JoinedMessage, RejectedMessage, RosterMessage } from '@game-host/lobby/protocol/protocol';
 import { buildFixture } from '../../engine/golden/fixtures';
 
 /**

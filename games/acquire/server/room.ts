@@ -3,8 +3,8 @@ import type { Intent } from '../engine/intents.js';
 import { createInitialGame } from '../engine/gameInit.js';
 import { createGameSession, type GameSession } from '../session/GameSession.js';
 import { DRAWS, type RejectionCode, type WireIntent } from '../session/protocol.js';
-import type { Lifecycle } from '../vendor/lobby/protocol/protocol.js';
-import type { SeatHolder } from '../vendor/lobby/server/rooms.js';
+import type { Lifecycle } from '@game-host/lobby/protocol/protocol.js';
+import type { SeatHolder } from '@game-host/lobby/server/rooms.js';
 
 export type RoomPlayer = SeatHolder;
 

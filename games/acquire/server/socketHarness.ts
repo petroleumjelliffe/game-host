@@ -19,7 +19,7 @@ import {
   LOBBY_SERVER_EVENTS,
   type JoinedMessage,
   type RejectedMessage,
-} from '../vendor/lobby/protocol/protocol.js';
+} from '@game-host/lobby/protocol/protocol.js';
 
 /**
  * Where `createServer` mounts socket.io. The bare '/socket.io' default is

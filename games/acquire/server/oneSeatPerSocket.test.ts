@@ -7,7 +7,7 @@ import {
   type JoinedMessage,
   type RejectedMessage,
   type RosterMessage,
-} from '../vendor/lobby/protocol/protocol.js';
+} from '@game-host/lobby/protocol/protocol.js';
 import { startTestServer, settleSocket, SOCKET_PATH, type TestServer } from './socketHarness.js';
 
 let server: TestServer;

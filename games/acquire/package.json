@@ -1,5 +1,5 @@
 {
-  "name": "acquire-startups-m1",
+  "name": "@game-host/acquire",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,7 +12,6 @@
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json",
     "verify:layout": "node scripts/verify-layout.mjs",
-    "build:server": "test -f vendor/lobby/protocol/protocol.ts || { echo 'ERROR: vendor/lobby is empty. The server imports it at runtime, and tsx compiles nothing at build time — so without this check the build goes green and the process dies at boot with ERR_MODULE_NOT_FOUND. Clone with --recurse-submodules, or run: git submodule update --init --recursive'; exit 1; }",
     "start:server": "tsx server/index.ts",
     "serve": "npm run build && tsx server/index.ts",
     "preview": "vite preview",
@@ -24,6 +23,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@game-host/lobby": "*",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "react": "^19.2.8",
