@@ -102,7 +102,13 @@ export default defineConfig({
           // Spread the defaults back: supplying `exclude` replaces them, and
           // dropping them would set vitest scanning node_modules.
           exclude: [...configDefaults.exclude, PURE_STATE_TESTS],
-          setupFiles: ['src/test/setup.ts']
+          setupFiles: ['src/test/setup.ts'],
+          // Board.test.tsx's "lands the region, then the city, then the
+          // payout" drives 120 fake-timer ticks with a full DOM query each —
+          // legitimately slow, not broken. The 5000ms default is tight
+          // enough that ordinary machine contention (another package's
+          // vitest run sharing the same cores) pushes it over.
+          testTimeout: 20000
         }
       }
     ]

@@ -4,12 +4,20 @@
 // why: a single root `test.projects` array silently drops setupFiles for
 // any package — Acquire, Rail Baron — that already nests its own projects).
 //
-// Spawned in parallel and always let to finish: a plain `&&` chain stops at
-// the first failing package, which means a broken lobby suite hides three
-// games' worth of results and turns every fix into its own separate
-// discovery. Each child's output is buffered and printed as one block after
-// it completes, so four suites running concurrently don't interleave their
-// output — parallel for speed, but read like a sequential log.
+// Every package is let to finish regardless of another's outcome: a plain
+// `&&` chain stops at the first failure, which means a broken lobby suite
+// hides three games' worth of results and turns every fix into its own
+// separate discovery.
+//
+// Not spawned all four at once, though. Each vitest process sizes its own
+// worker pool to the whole machine, so four full-machine-sized pools
+// competing at once oversubscribe by roughly 4x — enough to push
+// railbaron's slowest test (120 fake-timer ticks with full DOM queries per
+// tick) past its default timeout under contention alone, no code change
+// behind it, and CI runners with 2-4 cores feel this worse than a fat dev
+// machine does. Railbaron and acquire (the two heavy suites) run one after
+// the other; lobby and marcopolo (the two light ones) run together — at
+// most three full-machine-sized pools contending at once, never four.
 import { spawn } from 'node:child_process';
 
 const packages = [
@@ -18,6 +26,9 @@ const packages = [
   ['railbaron', 'games/railbaron'],
   ['acquire', 'games/acquire'],
 ];
+
+const light = packages.filter(([name]) => name === 'lobby' || name === 'marcopolo');
+const heavy = packages.filter(([name]) => name === 'railbaron' || name === 'acquire');
 
 function runOne(name, root) {
   return new Promise((resolve) => {
@@ -32,6 +43,41 @@ function runOne(name, root) {
   });
 }
 
+// Each package's block is printed as soon as that package finishes, rather
+// than buffered until all four are done — so a fast package's result shows
+// up while a slow one is still running, and blocks still can't interleave
+// with each other since each is written in one shot.
+function printResult(r) {
+  console.log(`\n=== ${r.name} (${r.root}) ===`);
+  process.stdout.write(r.out);
+}
+
+async function runParallel(entries) {
+  return Promise.all(entries.map(async ([name, root]) => {
+    const r = await runOne(name, root);
+    printResult(r);
+    return r;
+  }));
+}
+
+async function runSequential(entries) {
+  const out = [];
+  for (const [name, root] of entries) {
+    const r = await runOne(name, root);
+    printResult(r);
+    out.push(r);
+  }
+  return out;
+}
+
+const [lightResults, heavyResults] = await Promise.all([
+  runParallel(light),
+  runSequential(heavy),
+]);
+
+const byName = new Map([...lightResults, ...heavyResults].map((r) => [r.name, r]));
+const results = packages.map(([name]) => byName.get(name));
+
 // Vitest's own summary lines, e.g.:
 //   " Test Files  5 passed (5)"
 //   " Test Files  53 failed | 92 passed (145)"
@@ -43,11 +89,13 @@ function parseTotal(out, label) {
   return match ? Number(match[1]) : null;
 }
 
-const results = await Promise.all(packages.map(([name, root]) => runOne(name, root)));
-
-for (const r of results) {
-  console.log(`\n=== ${r.name} (${r.root}) ===`);
-  process.stdout.write(r.out);
+// The failed count sits right after the label, before the trailing total —
+// present only when something actually failed ("393 failed | 1129 passed").
+// A passing run's "Tests  1522 passed (1522)" has no "failed" to match.
+function parseFailed(out, label) {
+  const re = new RegExp(String.raw`${label}\s+(\d+) failed`);
+  const match = out.match(re);
+  return match ? Number(match[1]) : 0;
 }
 
 console.log('\n--- summary ---');
@@ -59,6 +107,7 @@ let allTotalsKnown = true;
 for (const r of results) {
   const files = parseTotal(r.out, 'Test Files');
   const tests = parseTotal(r.out, 'Tests');
+  const testsFailed = parseFailed(r.out, 'Tests');
   if (files == null || tests == null) allTotalsKnown = false;
   else {
     totalFiles += files;
@@ -66,7 +115,9 @@ for (const r of results) {
   }
   const status = r.code === 0 ? 'PASS' : 'FAIL';
   if (r.code !== 0) anyFailed = true;
-  const counts = files != null && tests != null ? `${tests} tests / ${files} files` : '(no test summary found)';
+  const counts = files != null && tests != null
+    ? (testsFailed > 0 ? `${testsFailed} failed / ${tests} total` : `${tests} tests / ${files} files`)
+    : '(no test summary found)';
   console.log(`${status}  ${r.name.padEnd(10)} exit ${r.code}  ${counts}`);
 }
 
