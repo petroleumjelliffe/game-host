@@ -19,7 +19,7 @@
 - **Do not move `Caddyfile`, `launchd/`, `menu/`, `saves/`, or the `start-*.sh` scripts.** The spec's `infra/` layout is deferred to the cutover plan: the live game machine reaches these through `/opt/homebrew/etc/game-host` symlinks, and moving them breaks Caddy and all three services the moment that machine pulls. This plan only *adds* directories.
 - **Do not compose anything into one process.** No `apps/host`, no `mount()`, no shared Express app. That is the next plan.
 - **Every task ends green:** the repo installs, typechecks, and passes every game's full suite.
-- **Baselines to preserve** (measure before you start, compare after): Acquire 865 tests / 82 files; Rail Baron and Marco Polo — record their counts in Task 1 and never let them drop.
+- **Baselines to preserve** (measure before you start, compare after): Acquire 866 tests / 82 files; Rail Baron and Marco Polo — record their counts in Task 1 and never let them drop.
 - **Node 26.7.0, npm 11.19.0.** Workspaces are npm-native; do not introduce pnpm, yarn, turbo, or nx.
 - **A `tsx watch` reloads code but never its environment.** Any step that changes an environment variable or a script must say "restart your dev servers" — Phase 0 lost four days to exactly this.
 
@@ -62,7 +62,7 @@ cd ~/Developer/personal/marco-polo && npm test 2>&1 | grep -E "Test Files|Tests 
 cd ~/Developer/personal/acquire-startups-m1 && npm run test:run 2>&1 | grep -E "Test Files|Tests "
 ```
 
-Acquire must report 865 tests / 82 files. Write all three numbers into the commit message in Step 6 — later tasks compare against them.
+Acquire must report 866 tests / 82 files. Write all three numbers into the commit message in Step 6 — later tasks compare against them.
 
 - [ ] **Step 2: Create the workspace root**
 
@@ -141,7 +141,7 @@ good reasons, and a shared base that forces them to agree would be a base
 nobody could extend.
 
 Baselines to hold through the migration: <RB counts>, <MP counts>,
-Acquire 865 tests / 82 files."
+Acquire 866 tests / 82 files."
 ```
 
 ---
@@ -554,7 +554,7 @@ Largest game (25.7k LOC), most configuration, and the only one with a live deplo
 
 **Interfaces:**
 - Consumes: `@game-host/lobby/*` from Task 2.
-- Produces: `games/acquire` as workspace `@game-host/acquire`, 865 tests green.
+- Produces: `games/acquire` as workspace `@game-host/acquire`, 866 tests green.
 
 - [ ] **Step 1: Confirm the predecessor merged, then subtree-merge**
 
@@ -650,7 +650,7 @@ npm run typecheck --workspace @game-host/acquire
 npm run build --workspace @game-host/acquire
 ```
 
-Expected: **865 tests / 82 files**, typecheck silent, build succeeds. Then confirm the build output still targets the live Pages path:
+Expected: **866 tests / 82 files**, typecheck silent, build succeeds. Then confirm the build output still targets the live Pages path:
 
 ```bash
 grep -o '"/acquire-startups-m1/[^"]*"' games/acquire/dist/index.html | head -3
@@ -672,7 +672,7 @@ job, and doing it here would break a running deployment for no gain.
 Its tsconfig.server.json NodeNext override survives untouched: it is the
 split the other two are being brought toward, not something to flatten.
 
-865 tests / 82 files, unchanged. Build output still resolves under
+866 tests / 82 files, unchanged. Build output still resolves under
 /acquire-startups-m1/, verified against what Pages serves."
 ```
 
@@ -745,7 +745,7 @@ Fix each failure at its cause. Do **not** pin a package back to an older version
 
 - [ ] **Step 6: Confirm counts against the baselines**
 
-All four suites green, and each game's count equal to its Task 1 baseline (Acquire 865/82). A dropped count means files stopped being collected.
+All four suites green, and each game's count equal to its Task 1 baseline (Acquire 866/82). A dropped count means files stopped being collected.
 
 - [ ] **Step 7: Commit**
 
@@ -893,7 +893,7 @@ changes."
 ## Done when
 
 - [ ] `npm install` at the root links four workspaces; `npm test` runs all four suites in one command.
-- [ ] Every game's test count equals its pre-migration baseline (Acquire 865 / 82).
+- [ ] Every game's test count equals its pre-migration baseline (Acquire 866 / 82).
 - [ ] The lobby has its own suite that runs without a consumer.
 - [ ] `grep -rn "vendor/lobby" games/` returns nothing; no `.gitmodules` anywhere.
 - [ ] `git log --follow` reaches pre-migration history for a file in each of the four merged trees.
