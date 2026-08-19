@@ -1,0 +1,84 @@
+{
+  "Text": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.05882352963089943,
+        0.4627451002597809,
+        0.4313725531101227
+      ],
+      "alpha": 1,
+      "hex": "#0F766E"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7021",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Fill": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.800000011920929,
+        0.9843137264251709,
+        0.9450980424880981
+      ],
+      "alpha": 1,
+      "hex": "#CCFBF1"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7030",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Brand name": {
+    "$type": "string",
+    "$value": "ZuckFace",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7022",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Abbreviation": {
+    "$type": "string",
+    "$value": "$Z",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7023",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Stroke": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.0784313753247261,
+        0.7215686440467834,
+        0.6509804129600525
+      ],
+      "alpha": 1,
+      "hex": "#14B8A6"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7467",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "$extensions": {
+    "com.figma.modeName": "Chain 4"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "Text": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.3019607961177826,
+        0.48627451062202454,
+        0.05882352963089943
+      ],
+      "alpha": 1,
+      "hex": "#4D7C0F"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7021",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Fill": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.9254902005195618,
+        0.9882352948188782,
+        0.7960784435272217
+      ],
+      "alpha": 1,
+      "hex": "#ECFCCB"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7030",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Brand name": {
+    "$type": "string",
+    "$value": "Paperful Post",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7022",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Abbreviation": {
+    "$type": "string",
+    "$value": "$PP",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7023",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Stroke": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.5176470875740051,
+        0.800000011920929,
+        0.08627451211214066
+      ],
+      "alpha": 1,
+      "hex": "#84CC16"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7467",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "$extensions": {
+    "com.figma.modeName": "Chain 7"
+  }
+}

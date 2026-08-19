@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Acquire — Scenario: Dead tile</title>
+<link rel="stylesheet" href="components.css">
+
+<div class="topbar">
+  <div class="brand">Prototype</div>
+  <nav class="proto-nav">
+    <a href="index.html">Prototype</a>
+    <a href="states.html">States</a>
+    <a href="motion.html">Motion</a>
+    <a href="scenario-dead-tile.html" aria-current="page">Scenarios</a>
+  </nav>
+  <nav class="proto-nav">
+    <a href="scenario-dead-tile.html" aria-current="page">Dead tile</a>
+    <a href="scenario-win-41.html">Win 41</a>
+  </nav>
+  <div class="sc-controls">
+    <button class="reset-btn" id="scBack">◀ Back</button>
+    <output id="stepCount">1 / 2</output>
+    <button class="reset-btn" id="scReplay">↺ Replay</button>
+  </div>
+  <div class="scenario-caption" id="caption"></div>
+</div>
+
+<div class="main side" id="main">
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<script src="components.js"></script>
+<script src="scenario.js"></script>
+<script>
+/* two size-11 safe chains with a dead gap at C6 (adjacent to B6 Messla + D6 ZuckFace) */
+const board = makeBoard({ ...chain('B',1,11,'Messla'), ...chain('D',1,11,'ZuckFace') });
+
+const players = [
+  {emoji:'🦊', name:'Alex',   cash:4200, active:true},
+  {emoji:'🐢', name:'Sam',    cash:5800, active:false},
+  {emoji:'🦁', name:'Jordan', cash:3100, active:false},
+];
+
+const base = {
+  board,
+  boardOpts:{ hand:['C6','G6'], blocked:['C6'], hqTiles:['B1','D1'] },
+  hand:{ name:'Alex', portfolio:{Messla:4, ZuckFace:2}, cash:4200 },
+  players,
+  log:[], active:'', staging:'',
+};
+
+const steps = [
+  { // step 0 — play: the dead tile is offered for trade-in
+    active: activeStep({
+      label:'Place a tile',
+      body:`<div class="option-row">`
+        + tile('C6',{state:'blocked', onclick:"switchPlacement('C6')"})
+        + tile('G6',{state:'hand',    onclick:"switchPlacement('G6')"})
+        + `</div>`
+        + `<div class="hint">◻ C6 can never be played — it would merge two safe chains. Tap it to trade it in.</div>`,
+    }),
+    caption:'Two size-11 safe chains with a single dead tile (C6) between them.',
+    hotspot:{ sel:'.active-step [title="C6"]', to:1 },
+  },
+  { // step 1 — traded in: C6 gone, I12 drawn; turn continues
+    boardOpts:{ hand:['G6','I12'], blocked:[], hqTiles:['B1','D1'] },
+    log:[{ phase:'Traded a tile', detail:'◻ C6 → drew ◻ I12' }],
+    active: activeStep({
+      label:'Place a tile',
+      body:`<div class="option-row">`
+        + tile('G6', {state:'hand', onclick:"switchPlacement('G6')"})
+        + tile('I12',{state:'hand', onclick:"switchPlacement('I12')"})
+        + `</div>`
+        + `<div class="hint">Traded in — the turn continues; you can still place a tile.</div>`,
+    }),
+    caption:'The dead tile is swapped for a fresh one (I12). The turn continues.',
+  },
+];
+
+runScenario({ base, steps });
+</script>

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Acquire — Motion Lab</title>
+<link rel="stylesheet" href="components.css">
+<style>
+  html,body{height:auto;}
+  body{margin:0; min-height:100%; overflow:visible; display:block;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:#111827; background:#eef0f3;}
+  header.cat{position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #e5e7eb; padding:12px 20px;}
+  header.cat .proto-nav{position:absolute; top:12px; right:20px;}
+  header.cat h1{font-size:15px; margin:0; font-weight:700;}
+  header.cat p{margin:4px 0 0; font-size:12px; color:#6b7280;}
+  .lab{padding:20px; display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;}
+  .stage-frame{width:360px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; overflow:hidden;}
+  .panel-mock{display:flex; flex-direction:column;}
+  .panel-mock .stepstack{min-height:120px; display:flex; flex-direction:column; justify-content:flex-end; gap:12px; padding:14px 16px 8px;}
+  .controls{width:320px; display:flex; flex-direction:column; gap:12px; font-size:13px;
+    background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px;}
+  .controls h2{font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#374151; margin:0;}
+  .controls .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .controls button{border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:5px 12px; cursor:pointer; font:inherit;}
+  .controls button.on{background:#2563eb; color:#fff; border-color:#2563eb;}
+  .controls label{display:flex; align-items:center; gap:8px; color:#6b7280; justify-content:space-between;}
+  .controls output, .controls select{font-variant-numeric:tabular-nums; color:#111827;}
+  .controls textarea{width:100%; height:96px; font:11px ui-monospace,Menlo,monospace;}
+  .controls .frames button{min-width:34px;}
+  .hintline{font-size:11px; color:#9ca3af; margin:0;}
+  /* the completed "→ result" that fades in at frame 3 */
+  .res{display:inline-flex; align-items:center; gap:5px; margin-left:2px; font-size:14px; color:#4b5563;}
+  /* recolor the selected tile hand→filled as it converges (lab viewport only) */
+  .panel-mock .tile{transition:background-color var(--t1-dur,320ms) ease, border-color var(--t1-dur,320ms) ease, color var(--t1-dur,320ms) ease;}
+</style>
+
+<header class="cat">
+  <nav class="proto-nav">
+    <a href="index.html">Prototype</a>
+    <a href="states.html">States</a>
+    <a href="motion.html" aria-current="page">Motion</a>
+    <a href="scenario-dead-tile.html">Scenarios</a>
+  </nav>
+  <h1>Motion lab</h1>
+  <p>Tune the two transitions in isolation. Params live in <b>MOTION</b> (transitions.js) — copy the settled values back when done.</p>
+</header>
+
+<main class="lab">
+  <div class="stage-frame"><div class="panel-mock" id="viewport"></div></div>
+  <div class="controls" id="controls"></div>
+</main>
+
+<script src="components.js"></script>
+<script src="transitions.js"></script>
+<script>
+function onBoardCellClick(){}   /* inert here */
+
+const FIX_HAND = ["E6","E2","E10","G6","A12","I1"];
+/* the "→ result" that fades in at frame 3 (empty = isolated placement, no arrow) */
+const RESULT = {
+  E6:  " → merger",
+  E2:  " → grew "  + brand("Messla"),
+  E10: " → grew "  + brand("ZuckFace"),
+  G6:  " → Found startup",
+  A12: "",
+  I1:  "",
+};
+let current = "t1";   // "t1" (active→completed) | "t2" (push-up, decoupled)
+const vp = document.getElementById("viewport");
+
+/* ============================================================
+   T1 — active → completed. Decoupled from the next step.
+   Frame 1: place-active (clickable) · Frame 2: converged ·
+   Frame 3: + arrow/result faded in.
+   ============================================================ */
+function t1Body(inner){ return activeStep({ label:"Place a tile", body:inner }); }
+
+function renderT1(){   // Frame 1 — clickable
+  vp.innerHTML = t1Body(
+    `<div class="option-row" id="row">${FIX_HAND.map(c=>tile(c,{state:"hand",onclick:`selectTile('${c}')`})).join("")}</div>
+     <div class="hint">Tap a tile to resolve.</div>`);
+}
+function renderT1Frame(n){   // static keyframe previews (default coord E6)
+  const coord = "E6";
+  if(n===1) return renderT1();
+  if(n===2) vp.innerHTML = t1Body(`<div class="option-row">${tile(coord,{state:"filled"})}</div><div class="hint">Tap a tile to resolve.</div>`);
+  if(n===3) vp.innerHTML = t1Body(`<div class="option-row">${tile(coord,{state:"filled"})}${RESULT[coord]?`<span class="res">${RESULT[coord]}</span>`:""}</div>`);
+}
+
+async function selectTile(coord){
+  applyMotionVars();
+  const row = document.getElementById("row");
+  if(!row) return;
+  const selEl = [...row.children].find(el=> el.getAttribute("title")===coord);
+  if(!selEl) return;
+  // click confirmation: pulse the chosen tile
+  await pulse(selEl, MOTION.t1.blink);
+  // Frame 1 → 2: selected recolors hand→filled + slides left; the rest converge behind and fade out
+  selEl.classList.remove("t-hand"); selEl.classList.add("t-filled");
+  await t1TileConverge(row, selEl);
+  row.innerHTML = tile(coord,{state:"filled"});   // settle to the clean converged DOM
+  // Frame 2 → 3: arrow + result fades and slides in (if this placement has one)
+  const res = RESULT[coord];
+  if(res){
+    const span = document.createElement("span");
+    span.className = "res"; span.innerHTML = res;
+    row.appendChild(span);
+    await runAnim(span, [
+      { opacity:0, transform:"translateX(10px)" },
+      { opacity:1, transform:"translateX(0)" },
+    ], { duration: MOTION.t1.dur/MOTION.speed, easing: MOTION.t1.ease });
+  }
+}
+
+/* ============================================================
+   Found — active → completed. Decoupled, interactive.
+   KF1 found-active · KF2 blink clicked brand · KF3 gather every brand
+   under the selected · KF4 selected slides to the upper-left.
+   ============================================================ */
+const FOUND_GROUPS = [
+  { price:200, ids:["PaperfulPost","Messla"] },
+  { price:300, ids:["CamCrooned","ZuckFace","WrecksonMobil"] },
+  { price:400, ids:["Gobble","Scrapple"] },
+];
+const FOUNDED = ["Messla","ZuckFace"];   // already on the board → taken (disabled)
+function foundBody(clickable){
+  return `<div class="found-groups">${FOUND_GROUPS.map(g=>`<div class="found-group">
+    <div class="found-price">${price(g.price)}<span class="found-price-note">to start</span></div>
+    <div class="option-row">${g.ids.map(id=> FOUNDED.includes(id)
+      ? brand(id,{disabled:true})
+      : brand(id, clickable?{mode:"select",onclick:`selectBrand('${id}')`}:{mode:"select"})).join("")}</div>
+  </div>`).join("")}</div>`;
+}
+function renderFound(){ vp.innerHTML = activeStep({label:"Found a startup", body: foundBody(true)}); }   // KF1
+function renderFoundFrame(n){
+  if(n===1) return renderFound();
+  if(n===4) vp.innerHTML = activeStep({label:"Found a startup",
+    body:`<div class="option-row">${brand("PaperfulPost")}<span class="res">(+1 free share)</span></div>`});
+}
+function playFound(){ renderFound(); setTimeout(()=> selectBrand("PaperfulPost"), 30); }
+
+async function selectBrand(id){
+  applyMotionVars();
+  const step = vp.querySelector(".active-step");
+  const groups = step && step.querySelector(".found-groups");
+  if(!groups) return;
+  const brands = [...groups.querySelectorAll(".brand")];
+  const selEl = brands.find(el=> el.classList.contains("brand-"+id) && !el.disabled);
+  if(!selEl) return;
+  const F = MOTION.found, d = F.dur/MOTION.speed;
+  // KF2 — click confirmation: pulse the clicked brand
+  await pulse(selEl, F.blink);
+  // KF3 — every other brand slides under the selected's location AND fades out as it goes
+  const selRect = selEl.getBoundingClientRect();
+  selEl.style.position="relative"; selEl.style.zIndex="50";
+  const movers = brands.filter(el=> el!==selEl);
+  groups.querySelectorAll(".found-price").forEach(p=>{ p.style.transition="opacity "+d+"ms"; p.style.opacity="0"; });
+  await Promise.all(movers.map((el,i)=>{
+    const r = el.getBoundingClientRect(); el.style.position="relative"; el.style.zIndex=String(40-i);
+    return runAnim(el, [
+      { transform:"translate(0,0)", opacity:1 },
+      { transform:`translate(${selRect.left-r.left}px, ${selRect.top-r.top}px)`, opacity:0 },
+    ], { duration:d, easing:F.ease, delay:i*(F.stagger/MOTION.speed), fill:"forwards" });
+  }));
+  // KF4 — selected slides to the groups' upper-left (the others have already faded out)
+  const gr = groups.getBoundingClientRect();
+  await runAnim(selEl, [
+    { transform:"translate(0,0)" },
+    { transform:`translate(${gr.left-selRect.left}px, ${gr.top-selRect.top}px)` },
+  ], { duration:d, easing:F.ease, fill:"forwards" });
+  // settle — completed
+  groups.outerHTML = `<div class="option-row">${brand(id)}<span class="res">(+1 free share)</span></div>`;
+}
+
+/* ============================================================
+   Merger (pick survivor) — active → completed. Decoupled, interactive.
+   Brand ids (the player's stock already shows in their hand — no stock cards here).
+   KF1 both brands · KF2 pulse the clicked winner · KF3 winner slides left (if
+   needed), loser slides right, "absorbs" slides in → "[winner] absorbs [loser]".
+   ============================================================ */
+const MERGER_BRANDS = ["Messla","ZuckFace"];
+function mergerBody(clickable){
+  return `<div class="option-row" id="mrow">${MERGER_BRANDS.map(id=>
+    brand(id, clickable?{mode:"select",onclick:`selectSurvivor('${id}')`}:{mode:"select"})).join("")}</div>`;
+}
+function renderMerger(){ vp.innerHTML = activeStep({label:"Messla & ZuckFace Merger", body: mergerBody(true)}); }   // KF1
+function renderMergerFrame(n){
+  if(n===1) return renderMerger();
+  if(n===3) vp.innerHTML = activeStep({label:"Messla & ZuckFace Merger",
+    body:`<div class="option-row">${brand("Messla")}<span class="res">absorbs</span>${brand("ZuckFace")}</div>`});
+}
+function playMerger(){ renderMerger(); setTimeout(()=> selectSurvivor("ZuckFace"), 30); }   // right one → shows the slide-left
+
+async function selectSurvivor(id){
+  applyMotionVars();
+  const step = vp.querySelector(".active-step");
+  const row = step && step.querySelector("#mrow");
+  if(!row) return;
+  const els = [...row.children];
+  const selEl = els.find(el=> el.classList.contains("brand-"+id));
+  const othEl = els.find(el=> el!==selEl);
+  if(!selEl || !othEl) return;
+  const othId = MERGER_BRANDS.find(b=> b!==id);
+  const M = MOTION.merger, d = M.dur/MOTION.speed;
+  // KF2 — pulse the clicked winner
+  await pulse(selEl, M.blink);
+  // KF3 — winner → row-left (if needed), loser → right, "absorbs" slides in between
+  const rowRect = row.getBoundingClientRect();
+  const selRect = selEl.getBoundingClientRect();
+  const othRect = othEl.getBoundingClientRect();
+  const selW = selRect.width;
+  row.style.position="relative"; selEl.style.position="relative"; othEl.style.position="relative";
+  const winnerDelta = rowRect.left - selRect.left;                  // → left edge (≈0 if already left)
+  const loserDelta  = (rowRect.left + selW + 74) - othRect.left;    // → right, past where "absorbs" sits
+  const abs = document.createElement("span");
+  abs.className="res"; abs.textContent="absorbs";
+  abs.style.position="absolute"; abs.style.left=(selW+16)+"px"; abs.style.top=(selRect.top-rowRect.top+3)+"px"; abs.style.opacity="0";
+  row.appendChild(abs);
+  await Promise.all([
+    runAnim(selEl, [{transform:"translateX(0)"},{transform:`translateX(${winnerDelta}px)`}], {duration:d, easing:M.ease, fill:"forwards"}),
+    runAnim(othEl, [{transform:"translateX(0)"},{transform:`translateX(${loserDelta}px)`}], {duration:d, easing:M.ease, fill:"forwards"}),
+    runAnim(abs, [{opacity:0, transform:"translateX(-8px)"},{opacity:1, transform:"translateX(0)"}], {duration:d, easing:M.ease, delay:d*0.35, fill:"forwards"}),
+  ]);
+  // settle — completed "[winner] absorbs [loser]"
+  row.outerHTML = `<div class="option-row">${brand(id)}<span class="res">absorbs</span>${brand(othId)}</div>`;
+}
+
+/* ============================================================
+   Merger payout — active → completed. Play-driven (no pick; the bonuses
+   just calculate then reveal). Title matches payout-completed ("Merger payout").
+   KF1 title + "calculating bonuses…" loader · KF2 majority winner(s) fade in ·
+   KF3 minority winner(s) fade in → completed.
+   ============================================================ */
+const PAYOUT_TITLE = "Merger payout";
+const PAYOUT_BONUSES = [
+  { player:"Sam",    emoji:"🐢", qty:5, type:"majority", amount:4000 },
+  { player:"Jordan", emoji:"🦁", qty:3, type:"minority", amount:2000 },
+];
+const PAYOUT_MAJORITY = PAYOUT_BONUSES.filter(b=> b.type==="majority");
+function payoutLoaderBody(){ return `<div class="payout-lines"><div class="payout-loader">calculating bonuses…</div></div>`; }
+/* loader + all settled lines (payoutReveal hides the lines, holds, then reveals them) */
+function payoutRevealBody(){
+  return payoutLines(PAYOUT_BONUSES).replace(
+    `<div class="payout-lines">`,
+    `<div class="payout-lines"><div class="payout-loader">calculating bonuses…</div>`);
+}
+function renderPayout(){ vp.innerHTML = activeStep({ label:PAYOUT_TITLE, body: payoutLoaderBody() }); }   // KF1
+function renderPayoutFrame(n){
+  if(n===1) return renderPayout();
+  if(n===2) vp.innerHTML = activeStep({ label:PAYOUT_TITLE, body: payoutLines(PAYOUT_MAJORITY) });   // majority only
+  if(n===3) vp.innerHTML = activeStep({ label:PAYOUT_TITLE, body: payoutLines(PAYOUT_BONUSES) });    // completed
+}
+async function playPayout(){
+  applyMotionVars();
+  vp.innerHTML = activeStep({ label:PAYOUT_TITLE, body: payoutRevealBody() });
+  const step = vp.querySelector(".active-step");
+  if(step){ step.style.cursor="pointer"; step.title="Click to replay"; step.onclick=()=>playPayout(); }   // replay
+  const lines = vp.querySelector(".payout-lines");
+  if(lines) await payoutReveal(lines);
+}
+
+/* ============================================================
+   Staging receive — during buy, tapping a brand adds a share to the cart:
+   a large card materializes over the pile and shrinks into its slot. The buy
+   grid sits above a live staging zone; each tap increments the Messla cart.
+   KF1 empty cart · (Play) big card pops in over the pile · KF3 landed in slot.
+   ============================================================ */
+const STAGE_PRICE = 300;
+let stageN = 1;   // current Messla count in the lab cart
+function stagingCart(n){
+  return stagingZone({ label:"Staging — commits on end turn",
+    sharesHtml: n>0 ? stockStack("Messla", n, {size:"sm", price:STAGE_PRICE}) : "",
+    cashDelta: -n*STAGE_PRICE });
+}
+function renderStaging(){
+  vp.innerHTML =
+    activeStep({ label:`Buy shares (${Math.min(stageN,3)}/3)`,
+      body:`<div class="buy-grid">${["PaperfulPost","Messla","ZuckFace"].map(id=>stockCard(id,{mode:"select",price:STAGE_PRICE})).join("")}</div>` })
+    + stagingCart(stageN);
+  vp.querySelectorAll(".buy-grid .stock").forEach(b=> b.onclick=()=>playStaging());   // any tap → receive one
+}
+function renderStagingFrame(n){
+  if(n===1){ stageN=0; renderStaging(); }   // ① empty cart
+  if(n===3){ stageN=1; renderStaging(); }   // ③ one received
+}
+async function playStaging(){
+  applyMotionVars();
+  if(stageN>=3) stageN=0;   // cart caps at 3 — replay from empty
+  stageN++;
+  renderStaging();
+  const stack = vp.querySelector(".staging-pile .stock-stack");
+  if(stack) await stagingReceive(stack);
+}
+
+/* ============================================================
+   T2 — push-up reveal. Decoupled: does not depend on step contents.
+   The current step rises up (into the log) as the next rises from below.
+   ============================================================ */
+function renderT2(){
+  vp.innerHTML =
+    `<div class="stepstack" id="logStack">${stepEntry({phase:"Place a tile", detail: tile("E6",{state:"filled"})+" → merger"})}</div>` +
+    `<div id="slot">${activeStep({ label:"Found a startup", body:`<div class="hint">the current step</div>` })}</div>`;
+}
+async function playPushUp(){
+  renderT2(); applyMotionVars();
+  const slot = document.getElementById("slot");
+  const active = slot.querySelector(".active-step");
+  const holder = document.createElement("div");
+  holder.innerHTML = activeStep({ label:"Buy shares (0/3)",
+    body:`<div class="buy-grid">${["PaperfulPost","Messla","ZuckFace"].map(id=>stockCard(id,{mode:"select",price:300})).join("")}</div>` });
+  const incoming = holder.firstElementChild;
+  slot.appendChild(incoming);
+  await stepAdvance(active, incoming);
+  active.style.transform=""; document.getElementById("logStack").appendChild(active);   // becomes the log entry
+  incoming.style.transform=""; incoming.style.opacity="";
+}
+
+/* ---- scrub: start the current transition paused, drive currentTime across it ---- */
+let scrubAnims = [];
+function startScrub(){
+  applyMotionVars();
+  if(current==="t1"){
+    renderT1(); const row=document.getElementById("row");
+    const sel=[...row.children].find(el=>el.getAttribute("title")==="E6")||row.children[0];
+    sel.classList.remove("t-hand"); sel.classList.add("t-filled");
+    t1TileConverge(row, sel);
+  } else if(current==="found"){
+    renderFound(); scrubAnims=[]; return;   // multi-phase — use Play + Speed 0.25× instead
+  } else if(current==="merger"){
+    renderMerger(); scrubAnims=[]; return;  // multi-phase — use Play + Speed 0.25× instead
+  } else if(current==="payout"){
+    renderPayout(); scrubAnims=[]; return;  // multi-phase — use Play + Speed 0.25× instead
+  } else if(current==="staging"){
+    stageN=1; renderStaging(); scrubAnims=[]; return;  // ghost lives on <body> — use Play + Speed 0.25×
+  } else {
+    renderT2(); const slot=document.getElementById("slot");
+    const active=slot.querySelector(".active-step");
+    const holder=document.createElement("div"); holder.innerHTML=activeStep({label:"Buy shares (0/3)", body:`<div class="buy-grid">${stockCard("Messla",{mode:"select",price:300})}</div>`});
+    const incoming=holder.firstElementChild; slot.appendChild(incoming);
+    stepAdvance(active, incoming);
+  }
+  scrubAnims = vp.getAnimations ? vp.getAnimations({subtree:true}) : [];
+  scrubAnims.forEach(a=> a.pause());
+}
+function scrubTo(frac){
+  const maxEnd = Math.max(1, ...scrubAnims.map(a=>{ const t=a.effect.getTiming(); return (t.delay||0)+(t.duration||0); }));
+  scrubAnims.forEach(a=>{ a.currentTime = frac * maxEnd; });
+}
+
+/* ---- controls ---- */
+function renderControls(){
+  const c = document.getElementById("controls");
+  const t1 = MOTION.t1, t2 = MOTION.t2, F = MOTION.found, M = MOTION.merger, PY = MOTION.payout, S = MOTION.staging;
+  const modes = [["t1","Place"],["found","Found"],["merger","Merger"],["payout","Payout"],["staging","Staging"],["t2","Push-up"]];
+  let html = `
+    <h2>Transition</h2>
+    <div class="row" id="pick">${modes.map(([k,l])=>`<button data-t="${k}" class="${current===k?"on":""}">${l}</button>`).join("")}</div>
+    <label>Speed <select id="speed">
+      <option value="1"${MOTION.speed===1?" selected":""}>1×</option>
+      <option value="0.5"${MOTION.speed===0.5?" selected":""}>0.5×</option>
+      <option value="0.25"${MOTION.speed===0.25?" selected":""}>0.25×</option>
+    </select></label>`;
+  if(current==="t1"){
+    html += `
+      <h2>Frames</h2>
+      <div class="row frames"><button data-mode="t1" data-f="1">① active</button><button data-mode="t1" data-f="2">② converged</button><button data-mode="t1" data-f="3">③ completed</button></div>
+      <p class="hintline">Click a tile in the panel to play ①→②→③.</p>
+      <h2>Place params</h2>
+      <label>Blink ms <input type="range" id="t1blink" min="0" max="800" step="20" value="${t1.blink}"><output>${t1.blink}ms</output></label>
+      <label>Duration <input type="range" id="t1dur" min="0" max="800" step="20" value="${t1.dur}"><output>${t1.dur}ms</output></label>
+      <label>Tuck scale <input type="range" id="t1tuck" min="0.5" max="1" step="0.05" value="${t1.tuckScale}"><output>${t1.tuckScale}</output></label>
+      <label>Stagger ms <input type="range" id="t1stag" min="0" max="120" step="5" value="${t1.stagger}"><output>${t1.stagger}</output></label>`;
+  } else if(current==="found"){
+    html += `
+      <h2>Frames</h2>
+      <div class="row frames"><button data-mode="found" data-f="1">① active</button><button data-mode="found" data-f="4">④ completed</button></div>
+      <div class="row"><button id="playFound">▶ Play (PaperfulPost)</button></div>
+      <p class="hintline">Click a selectable brand to play. ②blink ③gather ④upper-left — watch at Speed 0.25×.</p>
+      <h2>Found params</h2>
+      <label>Blink ms <input type="range" id="fblink" min="0" max="800" step="20" value="${F.blink}"><output>${F.blink}ms</output></label>
+      <label>Duration <input type="range" id="fdur" min="0" max="800" step="20" value="${F.dur}"><output>${F.dur}ms</output></label>
+      <label>Stagger ms <input type="range" id="fstag" min="0" max="120" step="5" value="${F.stagger}"><output>${F.stagger}</output></label>`;
+  } else if(current==="merger"){
+    html += `
+      <h2>Frames</h2>
+      <div class="row frames"><button data-mode="merger" data-f="1">① both</button><button data-mode="merger" data-f="3">③ completed</button></div>
+      <div class="row"><button id="playMerger">▶ Play (ZuckFace wins)</button></div>
+      <p class="hintline">Click a brand to pick the survivor. ②pulse ③slide+absorbs — Speed 0.25×.</p>
+      <h2>Merger params</h2>
+      <label>Blink ms <input type="range" id="mblink" min="0" max="800" step="20" value="${M.blink}"><output>${M.blink}ms</output></label>
+      <label>Duration <input type="range" id="mdur" min="0" max="800" step="20" value="${M.dur}"><output>${M.dur}ms</output></label>`;
+  } else if(current==="payout"){
+    html += `
+      <h2>Frames</h2>
+      <div class="row frames"><button data-mode="payout" data-f="1">① loader</button><button data-mode="payout" data-f="2">② majority</button><button data-mode="payout" data-f="3">③ completed</button></div>
+      <div class="row"><button id="playPayout">▶ Play</button></div>
+      <p class="hintline">Auto-plays on enter: loader → majority → minority. Click the panel or ▶ Play to replay; Speed 0.25× to slow it.</p>
+      <h2>Payout params</h2>
+      <label>Loader ms <input type="range" id="ploader" min="0" max="1600" step="20" value="${PY.loader}"><output>${PY.loader}ms</output></label>
+      <label>Duration <input type="range" id="pdur" min="0" max="800" step="20" value="${PY.dur}"><output>${PY.dur}ms</output></label>
+      <label>Group gap <input type="range" id="pgap" min="0" max="600" step="20" value="${PY.gap}"><output>${PY.gap}ms</output></label>`;
+  } else if(current==="staging"){
+    html += `
+      <h2>Frames</h2>
+      <div class="row frames"><button data-mode="staging" data-f="1">① empty</button><button data-mode="staging" data-f="3">③ received</button></div>
+      <div class="row"><button id="playStaging">▶ Play (receive)</button></div>
+      <p class="hintline">Tap a brand card in the panel to receive one into the cart. Big card pops over the pile then shrinks into its slot — Speed 0.25×.</p>
+      <h2>Staging params</h2>
+      <label>Rise px <input type="range" id="srise" min="0" max="200" step="10" value="${S.rise}"><output>${S.rise}</output></label>
+      <label>Grow × <input type="range" id="sgrow" min="1" max="4" step="0.1" value="${S.grow}"><output>${S.grow}</output></label>
+      <label>Duration <input type="range" id="sdur" min="0" max="900" step="20" value="${S.dur}"><output>${S.dur}ms</output></label>`;
+  } else {
+    html += `
+      <div class="row"><button id="playBtn">▶ Play push-up</button></div>
+      <h2>Push-up params</h2>
+      <label>Duration <input type="range" id="t2dur" min="0" max="800" step="20" value="${t2.dur}"><output>${t2.dur}ms</output></label>
+      <label>Rise px <input type="range" id="t2rise" min="0" max="120" step="4" value="${t2.rise}"><output>${t2.rise}</output></label>`;
+  }
+  html += `
+    <h2>Scrub</h2>
+    <div class="row"><button id="scrubStart">Load frame</button></div>
+    <label>t <input type="range" id="scrub" min="0" max="1" step="0.02" value="0" style="flex:1"></label>
+    <h2>Tokens</h2>
+    <textarea id="tokens" readonly></textarea>
+    <button id="copyBtn">Copy MOTION</button>`;
+  c.innerHTML = html;
+  // wire
+  c.querySelectorAll("#pick button").forEach(b=> b.onclick=()=>{ current=b.dataset.t; renderControls(); enter(); });
+  c.querySelectorAll(".frames button").forEach(b=> b.onclick=()=>{ const f=parseInt(b.dataset.f,10);
+    ({t1:renderT1Frame, found:renderFoundFrame, merger:renderMergerFrame, payout:renderPayoutFrame, staging:renderStagingFrame}[b.dataset.mode]||(()=>{}))(f); });
+  const pf=c.querySelector("#playFound"); if(pf) pf.onclick=playFound;
+  const pm=c.querySelector("#playMerger"); if(pm) pm.onclick=playMerger;
+  const pp=c.querySelector("#playPayout"); if(pp) pp.onclick=playPayout;
+  const ps=c.querySelector("#playStaging"); if(ps) ps.onclick=playStaging;
+  const pb=c.querySelector("#playBtn"); if(pb) pb.onclick=playPushUp;
+  c.querySelector("#speed").onchange = e=>{ MOTION.speed=parseFloat(e.target.value); refreshTokens(); };
+  const bind = (id, apply)=>{ const el=c.querySelector("#"+id); if(!el) return;
+    el.oninput=()=>{ apply(parseFloat(el.value)); el.nextElementSibling.textContent = el.value + (/(?:dur|blink|loader|gap)$/.test(id)?"ms":""); refreshTokens(); }; };
+  bind("t1blink", v=>MOTION.t1.blink=v); bind("t1dur", v=>MOTION.t1.dur=v); bind("t1tuck", v=>MOTION.t1.tuckScale=v); bind("t1stag", v=>MOTION.t1.stagger=v);
+  bind("fblink", v=>MOTION.found.blink=v); bind("fdur", v=>MOTION.found.dur=v); bind("fstag", v=>MOTION.found.stagger=v);
+  bind("mblink", v=>MOTION.merger.blink=v); bind("mdur", v=>MOTION.merger.dur=v);
+  bind("ploader", v=>MOTION.payout.loader=v); bind("pdur", v=>MOTION.payout.dur=v); bind("pgap", v=>MOTION.payout.gap=v);
+  bind("srise", v=>MOTION.staging.rise=v); bind("sgrow", v=>MOTION.staging.grow=v); bind("sdur", v=>MOTION.staging.dur=v);
+  bind("t2dur", v=>MOTION.t2.dur=v); bind("t2rise", v=>MOTION.t2.rise=v);
+  c.querySelector("#scrubStart").onclick = ()=>{ startScrub(); c.querySelector("#scrub").value=0; };
+  c.querySelector("#scrub").oninput = e=> scrubTo(parseFloat(e.target.value));
+  c.querySelector("#copyBtn").onclick = ()=> navigator.clipboard && navigator.clipboard.writeText(c.querySelector("#tokens").value);
+  refreshTokens();
+}
+function refreshTokens(){
+  const t = document.querySelector("#tokens"); if(!t) return;
+  t.value = "t1: "     + JSON.stringify(MOTION.t1)     + ",\n" +
+            "found: "  + JSON.stringify(MOTION.found)  + ",\n" +
+            "merger: " + JSON.stringify(MOTION.merger) + ",\n" +
+            "payout: " + JSON.stringify(MOTION.payout) + ",\n" +
+            "staging: " + JSON.stringify(MOTION.staging) + ",\n" +
+            "t2: "     + JSON.stringify(MOTION.t2)     + ",";
+}
+/* enter a mode: Place/Found/Merger wait at frame 1 for a click; Push-up shows its start state */
+function enter(){
+  if(current==="t1") renderT1();
+  else if(current==="found") renderFound();
+  else if(current==="merger") renderMerger();
+  else if(current==="payout") playPayout();   // no pick — auto-run loader→majority→minority (click panel to replay)
+  else if(current==="staging"){ stageN=1; renderStaging(); }   // waits for a buy-card tap to receive
+  else renderT2();
+}
+
+renderControls();
+enter();
+</script>

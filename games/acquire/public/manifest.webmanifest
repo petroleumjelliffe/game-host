@@ -1,0 +1,31 @@
+{
+  "name": "Acquire — Startups",
+  "short_name": "Acquire",
+  "description": "The classic tile-and-shares board game, with startups. Pass-and-play works fully offline; online games need a network.",
+  "display": "standalone",
+  "start_url": "/acquire-startups-m1/",
+  "scope": "/acquire-startups-m1/",
+  "theme_color": "#2563eb",
+  "background_color": "#f9fafb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "Text": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.7058823704719543,
+        0.32549020648002625,
+        0.03529411926865578
+      ],
+      "alpha": 1,
+      "hex": "#B45309"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7021",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Fill": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.9960784316062927,
+        0.9529411792755127,
+        0.7803921699523926
+      ],
+      "alpha": 1,
+      "hex": "#FEF3C7"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7030",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Brand name": {
+    "$type": "string",
+    "$value": "WrecksonMobil",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7022",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Abbreviation": {
+    "$type": "string",
+    "$value": "$W",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7023",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Stroke": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.9607843160629272,
+        0.6196078658103943,
+        0.04313725605607033
+      ],
+      "alpha": 1,
+      "hex": "#F59E0B"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7467",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "$extensions": {
+    "com.figma.modeName": "Chain 6"
+  }
+}

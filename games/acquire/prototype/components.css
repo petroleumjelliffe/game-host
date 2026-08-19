@@ -1,0 +1,385 @@
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:#111827; background:#f9fafb;
+    height:100dvh; overflow:hidden; display:grid; grid-template-rows:auto 1fr;
+    font-size:14px; line-height:1.4;
+  }
+  button{font:inherit; color:inherit;}
+  select{font:inherit; color:inherit;}
+  button:focus-visible, select:focus-visible, input:focus-visible{outline:2px solid #3b82f6; outline-offset:1px;}
+
+  /* ---------- Global prototype nav ---------- */
+  .proto-nav{
+    display:inline-flex; gap:2px; padding:2px;
+    background:#f3f4f6; border:1px solid #e5e7eb; border-radius:8px;
+    font-size:12px;
+  }
+  .proto-nav a{
+    padding:3px 10px; border-radius:6px; text-decoration:none;
+    color:#6b7280; font-weight:600;
+  }
+  .proto-nav a:hover{background:#e5e7eb; color:#111827;}
+  .proto-nav a[aria-current="page"]{background:#2563eb; color:#fff;}
+
+  /* ---------- Header ---------- */
+  .topbar{
+    border-bottom:1px solid #e5e7eb; background:#fff;
+    padding:8px 16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  .brand{font-weight:700; font-size:14px;}
+  .field{display:flex; align-items:center; gap:4px; font-size:14px;}
+  .field select{padding:2px 4px; border-radius:4px; border:1px solid #d1d5db; background:#fff;}
+  .check-field{display:flex; align-items:center; gap:4px; font-size:14px; cursor:pointer;}
+  .reset-btn{margin-left:auto; padding:4px 12px; border:1px solid #d1d5db; border-radius:4px; background:#fff; cursor:pointer; font-size:13px;}
+  .reset-btn:hover{background:#f3f4f6;}
+
+  /* ---------- Main layout ---------- */
+  .main{overflow:hidden; position:relative;}
+  .main.side{display:grid; grid-template-columns:1fr 320px;}
+  .main.bottom{display:grid; grid-template-rows:1fr auto;}
+
+  .board-wrap{overflow:hidden; display:flex; align-items:center; justify-content:center; padding:16px;}
+  .board{
+    display:grid; grid-template-columns:22px repeat(12,1fr); gap:5px;
+    height:100%; max-width:100%; aspect-ratio:13/10;
+    container-type:inline-size;   /* cell labels size in cqi so text scales with the board */
+    background:#dfe1e6; border-radius:12px; padding:8px;
+  }
+  .board .colhead, .board .rowhead{
+    display:flex; align-items:center; justify-content:center; font-size:11px; color:#4b5563;
+  }
+  /* ---- tile system — one cohesive vocabulary shared by board cells and inline tiles.
+     bg = affiliation (neutral empty · dark placed · brand chain) ·
+     border weight = attention (1px settled · 2px actionable) ·
+     ring = the tile placed THIS turn (undoable). ---- */
+  :root{
+    --tile-empty-bg:#f3f4f6; --tile-empty-bd:#d1d5db; --tile-empty-fg:#6b7280;
+    --tile-filled-bg:#374151; --tile-filled-bd:#374151; --tile-filled-fg:#f9fafb;
+    --tile-hand-bg:#dbeafe;   --tile-hand-bd:#3b82f6;   --tile-hand-fg:#1d4ed8;
+    --tile-ring:#2563eb;
+  }
+  .cell{
+    position:relative; border:1px solid var(--tile-empty-bd); color:var(--tile-empty-fg);
+    display:flex; align-items:center; justify-content:center; padding:0; background:var(--tile-empty-bg);
+  }
+  .cell .coord{font-size:2.3cqi; line-height:1;}   /* fills the tile, scales with the board */
+  .cell.placed{background:var(--tile-filled-bg); border-color:var(--tile-filled-bd); color:var(--tile-filled-fg); font-weight:700;}
+  /* chain member = a dark (placed) tile wearing a brand ring; rings on neighbours overlap into a group outline.
+     .brand-{id} supplies --stroke; the cell keeps its coord. */
+  .cell.chain{
+    background:var(--tile-filled-bg); border-color:var(--tile-filled-bd); color:var(--tile-filled-fg); font-weight:700;
+    box-shadow:0 0 0 3px var(--stroke); z-index:1;
+  }
+  /* HQ = the one labelled cell: brand tint fill + text + ticker (colours come from .brand-{id}) */
+  .cell.hq{ box-shadow:0 0 0 3px var(--stroke); z-index:2; font-weight:800; }
+  .cell.hand{
+    cursor:pointer; background:var(--tile-hand-bg); border:2px solid var(--tile-hand-bd); color:var(--tile-hand-fg); font-weight:700;
+  }
+  .cell.hand:hover{background:#bfdbfe;}
+  /* blocked = a hand tile whose placement would illegally merge 2+ safe chains */
+  .cell.blocked{cursor:not-allowed;}
+  .cell.blocked .coord{opacity:.3;}
+  .cell.blocked::after{
+    content:"🚫"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:4.6cqi; filter:grayscale(.15); pointer-events:none; z-index:2;
+  }
+  .cell.selected{outline:3px solid var(--tile-ring); outline-offset:-3px; z-index:3;}
+  .cell .tile-owner{
+    position:absolute; top:1px; right:1px; z-index:4;
+    font-size:8px; font-weight:700; line-height:1; padding:1px 2px; border-radius:2px;
+    background:rgba(255,255,255,0.85); color:#111827;
+  }
+
+  /* startup brand palette — one S/L ramp, hues placed around the reserved blue (hand / selection)
+     and true-green (cash) bands. background = light tint · border-color = stroke · color = text. */
+  .brand-Gobble{--stroke:#ef4444; background:#fee2e2; border-color:#ef4444; color:#b91c1c;}        /* red */
+  .brand-Scrapple{--stroke:#f97316; background:#ffedd5; border-color:#f97316; color:#c2410c;}      /* orange */
+  .brand-WrecksonMobil{--stroke:#f59e0b; background:#fef3c7; border-color:#f59e0b; color:#b45309;} /* amber */
+  .brand-PaperfulPost{--stroke:#84cc16; background:#ecfccb; border-color:#84cc16; color:#4d7c0f;}  /* lime */
+  .brand-ZuckFace{--stroke:#14b8a6; background:#ccfbf1; border-color:#14b8a6; color:#0f766e;}      /* teal */
+  .brand-Messla{--stroke:#a855f7; background:#f3e8ff; border-color:#a855f7; color:#7e22ce;}        /* purple */
+  .brand-CamCrooned{--stroke:#ec4899; background:#fce7f3; border-color:#ec4899; color:#be185d;}    /* pink */
+  .brand-Cash{--stroke:#16a34a; background:#dcfce7; border-color:#16a34a; color:#15803d;}          /* "Cash" as a brand (liquidation sell) */
+
+  /* ---------- Panel — bottom-anchored zones (log rises at top; the rest pins to the bottom) ---------- */
+  .panel{display:flex; flex-direction:column; height:100%; overflow:hidden;}
+  .main.side .panel{border-left:1px solid #e5e7eb;}
+  .main.bottom .panel{border-top:1px solid #e5e7eb;}   /* bottom-bar variant unmaintained for now */
+
+  .zone-label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#9ca3af; font-weight:700; margin-bottom:8px;}
+  .staging-zone{flex:none; padding:12px 16px; border-top:1px dashed #e7dfbf; background:#fffdf5;}
+  .staging-pile{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; min-height:62px;}   /* reserve a populated-row height so empty↔filled doesn't shift */
+  .stage-empty{color:#c9bd93; font-size:13px; align-self:center;}
+  /* phase-advance button (merger / liquidate / buy) lives here; the slot is always rendered so
+     the zone height is identical whether or not a button is present. */
+  .staging-action-slot{margin-top:12px; min-height:32px; display:flex; align-items:stretch;}
+  .hand-zone{flex:none; padding:12px 16px; border-top:1px solid #eef0f2;}
+  .hand-body{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;}
+  .players-strip{flex:none; display:flex; gap:8px; padding:10px 12px; border-top:1px solid #e5e7eb; background:#f9fafb; overflow-x:auto;}
+  .players-strip .pl{display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; flex:1; white-space:nowrap;}
+  .players-strip .pl.active{border-color:#2563eb; background:#eff6ff;}
+  .players-strip .pnm{font-weight:600;}
+  .players-strip .pcash{margin-left:auto;}
+
+  /* buy = a row of standard stock cards in select mode (qty accumulates in staging). */
+  .buy-grid{display:flex; flex-wrap:wrap; gap:10px;}
+  /* small corner badge on a stock card — e.g. "new", the chain just founded this turn. */
+  .stock-badge{position:absolute; top:-8px; right:-7px; background:#2563eb; color:#fff; font-size:9px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.04em; padding:1px 6px; border-radius:9px; z-index:5;}
+
+  /* numeric balance + ecomm-style staging total */
+  .balance{display:inline-flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:6px 12px;
+    border:1px solid #cfe8da; border-radius:8px; background:#f0fdf4;}
+  .balance .bl{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600;}
+  .balance .bn .cash{font-size:18px; font-weight:800;}
+  .cart-total{flex-basis:100%; display:flex; align-items:baseline; justify-content:flex-end; gap:10px; margin-top:6px; padding-top:8px; border-top:1px dashed #e7dfbf;}
+  .cart-total .ctl{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#a8935a; font-weight:700;}
+  .cart-total .ct{font-size:18px; font-weight:800; font-variant-numeric:tabular-nums; color:#b45309;}
+  .cart-total .ct.pos{color:#15803d;}
+  .cart-total .ct.zero{color:#c9bd93;}   /* muted $0 — the reserved-height placeholder */
+  .stock-stack.leaving{opacity:.5;}
+  .stock-stack.leaving .stack-qty{color:#b91c1c;}
+
+  .block-title{font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px;}
+
+  /* players (roster now in sidebar) */
+  .players-block{display:flex; flex-direction:column; gap:4px;}
+  .player-row{
+    display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px;
+    border:1px solid #e5e7eb; font-size:13px; flex-wrap:wrap;
+  }
+  .player-row.active{border-color:#3b82f6; background:#eff6ff;}
+  .player-emoji{font-size:16px; line-height:1; flex:none;}
+  .player-row .nm{font-weight:600;}
+  .player-row .turn-tag{font-size:10px; font-weight:700; text-transform:uppercase; color:#2563eb; letter-spacing:.03em;}
+  .player-row .csh{margin-left:auto;}
+  .player-row .chips{flex-basis:100%; display:flex; flex-wrap:wrap; gap:4px; margin-top:2px;}
+
+  .stepstack{flex:1 1 auto; overflow-y:auto; display:flex; flex-direction:column; justify-content:flex-end; gap:12px; padding:14px 16px 8px;}
+  .step-block{display:flex; flex-direction:column; gap:3px;}
+  .step-block .stage-label{display:flex; align-items:center; gap:8px;}
+  .step-undo{border:none; background:none; color:#9ca3af; cursor:pointer; font:inherit; font-size:11px; text-transform:none; letter-spacing:normal; font-weight:500; padding:0;}
+  .step-undo:hover{color:#2563eb; text-decoration:underline;}
+  .step-done{font-size:13px; color:#4b5563;}
+  .step-done b{color:#111827; font-weight:600;}
+
+  .active-step{flex:none; display:flex; flex-direction:column; gap:12px; font-size:14px; padding:12px 16px; border-top:1px solid #eef0f2; background:#f8fafc;}
+  .active-step p{margin:0;}
+  .active-step .hint{font-size:12px; color:#6b7280;}
+  .stage-label{font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase; letter-spacing:.03em;}
+
+  .option-row{display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end;}
+
+  /* founding: foundable brands bucketed under their starting price */
+  .found-groups{display:flex; flex-direction:column; gap:12px;}
+  .found-group{display:flex; flex-direction:column; gap:5px;}
+  .found-price{display:flex; align-items:baseline; gap:6px; font-size:13px;}
+  .found-price .price{font-weight:700; color:#374151;}
+  .found-price-note{font-size:11px; color:#9ca3af; text-transform:uppercase; letter-spacing:.03em;}
+
+  /* ---- brand indicator: a company's identity (filled). distinct from a stock card (a share). ---- */
+  .brand{
+    display:inline-flex; align-items:center; gap:5px; border-width:1px; border-style:solid;
+    border-radius:4px; padding:3px 9px; font-size:14px; font-weight:600;
+    line-height:1.35; vertical-align:middle;
+  }
+  button.brand{cursor:pointer;}
+  .brand.selected{outline:2px solid #2563eb; outline-offset:1px;}
+  .brand.disabled, .brand:disabled{opacity:.5; cursor:not-allowed;}
+  .brand.sm{font-size:12px; padding:1px 7px;}
+
+  /* ---- stock card: one share of a brand — a portrait certificate (outlined). + count → a stack. ---- */
+  .stock{
+    position:relative;
+    display:inline-flex; flex-direction:column; align-items:center; justify-content:space-between; gap:3px;
+    width:52px; min-height:58px;
+    border:1px solid; border-radius:6px; padding:6px 4px;
+    font-weight:500; background:#fff; cursor:default;
+    vertical-align:bottom; line-height:1.15; text-align:center;
+  }
+  .stock .stock-name{font-weight:700; font-size:14px; letter-spacing:.01em;}
+  .stock .price{font-size:11px;}
+  button.stock{cursor:pointer;}
+  .stock.selected{outline:2px solid #2563eb; outline-offset:1px;}
+  .stock.disabled, .stock:disabled{opacity:.5; cursor:not-allowed;}
+  .stock.sm{width:40px; min-height:44px; padding:4px 3px; gap:2px; border-radius:5px;}
+  .stock.sm .stock-name{font-size:12px;}
+  .stock.sm .price{font-size:10px;}
+  .stock .x{position:absolute; top:-6px; right:-6px; width:15px; height:15px; border-radius:50%; background:rgba(0,0,0,0.14); display:flex; align-items:center; justify-content:center; font-size:10px;}
+
+  /* cash card: money reads landscape, like a dollar bill — $$ only, no per-share price */
+  .stock.cash-card{flex-direction:row; align-items:center; justify-content:center; width:74px; min-height:42px;}
+  .stock.cash-card .stock-name{font-size:16px;}
+  .stock.cash-card.sm{width:56px; min-height:34px;}
+  .stock.cash-card.sm .stock-name{font-size:13px;}
+
+  /* physical depth: layered card edges peeking out behind the front card (down-right) */
+  .stock.depth-1{margin:0 4px 4px 0;}
+  .stock.depth-2{margin:0 7px 7px 0;}
+  .stock.depth-1::after,
+  .stock.depth-2::before, .stock.depth-2::after{
+    content:""; position:absolute; inset:0; z-index:-1;
+    border:1px solid; border-color:inherit; border-radius:inherit; background:#fff;
+  }
+  /* ::before paints first (farthest, behind); ::after paints last (nearer, in front) */
+  .stock.depth-1::after{transform:translate(3px,3px);}
+  .stock.depth-2::before{transform:translate(6px,6px);}
+  .stock.depth-2::after{transform:translate(3px,3px);}
+
+  /* ---- stock stack = a stock card + a share count outside it ---- */
+  .stock-stack{position:relative; display:inline-flex; align-items:flex-start; vertical-align:bottom;}
+  .stock-stack.disabled{opacity:.55;}
+  .stock-stack-body{display:inline-flex; flex-direction:column; align-items:center; gap:3px; font:inherit; color:inherit; background:none; border:1px solid transparent; border-radius:8px; padding:4px;}
+  .stock-stack.sm .stock-stack-body{gap:2px; padding:2px;}
+  button.stock-stack-body{cursor:pointer;}
+  button.stock-stack-body:hover{background:#f3f4f6; border-color:#e5e7eb;}
+  .stock-stack .stack-qty{font-variant-numeric:tabular-nums; font-weight:600; color:#374151; line-height:1;}
+  .stock-stack.sm .stack-qty{font-size:12px;}
+  .stock-stack .stack-qty.zero{color:#9ca3af;}
+  .stock-stack .stack-qty.cash-total{color:#15803d;}
+  .no-shares{font-size:12px; color:#9ca3af;}
+  .stack-x{position:absolute; top:-2px; right:-2px; z-index:4; width:18px; height:18px; border:none; border-radius:50%; background:rgba(0,0,0,0.12); color:inherit; cursor:pointer; font-size:12px; line-height:1; display:inline-flex; align-items:center; justify-content:center; padding:0;}
+  .stock-stack.sm .stack-x{width:15px; height:15px; font-size:10px;}
+  .stack-x:hover{background:rgba(0,0,0,0.22);}
+
+  /* ---- liquidation: queue of holders + held / sell / trade stacks ---- */
+  .liq-lanes{display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start;}
+  .liq-queue{display:flex; flex-wrap:wrap; gap:8px;}
+  .liq-queue-item{display:inline-flex; align-items:center; gap:5px; padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px; color:#6b7280;}
+  .liq-queue-item.current{border-color:#3b82f6; background:#eff6ff; color:#111827; font-weight:600;}
+  .liq-queue-item.done{opacity:.5;}
+  .liq-queue-item.done::before{content:"✓"; margin-right:1px;}
+  .liq-queue-emoji{margin-right:2px;}
+  .liq-lane{display:flex; flex-direction:column; gap:6px; align-items:flex-start;}
+  .liq-lane-label{font-size:12px; color:#6b7280; font-weight:600;}
+  .liq-actions{display:flex; flex-wrap:wrap; gap:10px;}
+  .liq-act{display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border:1px solid #d1d5db; border-radius:8px; background:#fff; cursor:pointer; font-size:13px; font-weight:600;}
+  .liq-act:hover{background:#f3f4f6;}
+  .liq-act:disabled{opacity:.45; cursor:not-allowed;}
+  .liq-arrow{color:#9ca3af; font-weight:400;}
+
+
+  /* ---- tile (inline: hand / log). same state vocabulary as board cells above.
+     base carries only layout + 1px border; each state supplies bg / border / fg,
+     and chain / founded borrow the .brand-{id} palette. ---- */
+  .tile{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:34px; height:34px; flex:none; padding:0;
+    border-width:1px; border-style:solid; border-radius:4px;
+    font-size:14px; font-weight:600; line-height:1; vertical-align:middle;
+  }
+  button.tile{cursor:pointer;}
+  .tile.t-empty{background:var(--tile-empty-bg); border-color:var(--tile-empty-bd); color:var(--tile-empty-fg); font-weight:500;}
+  .tile.t-filled{background:var(--tile-filled-bg); border-color:var(--tile-filled-bd); color:var(--tile-filled-fg);}
+  .tile.t-hand{background:var(--tile-hand-bg); border-width:2px; border-color:var(--tile-hand-bd); color:var(--tile-hand-fg); font-weight:700;}
+  .tile.t-hand:hover{background:#bfdbfe;}
+  .tile.t-placed{background:var(--tile-filled-bg); border-color:var(--tile-filled-bd); color:var(--tile-filled-fg); outline:3px solid var(--tile-ring); outline-offset:1px;}
+  /* t-chain / t-founded: colors come from .brand-{id}; founded is the HQ — heavier border, bold, shows the ticker */
+  .tile.t-founded{border-width:2px; font-weight:700;}
+  .tile.t-blocked{position:relative; background:var(--tile-hand-bg); border-width:2px; border-color:var(--tile-hand-bd); color:rgba(29,78,216,.35); font-weight:700; cursor:not-allowed;}
+  .tile.t-blocked::after{content:"🚫"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; filter:grayscale(.15);}
+
+  /* ---- cash: money. green in, red out. ---- */
+  .cash{font-variant-numeric:tabular-nums; font-weight:600; color:#15803d;}
+  .cash.neg{color:#b91c1c;}
+  .cash.zero{color:#9ca3af;}
+
+  /* ---- price: a stock's value. neutral base; change tinted up-green / down-red. ---- */
+  .price{font-variant-numeric:tabular-nums; color:#6b7280; font-weight:500;}
+  .price .price-arrow{margin:0 3px; font-weight:700;}
+  .price .price-next{font-weight:600;}
+  .price .price-arrow.up, .price .price-next.up{color:#15803d;}
+  .price .price-arrow.down, .price .price-next.down{color:#b91c1c;}
+
+  .primary-btn{background:#2563eb; color:#fff; border:none; border-radius:4px; padding:5px 14px; font-size:14px; cursor:pointer; align-self:flex-start;}
+  .primary-btn:disabled{opacity:.5; cursor:not-allowed;}
+
+  table.data{width:100%; font-size:12px; border-collapse:collapse;}
+  table.data th{text-align:left; color:#4b5563; font-weight:600; padding:3px 6px; border-bottom:1px solid #e5e7eb;}
+  table.data td{padding:3px 6px; border-bottom:1px solid #e5e7eb;}
+  table.data th:not(:first-child), table.data td:not(:first-child){text-align:right;}
+
+  .payout-lines{display:flex; flex-direction:column; gap:5px;}
+  .payout-loader{display:flex; align-items:center; gap:8px; font-size:14px; color:#6b7280;}
+  .payout-loader::before{content:""; width:13px; height:13px; border-radius:50%;
+    border:2px solid #d1d5db; border-top-color:#6b7280; animation:payout-spin .7s linear infinite;}
+  @keyframes payout-spin{to{transform:rotate(360deg);}}
+  .bonus-line{display:flex; align-items:center; gap:6px; font-size:14px;}
+  .bonus-line .player-emoji{font-size:15px;}
+  .bonus-line .pnm{font-weight:600; color:#111827;}
+  .bonus-line .pqty{color:#374151; font-variant-numeric:tabular-nums; font-weight:600;}
+  .bonus-line .role{color:#6b7280;}
+
+  .buy-total{font-size:14px; font-weight:600;}
+  .hold-note{font-size:12px; color:#6b7280;}
+
+  ol.standings{margin:0; padding-left:20px;}
+  ol.standings li{font-size:14px; padding:2px 0;}
+
+  /* ---------- Component gallery ---------- */
+  .gallery{position:absolute; inset:0; background:#fff; z-index:30; overflow:auto; padding:24px 28px;}
+  .gallery h2{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; margin:26px 0 10px; font-weight:700;}
+  .gallery h2:first-of-type{margin-top:8px;}
+  .gallery .row{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;}
+  .gallery .swatch{display:flex; flex-direction:column; gap:5px; align-items:flex-start;}
+  .gallery .swatch small{font-size:11px; color:#9ca3af;}
+  .gallery-close{position:absolute; top:16px; right:20px;}
+  .phase-showcases{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start;}
+  .phase-showcase{border:1px solid #e5e7eb; border-radius:8px; padding:0 16px 16px; width:340px; background:#fff; pointer-events:none;}
+  .phase-showcase-label{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#9ca3af; font-weight:700; padding:12px 0 2px;}
+  .phase-showcase .active-step{border-top:none; padding-top:4px;}
+
+  /* ---------- Pass-and-play overlay ---------- */
+  .reveal-overlay{
+    position:absolute; inset:0; background:rgba(255,255,255,0.96); z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  }
+  .reveal-overlay .pass-name{font-size:18px; font-weight:700; color:#1f2937;}
+  .reveal-overlay button{
+    background:#2563eb; color:#fff; border:none; border-radius:8px; padding:12px 24px; font-size:14px; font-weight:600; cursor:pointer;
+  }
+  .reveal-overlay button:hover{background:#1d4ed8;}
+
+  /* ---------- Final scoring — the terminal game-over overlay ---------- */
+  .final-scoring-scrim{
+    position:absolute; inset:0; z-index:30; background:rgba(17,24,39,0.55);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .final-scoring{
+    background:#fff; border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,0.28);
+    padding:20px 24px 22px; max-width:100%; max-height:100%; overflow:auto;
+  }
+
+  .fs-banner{margin-bottom:14px;}
+  .fs-winner{display:flex; align-items:center; gap:8px; font-size:18px; font-weight:700; color:#1f2937;}
+  .fs-reason{margin-top:3px; font-size:12px; color:#6b7280;}
+
+  .fs-table{border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:13px;}
+  .fs-table th, .fs-table td{padding:5px 12px; text-align:right; white-space:nowrap;}
+  .fs-table th.fs-player{font-weight:700; color:#374151; padding-bottom:8px;}
+  .fs-player .pnm{margin-left:6px;}
+  .fs-table th.fs-rowlabel{
+    text-align:left; padding-left:16px; font-size:11px; font-weight:500;
+    text-transform:uppercase; letter-spacing:.04em; color:#9ca3af;
+  }
+
+  .fs-chain-head > th{text-align:left; padding:14px 12px 4px; border-top:1px solid #e5e7eb;}
+  .fs-ticker{font-weight:700; color:#6b7280; margin-right:6px;}
+  .fs-chain-meta{margin-left:8px; font-size:11px; font-weight:500; color:#9ca3af;}
+
+  .fs-qty{color:#9ca3af; margin-right:6px;}
+  .fs-none{color:#d1d5db;}
+
+  /* M vs m differ only in case — weight and size carry the distinction visually,
+     the title carries the word. */
+  .fs-mark{margin-right:6px; text-decoration:none; border:none; cursor:help; color:#6b7280;}
+  .fs-mark-majority, .fs-mark-both{font-weight:800; color:#374151;}
+  .fs-mark-minority{font-weight:500; font-size:12px;}
+
+  .fs-cash > th, .fs-cash > td{border-top:1px solid #e5e7eb; padding-top:10px;}
+  .fs-table .fs-total > th, .fs-table .fs-total > td{
+    border-top:2px solid #111827; padding-top:10px; font-size:15px; font-weight:700;
+  }

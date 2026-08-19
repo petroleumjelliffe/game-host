@@ -1,0 +1,84 @@
+{
+  "Text": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.7254902124404907,
+        0.10980392247438431,
+        0.10980392247438431
+      ],
+      "alpha": 1,
+      "hex": "#B91C1C"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7021",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Fill": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.9960784316062927,
+        0.886274516582489,
+        0.886274516582489
+      ],
+      "alpha": 1,
+      "hex": "#FEE2E2"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7030",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Brand name": {
+    "$type": "string",
+    "$value": "Gobble",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7022",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Abbreviation": {
+    "$type": "string",
+    "$value": "$G",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7023",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Stroke": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.9372549057006836,
+        0.2666666805744171,
+        0.2666666805744171
+      ],
+      "alpha": 1,
+      "hex": "#EF4444"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7467",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "$extensions": {
+    "com.figma.modeName": "Chain 5"
+  }
+}

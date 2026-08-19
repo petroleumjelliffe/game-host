@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Acquire — Layout Prototype</title>
+<link rel="stylesheet" href="components.css">
+
+<div class="topbar">
+  <div class="brand">Prototype</div>
+
+  <nav class="proto-nav">
+    <a href="index.html" aria-current="page">Prototype</a>
+    <a href="states.html">States</a>
+    <a href="motion.html">Motion</a>
+    <a href="scenario-dead-tile.html">Scenarios</a>
+  </nav>
+
+  <label class="field">Layout:
+    <select id="layoutSelect">
+      <option value="side">Side panel</option>
+      <option value="bottom">Bottom panel</option>
+    </select>
+  </label>
+
+  <label class="check-field">
+    <input type="checkbox" id="passPlayToggle" />
+    Pass-and-play mode
+  </label>
+
+  <button class="reset-btn" id="galleryBtn">◧ Components</button>
+  <button class="reset-btn" id="resetBtn">↺ Reset turn</button>
+</div>
+
+<div class="main side" id="main">
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<script src="components.js"></script>
+<script>
+/* ============================================================
+   Static config
+   ============================================================ */
+/* ROWS, COLS + the presentational layer live in components.js (loaded first) */
+
+/* ticker abbreviation for a share entity ("Cash" is a pseudo-brand in liquidation). */
+
+const THRESHOLDS = [2,3,4,5,6,11,21,31,41];
+const TIER_PRICES = [
+  [200,300,400,500,600,700,800,900,1000],
+  [300,400,500,600,700,800,900,1000,1100],
+  [400,500,600,700,800,900,1000,1100,1200],
+];
+function priceIndexForSize(size){ let idx=0; for(let i=0;i<THRESHOLDS.length;i++) if(size>=THRESHOLDS[i]) idx=i; return idx; }
+function sharePrice(tier,size){ return TIER_PRICES[tier][priceIndexForSize(size)]; }
+
+/* orthogonal neighbours of a coord like "E10" */
+function neighbors(coord){
+  const r = coord[0], c = parseInt(coord.slice(1),10);
+  const ri = ROWS.indexOf(r), out = [];
+  if(ri>0) out.push(ROWS[ri-1]+c);
+  if(ri<ROWS.length-1) out.push(ROWS[ri+1]+c);
+  if(c>1) out.push(r+(c-1));
+  if(c<12) out.push(r+(c+1));
+  return out;
+}
+
+/* ============================================================
+   Game state — a real, mutable single-turn machine
+   ============================================================ */
+let game, ui;
+
+/* ---- undo: a snapshot before each step; undo reverts to that static state ---- */
+let history = [], curHist = -1;
+function beginAction(){ curHist = history.push(structuredClone(game)) - 1; }
+function addStep(step){ step.histIdx = curHist; game.steps.push(step); }
+function undoTo(histIdx){
+  if(histIdx < 0 || histIdx >= history.length) return;
+  game = history[histIdx];          // restore the state captured before that step
+  history.length = histIdx;         // drop that snapshot and everything after
+  ui.selectedTile = null; ui.foundChoice = null; ui.survivorChoice = null; ui.liqSell = 0; ui.liqTrade = 0;
+  render();
+}
+
+function makeStartups(){
+  const s = {};
+  Object.entries(STARTUPS).forEach(([id,info])=>{
+    s[id] = {id, tier:info.tier, tiles:[], foundingTile:null, size:0, price:0, isFounded:false, availableShares:25};
+  });
+  return s;
+}
+function emptyBoard(){ const b={}; ROWS.forEach(r=>COLS.forEach(c=>{ b[r+c]={placed:false}; })); return b; }
+
+function foundInit(g, id, tiles){
+  const st = g.startups[id];
+  tiles.forEach(t=> g.board[t] = {placed:true, startupId:id});
+  st.tiles=[...tiles]; st.foundingTile=tiles[0]; st.size=tiles.length; st.isFounded=true;
+  st.price = sharePrice(st.tier, st.size);
+}
+
+function initGame(){
+  const g = {
+    board: emptyBoard(),
+    startups: makeStartups(),
+    players: [
+      {id:"p1", name:"Alex",   emoji:"🦊", cash:4200, hand:["E6","E2","E10","G6","A12","I1"], portfolio:{Messla:4, ZuckFace:2}},
+      {id:"p2", name:"Sam",    emoji:"🐢", cash:5800, hand:[], portfolio:{Messla:2, ZuckFace:5}},
+      {id:"p3", name:"Jordan", emoji:"🦁", cash:3100, hand:[], portfolio:{Messla:3, ZuckFace:3}},
+    ],
+    activeIdx: 0,
+    stage: "play",
+    steps: [],
+    placedTile: null,
+    pendingFound: null,
+    merger: null,
+    cart: [],
+    summary: null,
+    foundedThisTurn: null,   // brand founded this turn → "new" badge in the buy phase
+  };
+  // Two equal chains with a mergeable gap at E6, plus a lone tile at G5.
+  foundInit(g, "Messla",   ["E3","E4","E5"]);
+  foundInit(g, "ZuckFace", ["E7","E8","E9"]);
+  g.board["G5"] = {placed:true}; // lone unaffiliated tile → G6 can found next to it
+  // available shares reflect what players already hold
+  ["Messla","ZuckFace"].forEach(id=>{
+    const held = g.players.reduce((n,p)=>n+(p.portfolio[id]||0),0);
+    g.startups[id].availableShares = 25 - held;
+  });
+  g.turnHand = [...g.players[g.activeIdx].hand];   // the turn's placeable tiles (kept for switching)
+  // turn-start hand — the "base" the panel shows; staging is derived as the diff from this to the committed state
+  const ap0 = g.players[g.activeIdx];
+  g.turnStartHand = { portfolio: structuredClone(ap0.portfolio), cash: ap0.cash };
+
+  game = g;
+  ui = {
+    layout: (ui && ui.layout) || "side",
+    passPlay: (ui && ui.passPlay) || false,
+    revealed: !((ui && ui.passPlay)),
+    selectedTile: null,
+    liqSell:0, liqTrade:0,
+    survivorChoice:null, foundChoice:null,
+    gallery: (ui && ui.gallery) || false,
+  };
+}
+
+function activePlayer(){ return game.players[game.activeIdx]; }
+
+/* ---------- absorb tiles into a chain, recompute size/price ---------- */
+function absorbInto(id, tiles){
+  const st = game.startups[id];
+  st.isFounded = true;
+  tiles.forEach(t=>{
+    game.board[t] = {placed:true, startupId:id};
+    if(!st.tiles.includes(t)) st.tiles.push(t);
+  });
+  if(!st.foundingTile) st.foundingTile = st.tiles[0];
+  st.size = st.tiles.length;
+  st.price = sharePrice(st.tier, st.size);
+}
+
+/* ============================================================
+   Placement → transitions
+   ============================================================ */
+function placeTile(coord){
+  const g = game;
+  const adj = neighbors(coord).filter(n => g.board[n] && g.board[n].placed);
+  const chains = [...new Set(adj.map(n=>g.board[n].startupId).filter(Boolean))];
+  const loneAdj = adj.filter(n=> g.board[n].placed && !g.board[n].startupId);
+
+  g.board[coord] = {placed:true};
+  g.placedTile = coord;
+  ui.selectedTile = null;
+  // remove from hand; tag this player's last-placed tile
+  const p = activePlayer();
+  p.hand = p.hand.filter(h=>h!==coord);
+  p.lastPlaced = coord;
+
+  if(chains.length >= 2){
+    startMerger(coord, chains, loneAdj);
+  } else if(chains.length === 1){
+    absorbInto(chains[0], [coord, ...loneAdj]);
+    addStep({phase:"Place a tile", detail:`${tileToken(coord)} → grew ${brand(chains[0])}`});
+    g.stage = "buy";
+  } else if(loneAdj.length >= 1){
+    g.pendingFound = {tiles:[coord, ...loneAdj]};
+    addStep({phase:"Place a tile", detail:`${tileToken(coord)} → Found startup`});
+    g.stage = "foundStartup";
+  } else {
+    addStep({phase:"Place a tile", detail:tileToken(coord)});
+    g.stage = "buy";
+  }
+}
+
+/* ---------- found ---------- */
+function chooseFoundBrand(id){
+  const g = game;
+  absorbInto(id, g.pendingFound.tiles);
+  const p = activePlayer();
+  p.portfolio[id] = (p.portfolio[id]||0) + 1;      // founder's free share
+  g.startups[id].availableShares -= 1;
+  g.foundedThisTurn = id;                          // flag for the buy phase "new" badge
+  addStep({phase:"Found a startup", detail:`${brand(id)} (+1 free share)`});
+  g.pendingFound = null;
+  ui.foundChoice = null;
+  g.stage = "buy";
+}
+
+/* ---------- merger ---------- */
+function startMerger(coord, chains, loneAdj){
+  const g = game;
+  const sizes = chains.map(id=>({id, size:g.startups[id].size}));
+  const maxSize = Math.max(...sizes.map(s=>s.size));
+  const largest = sizes.filter(s=>s.size===maxSize).map(s=>s.id);
+  g.merger = { chains, coord, loneAdj, tied: largest.length>1 ? largest : null, survivorId: null };
+  addStep({phase:"Place a tile", detail:`${tileToken(coord)} → merger`});
+  g.stage = "merger";
+  if(largest.length === 1) finalizeSurvivor(largest[0]);   // no tie → the victor is decided
+}
+function finalizeSurvivor(survivorId){
+  const g = game, m = g.merger;
+  m.survivorId = survivorId;
+  m.absorbedIds = m.chains.filter(id=>id!==survivorId);
+  m.absorbedPrices = {};
+  m.absorbedIds.forEach(id=> m.absorbedPrices[id] = g.startups[id].price);
+  m.bonuses = computeBonuses(m.absorbedIds);
+  addStep({phase:`${m.chains.join(' & ')} Merger`, detail:`${brand(survivorId)} absorbed ${m.absorbedIds.map(id=>brand(id)).join(' ')}`});
+  g.stage = "merger";   // proceed to the payout view (undo to change the victor)
+}
+function computeBonuses(absorbedIds){
+  const out = [];
+  absorbedIds.forEach(id=>{
+    const price = game.startups[id].price;
+    const holders = game.players.map(p=>({name:p.name, shares:p.portfolio[id]||0}))
+      .filter(h=>h.shares>0).sort((a,b)=>b.shares-a.shares);
+    if(!holders.length) return;
+    const top = holders[0].shares;
+    const maj = holders.filter(h=>h.shares===top);
+    if(maj.length>1){
+      const each = Math.round((price*10+price*5)/maj.length/100)*100;
+      maj.forEach(h=> out.push({absorbed:id, player:h.name, qty:h.shares, type:"majority", amount:each}));
+    } else {
+      out.push({absorbed:id, player:maj[0].name, qty:maj[0].shares, type:"majority", amount:price*10});
+      const rest = holders.filter(h=>h.shares<top);
+      if(rest.length){
+        const min = rest[0].shares;
+        const minH = rest.filter(h=>h.shares===min);
+        const each = minH.length>1 ? Math.round(price*5/minH.length/100)*100 : price*5;
+        minH.forEach(h=> out.push({absorbed:id, player:h.name, qty:h.shares, type:"minority", amount:each}));
+      }
+    }
+  });
+  return out;
+}
+function finalizePayout(){
+  const g = game, m = g.merger;
+  m.bonuses.forEach(b=>{ const p=g.players.find(x=>x.name===b.player); if(p) p.cash += b.amount; });
+  addStep({phase:"Merger payout", detail:payoutLinesHtml(m)});
+  setupLiquidation();
+}
+function setupLiquidation(){
+  const g = game, m = g.merger;
+  // queue: every holder of an absorbed chain, in player order starting from the merger-maker (active player)
+  const order = g.players.map((_,i)=>g.players[(g.activeIdx+i)%g.players.length]);
+  const queue = [];
+  m.absorbedIds.forEach(absorbedId=>{
+    order.forEach(pl=>{ if((pl.portfolio[absorbedId]||0) > 0) queue.push({playerId:pl.id, absorbedId}); });
+  });
+  m.liqQueue = queue; m.liqIdx = 0; m.liqResults = [];
+  if(queue.length){
+    m.liq = queue[0];
+    ui.liqSell=0; ui.liqTrade=0;
+    g.stage = "mergerLiquidation";
+    beginAction();   // one snapshot for the whole liquidation — its single undo dismisses every player's choices
+  } else {
+    completeMerger();
+  }
+}
+/* liquidation sorting — tap actions (increment only; "reset" clears) */
+function liqRemaining(){
+  const m = game.merger, liq = m.liq, p = game.players.find(x=>x.id===liq.playerId);
+  return (p.portfolio[liq.absorbedId]||0) - ui.liqSell - ui.liqTrade;
+}
+function liqSellOne(){ if(liqRemaining() >= 1) ui.liqSell++; }         // 1 absorbed → 1 Cash card
+function liqUnsell(){ if(ui.liqSell > 0) ui.liqSell--; }               // remove: back into the stock
+function liqTradeTwo(){ if(liqRemaining() >= 2) ui.liqTrade += 2; }    // 2 absorbed → 1 survivor
+function liqUntrade(){ if(ui.liqTrade >= 2) ui.liqTrade -= 2; }        // remove: 2 back into the stock
+
+function confirmLiquidation(){
+  const g = game, m = g.merger, liq = m.liq;
+  const p = g.players.find(x=>x.id===liq.playerId);
+  const price = m.absorbedPrices[liq.absorbedId];
+  const owned = p.portfolio[liq.absorbedId]||0;
+  const sold = ui.liqSell, traded = ui.liqTrade, converted = Math.floor(traded/2);
+  p.cash += sold*price;
+  p.portfolio[liq.absorbedId] = owned - sold - traded;
+  p.portfolio[m.survivorId] = (p.portfolio[m.survivorId]||0) + converted;
+  g.startups[m.survivorId].availableShares -= converted;
+  m.liqResults.push({name:p.name, sold, traded});
+  m.liqIdx++;
+  if(m.liqIdx < m.liqQueue.length){
+    m.liq = m.liqQueue[m.liqIdx];   // next holder's turn — no separate step/snapshot
+    ui.liqSell=0; ui.liqTrade=0;
+  } else {
+    // all holders done — one consolidated step for the whole liquidation
+    addStep({phase:`Liquidate ${m.absorbedIds.join(' & ')}`, detail: m.liqResults.map(r=>`${r.name}: sold ${r.sold}, traded ${r.traded}`).join(' · ')});
+    completeMerger();
+  }
+}
+function completeMerger(){
+  const g = game, m = g.merger;
+  const allTiles = [m.coord, ...m.loneAdj];
+  m.absorbedIds.forEach(id=>{
+    allTiles.push(...g.startups[id].tiles);
+    g.startups[id].isFounded = false; g.startups[id].tiles = []; g.startups[id].size = 0;
+  });
+  absorbInto(m.survivorId, allTiles);
+  g.stage = "buy";
+}
+
+/* ---------- buy / end turn ---------- */
+function buyableStartups(){
+  return Object.values(game.startups).filter(s=>s.isFounded && s.availableShares>0)
+    .map(s=>({id:s.id, price:s.price}));
+}
+function endTurn(){
+  const g = game, p = activePlayer();
+  g.cart.forEach(it=>{ p.cash -= it.price; p.portfolio[it.id]=(p.portfolio[it.id]||0)+1; g.startups[it.id].availableShares -= 1; });
+  addStep({phase:"Buy shares", detail: g.cart.length ? boughtStacks(g.cart) : "nothing"});
+  g.cart = [];
+  g.stage = "turnComplete";
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+/* a placement is illegal when it would merge two or more *safe* chains (≥11 tiles). */
+const SAFE_SIZE = 11;
+function placementBlocked(coord){
+  const adj = neighbors(coord).filter(n => game.board[n] && game.board[n].placed);
+  const chains = [...new Set(adj.map(n=>game.board[n].startupId).filter(Boolean))];
+  return chains.filter(id => game.startups[id].size >= SAFE_SIZE).length >= 2;
+}
+function renderBoard(){
+  const g = game;
+  // keep the hand highlighted on the board through the whole turn so the move can be switched
+  const hand = (ui.revealed && g.stage!=="turnComplete") ? activePlayer().hand : [];
+  const owners = {};   // each player's last-placed tile → their initial
+  g.players.forEach(pl=>{ if(pl.lastPlaced) owners[pl.lastPlaced] = pl.name[0]; });
+  const blocked = hand.filter(id=> g.board[id] && !g.board[id].placed && placementBlocked(id));
+  const hqTiles = Object.values(g.startups).filter(s=>s.isFounded).map(s=>s.foundingTile).filter(Boolean);
+  document.getElementById("board").innerHTML =
+    boardHtml(g.board, { hand, placed:g.placedTile, owners, blocked, hqTiles });   // boardHtml lives in components.js
+}
+function onBoardCellClick(coord){ switchPlacement(coord); }
+
+/* place `coord`, or — if a tile is already placed this turn — swap to it (revert the old placement first).
+   the other hand tiles stay visible so the move can be changed; undo also reverses it. */
+function switchPlacement(coord){
+  if(game.stage==="turnComplete" || !game.turnHand || !game.turnHand.includes(coord)) return;
+  const placeStep = game.steps.find(s=>s.phase==="Place a tile");
+  if(placeStep) undoTo(placeStep.histIdx);   // revert the current placement (and everything after)
+  beginAction();
+  placeTile(coord);
+  render();
+}
+
+/* ============================================================
+   Components — atoms and containers (see README "Component system")
+   ============================================================ */
+
+/* Atoms + containers (brand, cash, price, stockCard, stockStack, tile, player,
+   stacksFor, boughtStacks) now live in components.js, shared with states.html. */
+
+/* log token: a placed tile. company references in the log use brand(). */
+function tileToken(coord){ return tile(coord, {state:'filled'}); }
+/* the panel shows the current liquidator during liquidation (so you watch each player sort),
+   otherwise the turn-player. */
+function displayPlayer(){
+  if(game.stage==="mergerLiquidation" && game.merger)
+    return game.players.find(x=>x.id===game.merger.liq.playerId);
+  return activePlayer();
+}
+/* staging: during liquidation = the CURRENT liquidator's pending sort (clears when the queue advances);
+   otherwise = the turn-player's diff from turn-start + the (uncommitted) buy cart. undo rewinds either. */
+function stagingDelta(){
+  const g = game;
+  if(g.stage==="mergerLiquidation" && g.merger){
+    const m=g.merger, absId=m.liq.absorbedId, delta={};
+    delta[absId] = -(ui.liqSell + ui.liqTrade);                        // absorbed leaving
+    if(ui.liqTrade) delta[m.survivorId] = Math.floor(ui.liqTrade/2);   // survivor from the 2:1 trade
+    const cashDelta = ui.liqSell * m.absorbedPrices[absId];            // cash from selling
+    const shares = Object.entries(delta).filter(([,d])=>d!==0).map(([id,d])=>({id, delta:d}));
+    return { shares, cashDelta, cartCounts:{} };
+  }
+  const ap = activePlayer(), base = g.turnStartHand;
+  const delta = {}, add = (id,n)=> { delta[id]=(delta[id]||0)+n; };
+  const cartCounts = {}; g.cart.forEach(it=> cartCounts[it.id]=(cartCounts[it.id]||0)+1);
+  new Set([...Object.keys(base.portfolio), ...Object.keys(ap.portfolio)]).forEach(id=>
+    add(id, (ap.portfolio[id]||0) - (base.portfolio[id]||0)));       // committed diff (founding, confirmed liquidation, …)
+  Object.entries(cartCounts).forEach(([id,n])=> add(id, n));         // pending buy cart
+  const cashDelta = (ap.cash - base.cash) - g.cart.reduce((s,it)=>s+it.price,0);
+  const shares = Object.entries(delta).filter(([,d])=>d!==0).map(([id,d])=>({id, delta:d}));
+  return { shares, cashDelta, cartCounts };
+}
+function stagingHtml(){
+  const g = game;
+  // staging is always present so the hand/players below it never shift; pre-placement
+  // and after fold there's simply nothing staged → the empty placeholder holds the space.
+  if(g.stage==="play" || g.stage==="turnComplete") return stagingZone({ label:'Staging — commits on end turn' });
+  const { shares, cashDelta, cartCounts } = stagingDelta();
+  const liq = g.stage==="mergerLiquidation";
+  const pile = shares.map(s=> stockStack(s.id, Math.abs(s.delta), {
+      size:'sm', leaving:s.delta<0, price:g.startups[s.id]&&g.startups[s.id].price,
+      // liquidation: the leaving (negative) stack reverts this player's sort; buy cart: removes one bought share
+      onRemove: (liq && s.delta<0) ? `ui.liqSell=0; ui.liqTrade=0; render();`
+              : cartCounts[s.id]>0 ? `onRemoveBrand('${s.id}'); render();`
+              : null,
+    })).join('');
+  const label = liq ? `Staging — ${displayPlayer().name}'s liquidation` : 'Staging — commits on end turn';
+  return stagingZone({ label, sharesHtml:pile, cashDelta, action:stagingActionHtml() });
+}
+/* the phase-advance button lives in the staging zone for liquidate / buy
+   (founding, place-a-tile, turn-complete and the merger payout keep their inline buttons) */
+function stagingActionHtml(){
+  const g = game;
+  if(g.stage==="mergerLiquidation"){
+    const m = g.merger;
+    return `<button class="primary-btn staging-action" onclick="confirmLiquidation(); render();">${m.liqIdx < m.liqQueue.length-1 ? 'Next holder' : 'Confirm'}</button>`;
+  }
+  if(g.stage==="buy"){
+    return `<button class="primary-btn staging-action" onclick="beginAction(); endTurn(); render();">${g.cart.length?'Buy &amp; end turn':'Skip &amp; end turn'}</button>`;
+  }
+  return '';
+}
+function handHtml(){
+  const g = game, dp = displayPlayer(), liq = g.stage==="mergerLiquidation", folded = g.stage==="turnComplete";
+  // liquidation → the liquidator's live holdings; buy/found → the turn-player's turn-start base; complete → folded
+  const portfolio = (liq || folded) ? dp.portfolio : g.turnStartHand.portfolio;
+  const bal       = (liq || folded) ? dp.cash      : g.turnStartHand.cash;
+  return handZone({name:dp.name, portfolio, cash:bal});
+}
+function playersHtml(){
+  const g = game, dp = displayPlayer(), liq = g.stage==="mergerLiquidation", folded = g.stage==="turnComplete";
+  const players = g.players.map(p=>{
+    const isDp = p.id===dp.id;
+    const c = (isDp && !liq && !folded) ? g.turnStartHand.cash : p.cash;   // turn-player tracks the hand base until fold
+    return {emoji:p.emoji, name:p.name, cash:c, active:isDp};
+  });
+  return playersStrip(players);
+}
+
+function stepEntryHtml(step){
+  const undo = step.histIdx!=null ? `<button class="step-undo" onclick="undoTo(${step.histIdx})" title="Rewind to before this step">↺ undo</button>` : '';
+  return stepEntry({ phase:step.phase, detail:step.detail, undo });   // stepEntry lives in components.js
+}
+function stepsListHtml(steps){
+  return steps.map(s=>stepEntryHtml(s)).join('');
+}
+function stepStackHtml(){
+  return stepStack(game.steps, stepEntryHtml);   // stepEntryHtml adds the ↺ undo button per step
+}
+
+function capTableHtml(ids){
+  return `<table class="data">
+    <thead><tr><th>Player</th>${ids.map(id=>`<th>${id}</th>`).join('')}</tr></thead>
+    <tbody>${game.players.map(p=>`<tr><td>${p.name}</td>${ids.map(id=>`<td>${p.portfolio[id]||0}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+/* attach each bonus's player emoji, then defer to the shared payoutLines view. */
+function payoutLinesHtml(m){
+  const bonuses = m.bonuses.map(b=>{
+    const p = game.players.find(x=>x.name===b.player);
+    return { ...b, emoji:(p&&p.emoji)||'' };
+  });
+  return payoutLines(bonuses);   // payoutLines lives in components.js
+}
+
+function activeStepHtml(){
+  const g = game, ap = activePlayer();
+
+  if(g.stage==="play"){
+    // the placeable hand tiles, tappable here or on the board — mirrors the board highlight
+    const tiles = ap.hand.map(coord=>{
+      const blockd = placementBlocked(coord);
+      return tile(coord, {state: blockd?'blocked':'hand', onclick: blockd?null:`switchPlacement('${coord}')`});
+    }).join('');
+    return `<div class="active-step">
+      <div class="stage-label">Place a tile</div>
+      <div class="option-row">${tiles}</div>
+      <div class="hint">Tap a highlighted tile — on the board or here.</div>
+    </div>`;
+  }
+
+  if(g.stage==="foundStartup"){
+    const foundSize = g.pendingFound.tiles.length;
+    // bucket every brand by its starting share price; already-founded ones show as taken (disabled)
+    const groups = {};
+    Object.values(g.startups).forEach(s=>{
+      const pr = sharePrice(s.tier, foundSize);
+      (groups[pr] = groups[pr] || []).push(s.id);
+    });
+    const prices = Object.keys(groups).map(Number).sort((a,b)=>a-b);
+    return `<div class="active-step">
+      <div class="stage-label">Found a startup</div>
+      <div class="found-groups">
+        ${prices.map(pr=>`<div class="found-group">
+          <div class="found-price">${price(pr)}<span class="found-price-note">to start</span></div>
+          <div class="option-row">${groups[pr].map(id=> g.startups[id].isFounded
+            ? brand(id, {disabled:true})
+            : brand(id, {mode:'select', onclick:`beginAction(); chooseFoundBrand('${id}'); render();`})).join('')}</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  if(g.stage==="merger"){
+    const m = g.merger;
+    const title = `${m.chains.join(' & ')} Merger`;
+    // tie, no victor yet: tap a chain to pick it (proceeds straight to payout)
+    if(!m.survivorId){
+      return `<div class="active-step">
+        <div class="stage-label">${title}</div>
+        <div class="option-row">
+          ${m.tied.map(id=>stockStack(id, ap.portfolio[id]||0, {price:g.startups[id].price, onClick:`beginAction(); finalizeSurvivor('${id}'); render();`})).join('')}
+        </div>
+      </div>`;
+    }
+    // survivor decided → payout: who gets paid (emoji · name · role · amount), inline Continue.
+    // the "X absorbs Y" line lives in the completed step above (see finalizeSurvivor).
+    return `<div class="active-step">
+      <div class="stage-label">${title}</div>
+      ${payoutLinesHtml(m)}
+      <button class="primary-btn" onclick="beginAction(); finalizePayout(); render();">Continue</button>
+    </div>`;
+  }
+
+  if(g.stage==="mergerLiquidation"){
+    const m = g.merger, liq = m.liq;
+    const p = g.players.find(x=>x.id===liq.playerId);
+    const owned = p.portfolio[liq.absorbedId]||0;
+    const remaining = owned - ui.liqTrade - ui.liqSell;
+    const unitPrice = m.absorbedPrices[liq.absorbedId];
+    const converted = ui.liqTrade/2;
+    const canSell = remaining>=1, canTrade = remaining>=2;
+    const queueHtml = `<div class="liq-queue">${m.liqQueue.map((e,i)=>{
+      const qp = g.players.find(x=>x.id===e.playerId);
+      const st = i<m.liqIdx ? 'done' : (i===m.liqIdx ? 'current' : 'pending');
+      return `<span class="liq-queue-item ${st}"><span class="liq-queue-emoji">${qp.emoji||''}</span>${qp.name} <b>×${qp.portfolio[e.absorbedId]||0}</b></span>`;
+    }).join('')}</div>`;
+    return `<div class="active-step">
+      <div class="stage-label">Liquidate ${liq.absorbedId} — ${p.name}</div>
+      ${queueHtml}
+      ${liqActions({ absorbedId:liq.absorbedId, survivorId:m.survivorId, unitPrice, canSell, canTrade,
+        onSell:"liqSellOne(); render();", onTrade:"liqTradeTwo(); render();" })}
+      <div class="hint">${remaining} ${ticker(liq.absorbedId)} left to sort — results stage below.</div>
+    </div>`;
+  }
+
+  if(g.stage==="buy"){
+    const buyable = buyableStartups();
+    const spent = g.cart.reduce((s,it)=>s+it.price,0);
+    const remaining = g.turnStartHand.cash - spent;   // spendable = turn-start wallet
+    return `<div class="active-step">
+      <div class="stage-label">Buy shares (${g.cart.length}/3)</div>
+      <div class="buy-grid">
+        ${buyable.map(b=>{
+          const canAdd = g.cart.length<3 && b.price<=remaining;
+          const isNew = b.id===g.foundedThisTurn;
+          return stockCard(b.id, {mode:'select', price:b.price, disabled:!canAdd, badge:isNew?'new':null,
+            onclick: canAdd?`onAddToCart('${b.id}',${b.price}); render();`:null});
+        }).join('') || '<span class="hold-note">No shares available to buy.</span>'}
+      </div>
+    </div>`;
+  }
+
+  if(g.stage==="turnComplete"){
+    // every step (incl. Buy) already persists in the step stack above — just offer the next turn
+    return `<div class="active-step">
+      <button class="primary-btn" onclick="startTurn()">Start new turn</button>
+    </div>`;
+  }
+
+  return '';
+}
+
+function onAddToCart(id, price){
+  if(game.cart.length>=3) return;
+  const spent = game.cart.reduce((s,it)=>s+it.price,0);
+  if(price > game.turnStartHand.cash - spent) return;   // spend from the turn-start wallet (winnings are deferred)
+  game.cart.push({id,price});
+}
+function onRemoveBrand(id){ const i = game.cart.findIndex(it=>it.id===id); if(i>=0) game.cart.splice(i,1); }
+
+function renderPanel(){
+  // bottom-anchored: log rises at top, then active phase, staging, your hand, players pinned
+  document.getElementById("panel").innerHTML = panelHtml({
+    stepstack: stepStackHtml(),
+    active:    activeStepHtml(),
+    staging:   stagingHtml(),
+    hand:      handHtml(),
+    players:   playersHtml(),
+  });
+}
+
+function renderOverlay(){
+  const main = document.getElementById("main");
+  const existing = main.querySelector(".reveal-overlay");
+  if(existing) existing.remove();
+  if(ui.passPlay && !ui.revealed && game.stage==="play"){
+    const ap = activePlayer();
+    const div = document.createElement("div");
+    div.className = "reveal-overlay";
+    div.innerHTML = `<div class="pass-name">Pass to ${ap.name}</div>
+      <button onclick="ui.revealed=true; render();">I'm ${ap.name} — Reveal</button>`;
+    main.appendChild(div);
+  }
+}
+
+/* ---------- component gallery (a living reference of every state) ---------- */
+function swatch(label, html){ return `<div class="swatch">${html}<small>${label}</small></div>`; }
+
+/* render every turn phase's active-step UI as a standalone, display-only unit.
+   drives a throwaway demo game to each stage, snapshots activeStepHtml(), restores. */
+function phaseShowcase(){
+  const saved = { game, ui, history, curHist };
+  const shots = [];
+  const snap = (label)=> shots.push([label, activeStepHtml()]);
+  try {
+    curHist = -1; history = [];   // throwaway history so simulated beginAction() calls don't touch the real one
+    initGame();                                                      snap('Place a tile');
+    initGame(); placeTile('G6');                                     snap('Found a startup');
+    initGame(); placeTile('E6');                                     snap('Merger — pick victor');
+    finalizeSurvivor('Messla');                                      snap('Merger — payout');
+    finalizePayout(); if(game.stage==='mergerLiquidation'){ ui.liqSell = 1; snap('Liquidate'); }
+    initGame(); placeTile('E2'); onAddToCart('Messla', game.startups.Messla.price); snap('Buy shares');
+    endTurn();                                                       snap('Turn complete');
+  } finally {
+    game = saved.game; ui = saved.ui; history = saved.history; curHist = saved.curHist;
+  }
+  return shots.map(([label, html])=>`<div class="phase-showcase"><div class="phase-showcase-label">${label}</div>${html}</div>`).join('');
+}
+
+function galleryHtml(){
+  const rich = {name:"Alex", emoji:"🦊", cash:4200, portfolio:{Messla:4, ZuckFace:2}};
+  const broke = {name:"Sam", emoji:"🐢", cash:5800, portfolio:{}};
+  // worst-case: a player holding every startup, big counts, big cash
+  const allIds = Object.keys(STARTUPS);
+  const whale = {name:"Jordan", emoji:"🦁", cash:128400, portfolio:
+    {Gobble:25, Scrapple:12, PaperfulPost:8, CamCrooned:5, Messla:3, ZuckFace:2, WrecksonMobil:1}};
+  return `<div class="gallery">
+    <button class="reset-btn gallery-close" onclick="ui.gallery=false; render();">✕ Close</button>
+    <h2>Cash — money</h2>
+    <div class="row">
+      ${swatch("neutral", cash(4200))}
+      ${swatch("delta +", cash(4000,{sign:"delta"}))}
+      ${swatch("delta −", cash(-2000,{sign:"delta"}))}
+      ${swatch("zero", cash(0))}
+    </div>
+    <h2>Price — stock value</h2>
+    <div class="row">
+      ${swatch("flat", price(400))}
+      ${swatch("change ↑", price(300,{next:600}))}
+      ${swatch("change ↓", price(600,{next:400}))}
+    </div>
+    <h2>Brand — company identity (filled)</h2>
+    <div class="row">
+      ${swatch("static", brand("Messla"))}
+      ${swatch("select", brand("PaperfulPost",{mode:"select"}))}
+      ${swatch("selected", brand("PaperfulPost",{mode:"select",selected:true}))}
+      ${swatch("disabled", brand("PaperfulPost",{mode:"select",disabled:true}))}
+      ${swatch("small", brand("ZuckFace",{size:"sm"}))}
+    </div>
+    <h2>Stock card — a share (outlined, always priced)</h2>
+    <div class="row">
+      ${swatch("static", stockCard("Messla"))}
+      ${swatch("select", stockCard("Messla",{mode:"select"}))}
+      ${swatch("selected", stockCard("Messla",{mode:"select",selected:true}))}
+      ${swatch("disabled", stockCard("Messla",{mode:"select",disabled:true}))}
+      ${swatch("remove", stockCard("ZuckFace",{mode:"remove"}))}
+    </div>
+    <h2>Stock stack — the primary share entity (nested card + count)</h2>
+    <div class="row">
+      ${swatch("count", stockStack("Messla",4))}
+      ${swatch("zero", stockStack("Cash",0,{price:400}))}
+      ${swatch("increment", stockStack("Cash",2,{price:400, onClick:"void 0", onRemove:"void 0"}))}
+      ${swatch("small", stockStack("ZuckFace",2,{size:"sm"}))}
+      ${swatch("disabled", stockStack("Messla",0,{disabled:true}))}
+    </div>
+    <h2>"Cash" as a brand — the liquidation sell stack</h2>
+    <div class="row">
+      ${swatch("cash stack", stockStack("Cash",3,{price:400,onClick:"void 0",onRemove:"void 0"}))}
+    </div>
+    <h2>Tile — one system for board &amp; inline (bg = affiliation · border weight = attention · ring = placed this turn)</h2>
+    <div class="row">
+      ${swatch("empty", tile("E6",{state:"empty"}))}
+      ${swatch("filled", tile("E6",{state:"filled"}))}
+      ${swatch("in hand", tile("E6",{state:"hand"}))}
+      ${swatch("blocked (illegal merge)", tile("D4",{state:"blocked"}))}
+      ${swatch("placed (this turn)", tile("E6",{state:"placed"}))}
+      ${swatch("part of chain", tile("E6",{state:"chain", brand:"Messla"}))}
+      ${swatch("founded HQ", tile("E6",{state:"founded", brand:"Messla"}))}
+    </div>
+    <h2>Player indicator</h2>
+    <div class="row" style="flex-direction:column; align-items:stretch; max-width:320px;">
+      ${player(rich,{active:true})}
+      ${player(broke,{active:false})}
+    </div>
+    <h2>Stress tests — worst-case density (owns all 7)</h2>
+    <div class="row" style="flex-direction:column; align-items:stretch; max-width:320px;">
+      ${player(whale,{active:true})}
+    </div>
+    <div class="row">
+      ${allIds.map(id=>stockStack(id, whale.portfolio[id])).join('')}
+    </div>
+    <div class="row">
+      ${allIds.map(id=>stockStack(id, whale.portfolio[id], {size:'sm'})).join('')}
+    </div>
+    <div class="row">
+      ${allIds.map(id=>stockStack(id, whale.portfolio[id], {price:game.startups[id].price||400, onClick:"void 0", onRemove:"void 0"})).join('')}
+    </div>
+    <h2>Turn phases — standalone units (display only)</h2>
+    <div class="phase-showcases">${phaseShowcase()}</div>
+  </div>`;
+}
+function renderGallery(){
+  const main = document.getElementById("main");
+  const existing = main.querySelector(".gallery");
+  if(existing) existing.remove();
+  if(ui.gallery){
+    const wrap = document.createElement("div");
+    wrap.innerHTML = galleryHtml();
+    main.appendChild(wrap.firstElementChild);
+  }
+}
+
+function render(){
+  const main = document.getElementById("main");
+  main.className = "main " + ui.layout;
+  document.getElementById("layoutSelect").value = ui.layout;
+  document.getElementById("passPlayToggle").checked = ui.passPlay;
+  renderBoard();
+  renderPanel();
+  renderOverlay();
+  renderGallery();
+}
+
+/* ---------- turn lifecycle ---------- */
+function startTurn(){
+  history = []; curHist = -1;
+  initGame();               // fresh identical turn (Alex) for repeatable demo
+  render();
+}
+
+/* ---------- controls ---------- */
+document.getElementById("layoutSelect").addEventListener("change", e=>{ ui.layout = e.target.value; render(); });
+document.getElementById("passPlayToggle").addEventListener("change", e=>{
+  ui.passPlay = e.target.checked;
+  ui.revealed = !(ui.passPlay && game.stage==="play");
+  render();
+});
+document.getElementById("galleryBtn").addEventListener("click", ()=>{ ui.gallery = !ui.gallery; render(); });
+document.getElementById("resetBtn").addEventListener("click", ()=> startTurn());
+
+initGame();
+render();
+</script>

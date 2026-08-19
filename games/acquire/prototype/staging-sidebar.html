@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Acquire — Staging Sidebar (variation)</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:#111827; background:#f9fafb; height:100dvh; overflow:hidden;
+    display:grid; grid-template-rows:auto 1fr; font-size:14px; line-height:1.4;
+  }
+  button{font:inherit; color:inherit;}
+  button:focus-visible{outline:2px solid #3b82f6; outline-offset:1px;}
+
+  /* ---- topbar / stepper ---- */
+  .topbar{border-bottom:1px solid #e5e7eb; background:#fff; padding:8px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .topbar .name{font-weight:700;}
+  .seg{display:inline-flex; border:1px solid #d1d5db; border-radius:6px; overflow:hidden;}
+  .seg button{border:none; background:#fff; padding:4px 12px; cursor:pointer; font-size:13px;}
+  .seg button.on{background:#2563eb; color:#fff;}
+  .step-ctrl{margin-left:auto; display:flex; align-items:center; gap:10px;}
+  .step-ctrl .stage-name{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; min-width:120px; text-align:center;}
+  .ghost{border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:4px 12px; cursor:pointer; font-size:13px;}
+  .ghost:disabled{opacity:.4; cursor:not-allowed;}
+
+  .main{display:grid; grid-template-columns:1fr 340px; overflow:hidden;}
+  .board-ph{display:flex; align-items:center; justify-content:center; color:#c1c6cf; font-size:13px; letter-spacing:.06em; text-transform:uppercase;}
+
+  /* ---- the bottom-anchored panel ---- */
+  .panel{border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; height:100%; overflow:hidden;}
+  .log{flex:1 1 auto; overflow-y:auto; display:flex; flex-direction:column; justify-content:flex-end; gap:8px; padding:14px 16px 8px;}
+  .zone{flex:none; padding:12px 16px; border-top:1px solid #eef0f2;}
+  .zone-label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#9ca3af; font-weight:700; margin-bottom:8px;}
+
+  /* completed steps (rise up; newest nearest the active phase) */
+  .done-step{display:flex; flex-direction:column; gap:3px; opacity:.85;}
+  .done-step .dl{font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#9ca3af; font-weight:600;}
+  .done-step .dd{font-size:13px; color:#4b5563;}
+  .done-step .dd b{color:#111827;}
+
+  /* active phase — slides up on stage change */
+  .active-phase{background:#f8fafc;}
+  .active-phase .ap-title{font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#374151; font-weight:700; margin-bottom:10px;}
+  .active-phase.enter{animation:slideUp .28s cubic-bezier(.2,.7,.3,1);}
+  @keyframes slideUp{from{transform:translateY(26px); opacity:0;} to{transform:none; opacity:1;}}
+  @media (prefers-reduced-motion:reduce){ .active-phase.enter{animation:none;} }
+  .ap-row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;}
+  .hint{font-size:12px; color:#6b7280; margin-top:8px;}
+  .primary{background:#2563eb; color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:14px; cursor:pointer; margin-top:12px;}
+  .win-line{font-size:13px; margin:2px 0;}
+
+  /* staging pile */
+  .staging{background:#fffdf5; border-top:1px dashed #e7dfbf;}
+  .staging .zone-label{color:#a8935a;}
+  .stage-pile{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; min-height:64px;}
+  .stage-empty{color:#c9bd93; font-size:13px; align-self:center;}
+
+  /* hand */
+  .hand{background:#fff;}
+  .hand-body{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;}
+
+  /* players — pinned bottom */
+  .players{display:flex; gap:8px; background:#f9fafb; border-top:1px solid #e5e7eb;}
+  .pl{display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-size:13px; flex:1;}
+  .pl.active{border-color:#2563eb; background:#eff6ff;}
+  .pl .emo{font-size:15px;}
+  .pl .pnm{font-weight:600;}
+  .pl .pcash{margin-left:auto; font-variant-numeric:tabular-nums; color:#15803d; font-weight:600;}
+
+  /* ================= component atoms ================= */
+  /* brand palette (+ --stroke) */
+  .brand-Gobble{--stroke:#ef4444; background:#fee2e2; border-color:#ef4444; color:#b91c1c;}
+  .brand-Scrapple{--stroke:#f97316; background:#ffedd5; border-color:#f97316; color:#c2410c;}
+  .brand-WrecksonMobil{--stroke:#f59e0b; background:#fef3c7; border-color:#f59e0b; color:#b45309;}
+  .brand-PaperfulPost{--stroke:#84cc16; background:#ecfccb; border-color:#84cc16; color:#4d7c0f;}
+  .brand-ZuckFace{--stroke:#14b8a6; background:#ccfbf1; border-color:#14b8a6; color:#0f766e;}
+  .brand-Messla{--stroke:#a855f7; background:#f3e8ff; border-color:#a855f7; color:#7e22ce;}
+  .brand-CamCrooned{--stroke:#ec4899; background:#fce7f3; border-color:#ec4899; color:#be185d;}
+
+  .price{font-variant-numeric:tabular-nums; color:#6b7280; font-weight:500; font-size:11px;}
+
+  /* portrait stock card + depth */
+  .stock{
+    position:relative; display:inline-flex; flex-direction:column; align-items:center; justify-content:space-between; gap:3px;
+    width:52px; min-height:58px; border-width:1px; border-style:solid; border-radius:6px; padding:6px 4px;
+    background:#fff; vertical-align:bottom; line-height:1.15; text-align:center;
+  }
+  .stock .sn{font-weight:700; font-size:14px;}
+  .stock.sm{width:40px; min-height:44px; padding:4px 3px; gap:2px;}
+  .stock.sm .sn{font-size:12px;}
+  .stock.sm .price{font-size:10px;}
+  .stock.depth-1{margin:0 4px 4px 0;}
+  .stock.depth-2{margin:0 7px 7px 0;}
+  .stock.depth-1::after,
+  .stock.depth-2::before, .stock.depth-2::after{content:""; position:absolute; inset:0; z-index:-1; border:1px solid; border-color:inherit; border-radius:inherit; background:#fff;}
+  .stock.depth-2::before{transform:translate(6px,6px);}
+  .stock.depth-1::after, .stock.depth-2::after{transform:translate(3px,3px);}
+
+  .stock-stack{position:relative; display:inline-flex; flex-direction:column; align-items:center; gap:3px; vertical-align:bottom;}
+  .stack-qty{font-variant-numeric:tabular-nums; font-weight:600; color:#374151; line-height:1;}
+  .stock-stack.sm .stack-qty{font-size:12px;}
+  .stack-x{position:absolute; top:-2px; right:-2px; width:18px; height:18px; border:none; border-radius:50%; background:rgba(0,0,0,.12); color:inherit; cursor:pointer; font-size:12px; line-height:1; display:inline-flex; align-items:center; justify-content:center;}
+  .stack-x:hover{background:rgba(0,0,0,.22);}
+
+  /* cash bill — landscape, $$ + amount; green in, red out */
+  .bill{
+    position:relative; display:inline-flex; flex-direction:row; align-items:center; justify-content:center; gap:6px;
+    min-width:78px; min-height:42px; padding:6px 12px; border-radius:6px; border:1px solid;
+    background:#dcfce7; border-color:#16a34a; color:#15803d; font-weight:700; font-variant-numeric:tabular-nums;
+  }
+  .bill.sm{min-width:64px; min-height:34px; padding:4px 9px; font-size:13px;}
+  .bill .bt{font-size:16px;}
+  .bill.sm .bt{font-size:13px;}
+  .bill.out{background:#fee2e2; border-color:#dc2626; color:#b91c1c;}
+  .bill.depth-1{margin:0 4px 4px 0;}
+  .bill.depth-2{margin:0 7px 7px 0;}
+  .bill.depth-1::after,
+  .bill.depth-2::before, .bill.depth-2::after{content:""; position:absolute; inset:0; z-index:-1; border:1px solid; border-color:inherit; border-radius:inherit; background:inherit;}
+  .bill.depth-2::before{transform:translate(6px,6px);}
+  .bill.depth-1::after, .bill.depth-2::after{transform:translate(3px,3px);}
+
+  /* brand chip (filled identity) */
+  .brand{display:inline-flex; align-items:center; border:1px solid; border-radius:4px; padding:3px 9px; font-size:13px; font-weight:600;}
+  button.brand{cursor:pointer;}
+  .brand.on{outline:2px solid #2563eb; outline-offset:1px;}
+
+  /* buy = selection buttons (no qty here — qty lives in staging). new = just-founded chain. */
+  .buy-grid{display:flex; flex-wrap:wrap; gap:10px;}
+  .buybtn{position:relative; display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    width:60px; min-height:56px; padding:8px 4px; border-width:1px; border-style:solid; border-radius:8px; background:#fff; cursor:pointer;}
+  .buybtn:hover{background:#f8fafc;}
+  .buybtn:disabled{opacity:.4; cursor:not-allowed;}
+  .buybtn .bb-tk{font-weight:700; font-size:15px;}
+  .buybtn .bb-pr{font-size:11px; color:#6b7280; font-variant-numeric:tabular-nums;}
+  .newtag{position:absolute; top:-8px; right:-7px; background:#2563eb; color:#fff; font-size:9px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.04em; padding:1px 6px; border-radius:9px;}
+
+  /* cash as numbers */
+  .cashnum{font-variant-numeric:tabular-nums; font-weight:700; color:#b91c1c;}
+  .cashnum.pos{color:#15803d;}
+  .balance{display:inline-flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:8px 14px;
+    border:1px solid #cfe8da; border-radius:8px; background:#f0fdf4;}
+  .balance .bl{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600;}
+  .balance .bn{font-size:20px; font-weight:800; color:#15803d; font-variant-numeric:tabular-nums; line-height:1.1;}
+  .cart-total{flex-basis:100%; display:flex; align-items:baseline; justify-content:flex-end; gap:10px;
+    margin-top:8px; padding-top:8px; border-top:1px dashed #e7dfbf;}
+  .cart-total .ctl{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#a8935a; font-weight:700;}
+  .cart-total .ct{font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; color:#b45309;}
+  .cart-total .ct.pos{color:#15803d;}
+</style>
+
+<div class="topbar">
+  <span class="name">Staging sidebar</span>
+  <div class="seg" id="seg">
+    <button data-sc="worst" class="on">7-brand buy</button>
+    <button data-sc="merger">Merger turn</button>
+    <button data-sc="found">Founding turn</button>
+  </div>
+  <div class="step-ctrl">
+    <button class="ghost" id="back">◀ Back</button>
+    <span class="stage-name" id="stageName"></span>
+    <button class="ghost" id="next">Next ▶</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="board-ph">board</div>
+  <div class="panel">
+    <div class="log" id="log"></div>
+    <div class="zone active-phase" id="active"></div>
+    <div class="zone staging">
+      <div class="zone-label">Staging — commits on end turn</div>
+      <div class="stage-pile" id="stagePile"></div>
+    </div>
+    <div class="zone hand">
+      <div class="zone-label">Your hand</div>
+      <div class="hand-body" id="handBody"></div>
+    </div>
+    <div class="zone players" id="players"></div>
+  </div>
+</div>
+
+<script>
+/* ---------------- config ---------------- */
+const STARTUPS = {
+  Gobble:{ticker:"$G"}, Scrapple:{ticker:"$S"}, PaperfulPost:{ticker:"$PP"},
+  CamCrooned:{ticker:"$C"}, Messla:{ticker:"$M"}, ZuckFace:{ticker:"$Z"}, WrecksonMobil:{ticker:"$W"},
+};
+const tk = id => (STARTUPS[id]||{}).ticker || id;
+const money = n => "$"+Math.abs(n).toLocaleString();
+
+const ALEX = {name:"Alex", emoji:"🦊", cash:4200, portfolio:{Scrapple:4, Messla:1}};
+const OTHERS = [
+  {name:"Sam", emoji:"🐢", cash:5800, portfolio:{ZuckFace:5}},
+  {name:"Jordan", emoji:"🦁", cash:3100, portfolio:{Messla:3}},
+];
+
+/* scenarios: an ordered list of stages; staging is derived cumulatively per stage */
+const ALL7 = [
+  {id:"Gobble",price:700},{id:"Scrapple",price:600},{id:"PaperfulPost",price:300},
+  {id:"CamCrooned",price:500},{id:"Messla",price:700},{id:"ZuckFace",price:400},{id:"WrecksonMobil",price:800},
+];
+const SCEN = {
+  worst:{                                    // worst-case layout: 7 buyable, hand holds all 7, 3 pre-staged
+    base:{cash:6000, portfolio:{Gobble:1, Scrapple:2, PaperfulPost:1, CamCrooned:3, Messla:1, ZuckFace:2, WrecksonMobil:1}},
+    newId:"PaperfulPost",
+    buyStage:0, buyable:ALL7,
+    seedCart:[{id:"Messla",price:700},{id:"Messla",price:700},{id:"PaperfulPost",price:300}],
+    stages:["buy","complete"],
+    names:{buy:"Buy shares", complete:"Turn complete"},
+  },
+  merger:{
+    absorbed:"Scrapple", survivor:"Gobble",
+    buyStage:3,
+    buyable:[{id:"Messla",price:700},{id:"Gobble",price:700},{id:"ZuckFace",price:400}],
+    stages:["place","payout","liquidate","buy","complete"],
+    names:{place:"Place a tile", payout:"Merger payout", liquidate:"Liquidate", buy:"Buy shares", complete:"Turn complete"},
+  },
+  found:{
+    buyStage:2,
+    buyable:[{id:"PaperfulPost",price:300},{id:"Messla",price:700},{id:"ZuckFace",price:400}],
+    foundOpts:["PaperfulPost","CamCrooned","WrecksonMobil"],
+    stages:["place","found","buy","complete"],
+    names:{place:"Place a tile", found:"Found a startup", buy:"Buy shares", complete:"Turn complete"},
+  },
+};
+
+let state = { sc:"merger", stage:0, cart:[], foundId:"PaperfulPost", _last:-1 };
+
+/* ---------------- atoms ---------------- */
+function stackDepth(n){ if(n>=6) return 2; if(n>=2) return 1; return 0; }
+function stockStack(id, count, o={}){
+  const sm = o.sm ? " sm":"", d = stackDepth(count);
+  const card = `<span class="stock${sm} brand-${id} ${d?'depth-'+d:''}">
+      <span class="sn">${tk(id)}</span>${o.price?`<span class="price">${money(o.price)}</span>`:""}</span>`;
+  const x = o.onRemove && count>0 ? `<button class="stack-x" onclick="${o.onRemove}">×</button>`:"";
+  const body = o.onClick ? `<button style="all:unset;cursor:pointer" onclick="${o.onClick}">${card}</button>` : card;
+  return `<span class="stock-stack${sm}">${body}<span class="stack-qty">×${count}</span>${x}</span>`;
+}
+function bill(amount, o={}){
+  const sm = o.sm?" sm":"", out = amount<0?" out":"", d = o.depth?` depth-${o.depth}`:"";
+  const sign = o.sign ? (amount<0?"−":"+") : "";
+  return `<span class="bill${sm}${out}${d}"><span class="bt">$$</span>${sign}${money(amount)}</span>`;
+}
+function brandChip(id, o={}){
+  const tag = o.onclick?"button":"span";
+  return `<${tag} class="brand brand-${id} ${o.on?'on':''}" ${o.onclick?`onclick="${o.onclick}"`:""}>${id}</${tag}>`;
+}
+
+/* ---------------- staging derivation ----------------
+   staging = { shares, cash:[{amount,label}] } — each cash movement is its own bill
+   so winnings, liquidation proceeds and spend stay visually distinct. */
+function scBase(){ return SCEN[state.sc].base || ALEX; }
+function newId(){ const s=SCEN[state.sc]; return state.sc==="found" ? state.foundId : (s.newId || s.survivor || null); }
+function cartSpent(){ return state.cart.reduce((a,c)=>a+c.price,0); }
+function cartAdd(st){ state.cart.forEach(c=> st.shares[c.id]=(st.shares[c.id]||0)+1); const sp=cartSpent(); if(sp) st.cash.push({amount:-sp}); }
+function derive(){                       // cumulative staging up to current stage
+  const s = SCEN[state.sc], stage = state.stage, st = {shares:{}, cash:[]};
+  if(state.sc==="merger"){
+    if(stage>=1) st.cash.push({amount:6000});                   // majority winnings
+    if(stage>=2){ st.cash.push({amount:1200}); st.shares[s.survivor]=(st.shares[s.survivor]||0)+1; } // 2:1 trade
+  } else if(state.sc==="found"){
+    if(stage>=1) st.shares[state.foundId]=(st.shares[state.foundId]||0)+1;        // free founder share
+  }
+  if(stage>=s.buyStage) cartAdd(st);      // bought shares (all scenarios)
+  return st;
+}
+function netCash(st){ return st.cash.reduce((a,c)=>a+c.amount,0); }
+function committedHand(){                 // final hand = your hand + everything staged (purely additive)
+  const st = derive(), b = scBase();
+  const port = {...b.portfolio};
+  Object.entries(st.shares).forEach(([id,n])=> port[id]=(port[id]||0)+n);
+  return { cash: b.cash + netCash(st), portfolio: port };
+}
+
+/* ---------------- active-phase renderers ---------------- */
+function apPlace(){ return `<div class="ap-title">Place a tile</div>
+  <div class="hint">Tap a tile on the board. (mock — press <b>Next ▶</b> to continue)</div>`; }
+function apPayout(){ const s=SCEN.merger; return `<div class="ap-title">${s.survivor} &amp; ${s.absorbed} merger</div>
+  ${brandChip(s.survivor)} survives
+  <div class="win-line">Majority: Alex <span class="cashnum pos">+${money(6000)}</span></div>
+  <div class="hint">Winnings drop into staging.</div>`; }
+function apLiquidate(){ const s=SCEN.merger; return `<div class="ap-title">Liquidate ${s.absorbed}</div>
+  <div class="hint">Sold 2 → cash, traded 2 → 1 ${tk(s.survivor)}. Both land in staging below. (mock — scripted)</div>`; }
+function apFound(){ const s=SCEN.found; return `<div class="ap-title">Found a startup</div>
+  <div class="ap-row">${s.foundOpts.map(id=>brandChip(id,{on:id===state.foundId, onclick:`pickFound('${id}')`})).join("")}</div>
+  <div class="hint">The founder's free share stages below.</div>`; }
+function buyButton(id, price){
+  const disabled = cartSpent()+price > scBase().cash;   // can't exceed balance
+  const isNew = id===newId();
+  return `<button class="buybtn brand-${id}" ${disabled?"disabled":`onclick="addCart('${id}',${price})"`} title="${id}${isNew?' — just founded':''}">
+    ${isNew?`<span class="newtag">new</span>`:""}
+    <span class="bb-tk">${tk(id)}</span><span class="bb-pr">${money(price)}</span>
+  </button>`;
+}
+function apBuy(){
+  const s = SCEN[state.sc];
+  return `<div class="ap-title">Buy shares</div>
+    <div class="buy-grid">${s.buyable.map(b=>buyButton(b.id,b.price)).join("")}</div>
+    <div class="hint">Tap a share to add it to staging.</div>
+    <button class="primary" onclick="go(state.stage+1)">Buy &amp; end turn</button>`;
+}
+function apComplete(){ return `<div class="ap-title">Turn complete</div>
+  <div class="hint">Staging folded into your hand. <button class="ghost" style="margin-left:6px" onclick="reset()">New turn</button></div>`; }
+
+const AP = {place:apPlace, payout:apPayout, liquidate:apLiquidate, found:apFound, buy:apBuy, complete:apComplete};
+
+/* ---------------- render ---------------- */
+function stacksFor(port, o={}){
+  const e = Object.entries(port).filter(([,n])=>n>0);
+  return e.length ? e.map(([id,n])=>stockStack(id,n,o)).join("") : `<span class="stage-empty">—</span>`;
+}
+function render(){
+  const s = SCEN[state.sc], key = s.stages[state.stage];
+  document.getElementById("stageName").textContent = s.names[key];
+  document.getElementById("back").disabled = state.stage===0;
+  document.getElementById("next").disabled = state.stage>=s.stages.length-1;
+
+  // completed steps rising up
+  const log = s.stages.slice(0, state.stage).map(k=>`
+    <div class="done-step"><div class="dl">${s.names[k]}</div><div class="dd">✓ done</div></div>`).join("");
+  document.getElementById("log").innerHTML = log;
+
+  // active phase (animate on stage change)
+  const active = document.getElementById("active");
+  active.className = "zone active-phase" + (state.stage!==state._last ? " enter" : "");
+  active.innerHTML = AP[key]();
+  state._last = state.stage;
+
+  // staging — staged shares as stacks (qty lives here), plus a single ecomm-style grand total
+  const st = key==="complete" ? {shares:{},cash:[]} : derive();
+  const stacks = Object.entries(st.shares).map(([id,n])=>stockStack(id,n)).join("");
+  const net = netCash(st);
+  const total = (stacks || net)
+    ? `<div class="cart-total"><span class="ctl">Total</span><span class="ct ${net>0?'pos':''}">${net>0?'+':net<0?'−':''}${money(net)}</span></div>`
+    : "";
+  document.getElementById("stagePile").innerHTML = (stacks||net) ? stacks+total : `<span class="stage-empty">empty</span>`;
+
+  // hand — existing stock cards + account balance as a number. spend leaves the balance live; gains fold in at 'complete'
+  const b = scBase();
+  const spentNow = derive().cash.filter(c=>c.amount<0).reduce((a,c)=>a+c.amount,0);   // ≤ 0
+  const hand = key==="complete" ? committedHand() : { cash: b.cash + spentNow, portfolio: b.portfolio };
+  document.getElementById("handBody").innerHTML =
+    stacksFor(hand.portfolio) + `<div class="balance"><span class="bl">Balance</span><span class="bn">${money(hand.cash)}</span></div>`;
+
+  // players pinned (Alex's cash tracks the hand balance)
+  const cur = {...ALEX, cash: hand.cash};
+  document.getElementById("players").innerHTML = [cur, ...OTHERS].map((p,i)=>`
+    <div class="pl ${i===0?'active':''}"><span class="emo">${p.emoji}</span>
+      <span class="pnm">${p.name}</span><span class="pcash">${money(p.cash)}</span></div>`).join("");
+}
+
+/* ---------------- actions ---------------- */
+function seedBuyCart(){ const s=SCEN[state.sc]; state.cart=(s.seedCart||[{...s.buyable[0]},{...s.buyable[0]}]).map(c=>({...c})); }
+function go(i){
+  const s=SCEN[state.sc]; state.stage=Math.max(0,Math.min(i,s.stages.length-1));
+  if(s.stages[state.stage]==="buy" && state.cart.length===0) seedBuyCart();   // land on a populated buy state
+  render();
+}
+function addCart(id,price){ if(cartSpent()+price > scBase().cash) return; state.cart.push({id,price}); render(); }  // no over-balance
+function delCart(id){ const i=state.cart.findIndex(c=>c.id===id); if(i>=0) state.cart.splice(i,1); render(); }
+function pickFound(id){ state.foundId=id; render(); }
+function reset(){ state.stage=0; state.cart=[]; state._last=-1; if(SCEN[state.sc].stages[0]==="buy") seedBuyCart(); render(); }
+function setScenario(sc){ state.sc=sc; reset();
+  document.querySelectorAll("#seg button").forEach(b=>b.classList.toggle("on", b.dataset.sc===sc)); }
+
+document.getElementById("back").onclick = ()=>go(state.stage-1);
+document.getElementById("next").onclick = ()=>go(state.stage+1);
+document.getElementById("seg").onclick = e=>{ if(e.target.dataset.sc) setScenario(e.target.dataset.sc); };
+
+setScenario("worst");   // open on the worst-case buy layout
+</script>

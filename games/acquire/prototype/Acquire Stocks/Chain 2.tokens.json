@@ -1,0 +1,84 @@
+{
+  "Text": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.7607843279838562,
+        0.2549019753932953,
+        0.0470588244497776
+      ],
+      "alpha": 1,
+      "hex": "#C2410C"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7021",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Fill": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        1.0,
+        0.929411768913269,
+        0.8352941274642944
+      ],
+      "alpha": 1,
+      "hex": "#FFEDD5"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7030",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "Brand name": {
+    "$type": "string",
+    "$value": "Scrapple",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7022",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Abbreviation": {
+    "$type": "string",
+    "$value": "$S",
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7023",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ],
+      "com.figma.type": "string"
+    }
+  },
+  "Stroke": {
+    "$type": "color",
+    "$value": {
+      "colorSpace": "srgb",
+      "components": [
+        0.9764705896377563,
+        0.45098039507865906,
+        0.08627451211214066
+      ],
+      "alpha": 1,
+      "hex": "#F97316"
+    },
+    "$extensions": {
+      "com.figma.variableId": "VariableID:255:7467",
+      "com.figma.scopes": [
+        "ALL_SCOPES"
+      ]
+    }
+  },
+  "$extensions": {
+    "com.figma.modeName": "Chain 2"
+  }
+}

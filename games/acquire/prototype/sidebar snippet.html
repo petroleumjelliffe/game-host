@@ -1,0 +1,19 @@
+<div class="panel" id="panel"><div class="stepstack"><div class="step-block">
+    <div class="stage-label">Place a tile<button class="step-undo" onclick="undoTo(0)" title="Rewind to before this step">↺ undo</button></div>
+    <div class="step-done">✓ <span class="tile t-filled" title="E6">E6</span> → merger</div>
+  </div><div class="step-block">
+    <div class="stage-label">Messla &amp; ZuckFace Merger<button class="step-undo" onclick="undoTo(1)" title="Rewind to before this step">↺ undo</button></div>
+    <div class="step-done">✓ <span class="brand brand-Messla">Messla</span> absorbed <span class="brand brand-ZuckFace">ZuckFace</span></div>
+  </div></div><div class="active-step">
+        <div class="stage-label">Messla &amp; ZuckFace Merger</div>
+        <div class="absorb-line"><span class="brand brand-Messla">Messla</span><span class="absorb-word">absorbs</span><span class="brand brand-ZuckFace">ZuckFace</span></div>
+      </div><div class="staging-zone">
+    <div class="zone-label">Staging — commits on end turn</div>
+    <div class="staging-pile"><span class="stage-empty">empty</span></div>
+    <button class="primary-btn staging-action" onclick="showMergerPayout(); render();">Continue</button>
+  </div><div class="hand-zone">
+    <div class="zone-label">Alex's hand</div>
+    <div class="hand-body"><span class="stock-stack sm"><span class="stock-stack-body"><span class="stock brand-Messla sm depth-1" title="Messla"><span class="stock-name">$M</span><span class="price">$300</span></span><span class="stack-qty">×4</span></span></span><span class="stock-stack sm"><span class="stock-stack-body"><span class="stock brand-ZuckFace sm depth-1" title="ZuckFace"><span class="stock-name">$Z</span><span class="price">$400</span></span><span class="stack-qty">×2</span></span></span><div class="balance"><span class="bl">Balance</span><span class="bn"><span class="cash">$4,200</span></span></div></div>
+  </div><div class="players-strip">
+    <div class="pl active"><span class="player-emoji">🦊</span><span class="pnm">Alex</span><span class="pcash"><span class="cash">$4,200</span></span></div><div class="pl "><span class="player-emoji">🐢</span><span class="pnm">Sam</span><span class="pcash"><span class="cash">$5,800</span></span></div><div class="pl "><span class="player-emoji">🦁</span><span class="pnm">Jordan</span><span class="pcash"><span class="cash">$3,100</span></span></div>
+  </div></div>

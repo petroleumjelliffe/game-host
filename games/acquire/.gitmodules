@@ -1,0 +1,3 @@
+[submodule "vendor/lobby"]
+	path = vendor/lobby
+	url = https://github.com/petroleumjelliffe/multiplayer-game-lobby.git

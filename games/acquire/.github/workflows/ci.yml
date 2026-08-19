@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # vendor/lobby is a submodule and checkout does not fetch one unless
+      # told to. Without this the directory is present but empty, every
+      # import of it fails to resolve, and the run goes red for a reason
+      # that has nothing to do with the change under test.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # `test:run`, not `test` — the bare script is vitest watch mode, which
+      # never exits.
+      - run: npm run test:run

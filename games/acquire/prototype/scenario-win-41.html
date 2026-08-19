@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Acquire — Scenario: Win at 41</title>
+<link rel="stylesheet" href="components.css">
+
+<div class="topbar">
+  <div class="brand">Prototype</div>
+  <nav class="proto-nav">
+    <a href="index.html">Prototype</a>
+    <a href="states.html">States</a>
+    <a href="motion.html">Motion</a>
+    <a href="scenario-dead-tile.html">Scenarios</a>
+  </nav>
+  <nav class="proto-nav">
+    <a href="scenario-dead-tile.html">Dead tile</a>
+    <a href="scenario-win-41.html" aria-current="page">Win 41</a>
+  </nav>
+  <div class="sc-controls">
+    <button class="reset-btn" id="scBack">◀ Back</button>
+    <output id="stepCount">1 / 2</output>
+    <button class="reset-btn" id="scReplay">↺ Replay</button>
+  </div>
+  <div class="scenario-caption" id="caption"></div>
+</div>
+
+<div class="main side" id="main">
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<script src="components.js"></script>
+<script src="scenario.js"></script>
+<script>
+const G = 'Gobble';
+/* 40 tiles: rows A,B,C full (12 each) + D1–D4 = 36 + 4 = 40 */
+const fill40 = { ...chain('A',1,12,G), ...chain('B',1,12,G), ...chain('C',1,12,G), ...chain('D',1,4,G) };
+const board40 = makeBoard(fill40);
+const board41 = makeBoard({ ...fill40, D5:G });   // +D5 → 41
+
+const players = [
+  {emoji:'🦊', name:'Alex',   cash:8600, active:true},
+  {emoji:'🐢', name:'Sam',    cash:5200, active:false},
+  {emoji:'🦁', name:'Jordan', cash:3100, active:false},
+];
+
+function standings(ps){
+  return `<div class="standings">${ps.slice().sort((a,b)=>b.cash-a.cash).map(p=>
+    `<div class="pl"><span class="player-emoji">${p.emoji}</span><span class="pnm">${p.name}</span><span class="pcash">${cash(p.cash)}</span></div>`
+  ).join('')}</div>`;
+}
+
+const base = {
+  board: board40,
+  boardOpts:{ hand:['D5'], hqTiles:['A1'] },
+  hand:{ name:'Alex', portfolio:{Gobble:6}, cash:8600 },
+  players,
+  log:[], active:'', staging:'',
+};
+
+const steps = [
+  { // step 0 — play: the winning tile is offered
+    active: activeStep({
+      label:'Place a tile',
+      body:`<div class="option-row">`
+        + tile('D5',{state:'hand', onclick:"switchPlacement('D5')"})
+        + `</div>`
+        + `<div class="hint">Gobble is at 40 tiles — placing D5 makes 41 and ends the game.</div>`,
+    }),
+    caption:'Gobble spans 40 tiles. One more ends the game.',
+    hotspot:{ sel:'.board [title="D5"]', to:1 },
+  },
+  { // step 1 — game over: D5 placed, final standings
+    board: board41,
+    boardOpts:{ hand:[], placed:'D5', hqTiles:['A1'] },
+    log:[{ phase:'Placed a tile', detail:'◻ D5 → Gobble reached 41 · game over' }],
+    active:`<div class="active-step"><div class="stage-label">Gobble reached 41 — game over</div>${standings(players)}</div>`,
+    caption:'Gobble hit 41 tiles. Final standings shown.',
+  },
+];
+
+runScenario({ base, steps });
+</script>

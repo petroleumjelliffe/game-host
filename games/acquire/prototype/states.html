@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Acquire — Component States Catalog</title>
+<link rel="stylesheet" href="components.css">
+<style>
+  /* ---- catalog chrome (not part of the component system) ---- */
+  /* undo the app's fixed-viewport body rules that components.css carries, so the catalog scrolls */
+  html,body{height:auto;}
+  body{margin:0; min-height:100%; overflow:visible; display:block; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:#111827; background:#eef0f3;}
+  header.cat{position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #e5e7eb; padding:12px 20px;}
+  header.cat .proto-nav{position:absolute; top:12px; right:20px;}
+  header.cat h1{font-size:15px; margin:0; font-weight:700;}
+  header.cat p{margin:4px 0 0; font-size:12px; color:#6b7280;}
+  main{padding:20px; display:flex; flex-direction:column; gap:24px; max-width:1200px;}
+  section.group{background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px 18px;}
+  section.group > h2{margin:0 0 2px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:#374151;}
+  section.group > h2 .seq{color:#9ca3af; font-weight:600; margin-right:8px;}
+  section.group > .intent{margin:0 0 14px; font-size:12px; color:#6b7280; font-style:italic;}
+  .states{display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start;}
+  figure.state{margin:0; display:flex; flex-direction:column; gap:6px; width:340px;}
+  figure.state.wide{width:520px;}
+  figure.state.atom{width:auto;}
+  .state .frame{border:1px solid #e5e7eb; border-radius:8px; overflow:hidden; background:#fff;}
+  .state.atom .frame{padding:14px; display:inline-flex; align-items:flex-end;}
+  .state .frame .board{height:auto;}   /* board sizes by aspect-ratio, not parent height */
+  .state figcaption{font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#2563eb;}
+  .state figcaption .note{color:#9ca3af; font-family:inherit; margin-left:8px; font-style:italic;}
+
+  /* ---- transition player ---- */
+  .tp{display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;}
+  .tp-viewport{width:340px; min-height:200px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; overflow:hidden; display:flex; flex-direction:column;}
+  .tp-viewport .active-step.enter{animation:tpUp var(--tp-dur,280ms) var(--tp-ease,cubic-bezier(.2,.7,.3,1));}
+  @keyframes tpUp{from{transform:translateY(18px); opacity:0;} to{transform:none; opacity:1;}}
+  @media (prefers-reduced-motion:reduce){ .tp-viewport .active-step.enter{animation:none;} }
+  .tp-controls{display:flex; flex-direction:column; gap:10px; font-size:13px;}
+  .tp-controls .row{display:flex; gap:8px; flex-wrap:wrap; max-width:320px;}
+  .tp-controls button{border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:5px 12px; cursor:pointer; font:inherit;}
+  .tp-controls button.on{background:#2563eb; color:#fff; border-color:#2563eb;}
+  .tp-controls label{display:flex; align-items:center; gap:8px; color:#6b7280;}
+  .tp-controls output{font-variant-numeric:tabular-nums; color:#111827;}
+
+  /* ---- final-scoring stage: a fixed-height game view for the overlay to cover ---- */
+  .fs-stage{height:560px; border:1px solid #e5e7eb; border-radius:8px; overflow:hidden; background:#fff;}
+  .fs-stage .main{height:100%;}
+</style>
+
+<header class="cat">
+  <nav class="proto-nav">
+    <a href="index.html">Prototype</a>
+    <a href="states.html" aria-current="page">States</a>
+    <a href="motion.html">Motion</a>
+    <a href="scenario-dead-tile.html">Scenarios</a>
+  </nav>
+  <h1>Component states catalog</h1>
+  <p>Organized by turn step, in sequence — each step shows all its states. Reference a state by its <b>label</b>; adjacent states are meant to share a look.</p>
+</header>
+
+<main id="catalog"></main>
+
+<script src="components.js"></script>
+<script>
+function onBoardCellClick(){}   /* catalog is display-only; board clicks are inert */
+
+/* ============================================================
+   Fixtures — hand-made props, no game engine. Prices passed
+   explicitly so the atoms never need the live `game`.
+   ============================================================ */
+const P = { Messla:300, ZuckFace:400 };
+const BONUSES = [
+  {player:"Sam",    emoji:"🐢", qty:5, type:"majority", amount:4000},
+  {player:"Jordan", emoji:"🦁", qty:3, type:"minority", amount:2000},
+];
+const UNDO = `<button class="step-undo" title="Rewind to before this step">↺ undo</button>`;
+const noop = "void 0";
+
+/* the starting board: two equal chains with a mergeable gap at E6, plus a lone tile at G5 */
+const FIX_BOARD = (()=>{
+  const b = {}; ROWS.forEach(r=>COLS.forEach(c=> b[r+c] = {placed:false}));
+  ["E3","E4","E5"].forEach(t=> b[t] = {placed:true, startupId:"Messla"});
+  ["E7","E8","E9"].forEach(t=> b[t] = {placed:true, startupId:"ZuckFace"});
+  b["G5"] = {placed:true};
+  return b;
+})();
+const FIX_HAND = ["E6","E2","E10","G6","A12","I1"];   // Alex's hand
+const FIX_HQ   = ["E3","E7"];                          // founding tiles
+
+/* ---- final-scoring fixture: three chains, three players, game over at 41 ---- */
+const FS_HQ = ["A1","F1","H1"];
+const FS_BOARD = (()=>{
+  const b = {}; ROWS.forEach(r=>COLS.forEach(c=> b[r+c] = {placed:false}));
+  const fill = (id, row, from, to)=>{ for(let c=from;c<=to;c++) b[row+c] = {placed:true, startupId:id}; };
+  ["A","B","C"].forEach(r=> fill("Gobble", r, 1, 12));   // 36
+  fill("Gobble", "D", 1, 5);                             // +5 → 41
+  fill("Messla", "F", 1, 8);                             // 8
+  fill("ZuckFace", "H", 1, 5);                           // 5
+  return b;
+})();
+const FS_PANEL = panelHtml({
+  stepstack: stepStack([{phase:"Place a tile", detail:`${tile("D5",{state:"filled"})} → Gobble reached 41 · game over`}]),
+  hand:      handZone({name:"Alex", portfolio:{Gobble:6, Messla:4}, cash:8600}),
+  players:   playersStrip([
+    {emoji:"🦊", name:"Alex",   cash:8600,  active:true},
+    {emoji:"🐢", name:"Sam",    cash:12000},
+    {emoji:"🦁", name:"Jordan", cash:3100},
+  ]),
+});
+const FS_SCORE = {
+  reason: "Gobble reached 41 tiles",
+  players: [
+    {id:"p1", name:"Alex",   emoji:"🦊", cash:8600},
+    {id:"p2", name:"Sam",    emoji:"🐢", cash:12000},
+    {id:"p3", name:"Jordan", emoji:"🦁", cash:3100},
+  ],
+  chains: [
+    {id:"Gobble",   size:41, price:1000},
+    {id:"Messla",   size:8,  price:600},
+    {id:"ZuckFace", size:5,  price:400},
+  ],
+  holdings: {
+    p1: {Gobble:6, Messla:4},
+    p2: {Gobble:3, Messla:7},
+    p3: {Gobble:1, Messla:4, ZuckFace:3},
+  },
+  bonuses: [
+    {chainId:"Gobble",   playerId:"p1", type:"majority", amount:10000},
+    {chainId:"Gobble",   playerId:"p2", type:"minority", amount:5000},
+    {chainId:"Messla",   playerId:"p2", type:"majority", amount:6000},
+    {chainId:"Messla",   playerId:"p1", type:"minority", amount:1500},   // tie: $3,000 split
+    {chainId:"Messla",   playerId:"p3", type:"minority", amount:1500},
+    {chainId:"ZuckFace", playerId:"p3", type:"both",     amount:6000},   // sole holder
+  ],
+};
+
+/* ---- active-step fixtures (also fed to the transition player) ---- */
+function placeActiveState(){
+  return activeStep({
+    label:"Place a tile",
+    body:`<div class="option-row">${FIX_HAND.map(c=>tile(c,{state:"hand"})).join("")}</div>
+      <div class="hint">Tap a highlighted tile — on the board or here.</div>`,
+  });
+}
+function foundActiveState(){
+  const founded = ["Messla","ZuckFace"];   // already on the board (see FIX_BOARD) → taken
+  const groups = [
+    {price:200, ids:["PaperfulPost","Messla"]},
+    {price:300, ids:["CamCrooned","ZuckFace","WrecksonMobil"]},
+    {price:400, ids:["Gobble","Scrapple"]},
+  ];
+  return activeStep({
+    label:"Found a startup",
+    body:`<div class="found-groups">${groups.map(g=>`<div class="found-group">
+      <div class="found-price">${price(g.price)}<span class="found-price-note">to start</span></div>
+      <div class="option-row">${g.ids.map(id=> founded.includes(id) ? brand(id,{disabled:true}) : brand(id,{mode:"select"})).join("")}</div>
+    </div>`).join("")}</div>`,
+  });
+}
+function mergerPickState(){
+  return activeStep({
+    label:"Messla & ZuckFace Merger",
+    body:`<div class="option-row">
+      ${stockStack("Messla", 4, {price:P.Messla, onClick:noop})}
+      ${stockStack("ZuckFace", 2, {price:P.ZuckFace, onClick:noop})}
+    </div>`,
+  });
+}
+function payoutActiveState(){
+  return activeStep({ label:"Merger payout", body: payoutLines(BONUSES),
+    button:`<button class="primary-btn">Continue</button>` });
+}
+function liqQueue(){
+  return `<div class="liq-queue">
+    <span class="liq-queue-item done"><span class="liq-queue-emoji">🦊</span>Alex <b>×0</b></span>
+    <span class="liq-queue-item current"><span class="liq-queue-emoji">🐢</span>Sam <b>×5</b></span>
+    <span class="liq-queue-item pending"><span class="liq-queue-emoji">🦁</span>Jordan <b>×3</b></span>
+  </div>`;
+}
+function liquidateState(){
+  return activeStep({
+    label:"Liquidate ZuckFace — Sam",
+    body: liqQueue()
+      + liqActions({absorbedId:"ZuckFace", survivorId:"Messla", unitPrice:P.ZuckFace, canSell:true, canTrade:true, onSell:noop, onTrade:noop})
+      + `<div class="hint">5 ${ticker("ZuckFace")} left to sort — results stage below.</div>`,
+  });
+}
+function buyActiveState(){
+  const buyable = [{id:"PaperfulPost",price:300},{id:"Messla",price:300},{id:"ZuckFace",price:400}];
+  return activeStep({
+    label:"Buy shares (0/3)",
+    body:`<div class="buy-grid">${buyable.map(b=>stockCard(b.id,{mode:"select",price:b.price})).join("")}</div>`,
+  });
+}
+
+/* ============================================================
+   Catalog — sections in turn-step sequence, each with all its states.
+   Add a state = add an entry here.
+   ============================================================ */
+const board = (opts)=>`<div class="board">${boardHtml(FIX_BOARD, opts)}</div>`;
+const step  = (phase, detail)=> stepEntry({phase, detail, undo:UNDO});
+
+const SECTIONS = [
+  { seq:"1", title:"Place a tile",
+    states:[
+      {label:"place-active",  html: placeActiveState()},
+      {label:"place-board",   kind:"wide", note:"hand highlighted on the board", html: board({hand:FIX_HAND, hqTiles:FIX_HQ})},
+      {label:"place-done · merger",   html: step("Place a tile", `${tile("E6",{state:"filled"})} → merger`)},
+      {label:"place-done · grew",     html: step("Place a tile", `${tile("E2",{state:"filled"})} → grew ${brand("Messla")}`)},
+      {label:"place-done · new chain",html: step("Place a tile", `${tile("G6",{state:"filled"})} → Found startup`)},
+      {label:"place-done · isolated", html: step("Place a tile", tile("A12",{state:"filled"}))},
+    ]},
+
+  { seq:"2", title:"Found a startup",
+    states:[
+      {label:"found-active",    html: foundActiveState()},
+      {label:"found-completed", html: step("Found a startup", `${brand("PaperfulPost")} (+1 free share)`)},
+    ]},
+
+  { seq:"3", title:"Merger — pick a victor", intent:"Tie only: tap a chain to choose the survivor; a non-tie skips straight to payout.",
+    states:[
+      {label:"merger-pick",      html: mergerPickState()},
+      {label:"merger-completed", html: step("Messla & ZuckFace Merger", `${brand("Messla")} absorbed ${brand("ZuckFace")}`)},
+    ]},
+
+  { seq:"4", title:"Merger payout", intent:"Active and completed should read identically except the Continue button + interactivity. Each line shows the qty held.",
+    states:[
+      {label:"payout-active",    html: payoutActiveState()},
+      {label:"payout-completed", html: step("Merger payout", payoutLines(BONUSES))},
+    ]},
+
+  { seq:"5", title:"Liquidate",
+    states:[
+      {label:"liquidate-active",    html: liquidateState()},
+      {label:"liquidate-completed", html: step("Liquidate ZuckFace", "Sam: sold 3, traded 2 · Jordan: sold 3, traded 0")},
+    ]},
+
+  { seq:"6", title:"Buy shares",
+    states:[
+      {label:"buy-active",    html: buyActiveState()},
+      {label:"buy-completed", html: step("Buy shares", boughtStacks([{id:"Messla"},{id:"Messla"},{id:"PaperfulPost"}]))},
+    ]},
+
+  { seq:"—", title:"Staging (spans steps) — all should be the same height", intent:"Net always reserved; the pile keeps a populated-row height, and the action slot is always reserved — so empty ↔ filled and button ↔ no-button never shift.",
+    states:[
+      {label:"staging-empty",   html: stagingZone({label:"Staging — commits on end turn"})},
+      {label:"staging-cart",    html: stagingZone({label:"Staging — commits on end turn", sharesHtml: stockStack("Messla",2,{size:"sm",price:P.Messla}), cashDelta:-2*P.Messla})},
+      {label:"staging-leaving", html: stagingZone({label:"Staging — Sam's liquidation", sharesHtml: stockStack("ZuckFace",3,{size:"sm",price:P.ZuckFace,leaving:true,onRemove:noop}) + stockStack("Messla",1,{size:"sm",price:P.Messla}), cashDelta:P.ZuckFace})},
+      {label:"staging-action",  html: stagingZone({label:"Staging — commits on end turn", sharesHtml: stockStack("Messla",2,{size:"sm",price:P.Messla}), cashDelta:-2*P.Messla, action:`<button class="primary-btn staging-action">Buy &amp; end turn</button>`})},
+    ]},
+
+  { seq:"·", title:"Tiles (vocabulary)", intent:"One state vocabulary shared by board cells and inline tiles.",
+    states:[
+      {label:"t-empty",   kind:"atom", html: tile("E6",{state:"empty"})},
+      {label:"t-filled",  kind:"atom", html: tile("E6",{state:"filled"})},
+      {label:"t-hand",    kind:"atom", html: tile("E6",{state:"hand"})},
+      {label:"t-placed",  kind:"atom", html: tile("E6",{state:"placed"})},
+      {label:"t-blocked", kind:"atom", html: tile("D4",{state:"blocked"})},
+      {label:"t-chain",   kind:"atom", html: tile("E6",{state:"chain",  brand:"Messla"})},
+      {label:"t-founded", kind:"atom", html: tile("E6",{state:"founded",brand:"Messla"})},
+    ]},
+
+  { seq:"·", title:"Card stacks (vocabulary)", intent:"A stock card + a count outside it. Composable along: size (default / sm) · height h1–h3 (the overlap, scaling with |count|) · leaving · removable. Content variants: cash, zero.",
+    states:[
+      {label:"stack · h1",            kind:"atom", html: stockStack("Messla",1,{price:P.Messla})},
+      {label:"stack · h2",            kind:"atom", html: stockStack("Messla",2,{price:P.Messla})},
+      {label:"stack · h3",            kind:"atom", html: stockStack("Messla",6,{price:P.Messla})},
+      {label:"stack · sm",            kind:"atom", html: stockStack("ZuckFace",2,{size:"sm",price:P.ZuckFace})},
+      {label:"stack · sm · leaving",  kind:"atom", html: stockStack("ZuckFace",3,{size:"sm",price:P.ZuckFace,leaving:true,onRemove:noop})},
+      {label:"stack · sm · removable",kind:"atom", html: stockStack("Messla",2,{size:"sm",price:P.Messla,onRemove:noop})},
+      {label:"stack · cash",          kind:"atom", html: stockStack("Cash",3,{price:P.ZuckFace})},
+      {label:"stack · zero",          kind:"atom", html: stockStack("Messla",0,{price:P.Messla})},
+    ]},
+];
+
+function stateCard(s){
+  return `<figure class="state ${s.kind||''}">
+    <div class="frame">${s.html}</div>
+    <figcaption>${s.label}${s.note?`<span class="note">${s.note}</span>`:""}</figcaption>
+  </figure>`;
+}
+function sectionEl(sec){
+  return `<section class="group">
+    <h2><span class="seq">${sec.seq}</span>${sec.title}</h2>
+    ${sec.intent?`<p class="intent">${sec.intent}</p>`:""}
+    <div class="states">${sec.states.map(stateCard).join("")}</div>
+  </section>`;
+}
+
+/* ---- transition player: switch the active step across the turn sequence, animated ---- */
+const PHASES = {
+  "place":placeActiveState, "found":foundActiveState, "merger-pick":mergerPickState,
+  "payout":payoutActiveState, "liquidate":liquidateState, "buy":buyActiveState,
+};
+function transitionSection(){
+  return `<section class="group">
+    <h2><span class="seq">▶</span>Transition player</h2>
+    <p class="intent">Reveal, don't resize: the viewport height is fixed; phases cross in with a slide+fade. Tune the timing live.</p>
+    <div class="tp">
+      <div class="tp-viewport" id="tpViewport"></div>
+      <div class="tp-controls">
+        <div class="row" id="tpButtons">
+          ${Object.keys(PHASES).map((k,i)=>`<button data-phase="${k}" class="${i===0?"on":""}">${k}</button>`).join("")}
+        </div>
+        <label>Duration <input type="range" id="tpDur" min="0" max="600" step="20" value="280"> <output id="tpDurOut">280ms</output></label>
+        <button id="tpReplay">▶ Replay</button>
+      </div>
+    </div>
+  </section>`;
+}
+
+/* ---- final scoring: a full-width stage so the scrim covers a real board + panel ---- */
+function finalScoringSection(){
+  return `<section class="group">
+    <h2><span class="seq">★</span>Final scoring</h2>
+    <p class="intent">A chain reached 41 tiles. One column per player, sorted by final total; each chain contributes a stock row and a bonus row (M majority · m minority · Mm sole holder). Terminal — there is no way out of this overlay.</p>
+    <div class="fs-stage">
+      <div class="main side">
+        <div class="board-wrap"><div class="board">${boardHtml(FS_BOARD, {hqTiles:FS_HQ})}</div></div>
+        <div class="panel">${FS_PANEL}</div>
+        ${finalScoring(FS_SCORE)}
+      </div>
+    </div>
+  </section>`;
+}
+
+/* ---- render ---- */
+document.getElementById("catalog").innerHTML =
+  SECTIONS.map(sectionEl).join("") + transitionSection() + finalScoringSection();
+
+const vp = document.getElementById("tpViewport");
+let curPhase = "place";
+function playPhase(key){
+  curPhase = key;
+  vp.innerHTML = PHASES[key]();
+  const step = vp.querySelector(".active-step");
+  if(step){ step.classList.remove("enter"); void step.offsetWidth; step.classList.add("enter"); }
+  document.querySelectorAll("#tpButtons button").forEach(b=> b.classList.toggle("on", b.dataset.phase===key));
+}
+document.getElementById("tpButtons").addEventListener("click", e=>{ if(e.target.dataset.phase) playPhase(e.target.dataset.phase); });
+document.getElementById("tpReplay").addEventListener("click", ()=> playPhase(curPhase));
+const dur = document.getElementById("tpDur"), durOut = document.getElementById("tpDurOut");
+dur.addEventListener("input", ()=>{ document.documentElement.style.setProperty("--tp-dur", dur.value+"ms"); durOut.textContent = dur.value+"ms"; });
+playPhase("place");
+</script>
