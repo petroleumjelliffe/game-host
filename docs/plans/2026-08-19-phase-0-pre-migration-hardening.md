@@ -30,10 +30,24 @@ radius reaches `src/state/` because Rail Baron's server imports its game
 rules from client-land. That `src/state/` boundary is getting looked at
 during the migration anyway, so the two are cheaper together than apart.
 
-**Tasks 2 and 7 are complete**, on branch `phase0/dev-seed-and-base` in the
-Acquire repo: `0299691` (dev seed), `f675da8` (dev base), `1b9a86e` (final
-review fixes). Verified: typecheck clean, 865 tests across 82 files, build
-asset paths unchanged, `npm run verify:layout` passing.
+**PHASE 0 IS COMPLETE AND MERGED.** Tasks 2 and 7 landed on Acquire's `main`
+as squash-merge `027d237` (PR #25); content verified byte-identical to the
+branch. Tasks 1 and 3-6 landed earlier as `f9046a5` (PR #24).
+
+One follow-up commit (`9933450`) was added by the owner during by-hand
+testing, and it closes a gap this plan did not anticipate: **a `tsx watch`
+process reloads code but never its environment.** Inverting the dev-seed
+guard therefore broke every *already-running* dev server silently — one had
+held port 4002 for four days and had reloaded into the new guard while still
+carrying the environment it was launched with, so `POST /dev/rooms` had been
+404ing with nothing to say why. The fix reports `devSeed` on the server
+handle (not by re-reading `NODE_ENV`, which could drift from the value the
+route was actually registered by) and prints it in the boot banner, which
+reprints on every watch reload.
+
+The lesson for the migration plans: changing a guard that reads the
+environment invalidates running watchers, and the plan step that changes it
+should say "restart your dev servers" out loud.
 
 The final whole-branch review caught a **Critical defect the automated
 checks missed**, worth recording because it is the reason Task 7 step 7
@@ -45,7 +59,7 @@ answered with **200 `text/html`** rather than a 404. A status-code-only
 check would have passed it. The fix is to substitute a bare `/` and let Vite
 apply the base exactly once; the build was unaffected throughout.
 
-### ⚠️ Still owed: Task 7 step 7's manual browser check
+### ✅ Task 7 step 7's manual browser check — done by the owner
 
 Not done — it needs a human at a browser, and it was not faked. The final
 review mechanically covered the prefixed dev URL, the manifest and icon
@@ -781,4 +795,4 @@ checked."
 - [x] Rail Baron's NodeNext split is explicitly deferred to the migration plan — Rail Baron is untouched by Phase 0.
 - [x] Marco Polo is untouched by this plan. Its flag was already on before Phase 0 began (`85b36bf`); working tree clean.
 - [x] The Acquire Pages deploy still serves from `/acquire-startups-m1/` — `BASE_PATH` unchanged, build asset paths verified byte-identical.
-- [ ] **The owed manual browser check above** — the one thing still open before merge.
+- [x] The manual browser check — done by the owner, and it is what surfaced the stale-watcher failure recorded above.
