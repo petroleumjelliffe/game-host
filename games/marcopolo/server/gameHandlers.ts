@@ -3,6 +3,7 @@
 // routes bytes and enforces WHO may say what (marco calls, host advances).
 
 import type { Server as SocketServer, Socket } from 'socket.io';
+import { guardTick } from '@game-host/host/guard.js';
 import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol.js';
 import type { LobbyRegistry } from '@game-host/lobby/server/rooms.js';
 import type { LobbyWiring } from '@game-host/lobby/server/handlers.js';
@@ -58,7 +59,12 @@ export function createGameHandlers(
     if (loops.has(room.id)) return;
     loops.set(
       room.id,
-      setInterval(() => {
+      // guardTick because this is the one entry point a socket guard cannot
+      // see: a throw inside a timer callback reaches nothing but the top of
+      // the stack, and composed that ends Rail Baron's and Acquire's evening
+      // too. 20 times a second per active room makes it the likeliest place
+      // for one to happen, not the least.
+      setInterval(guardTick('marcopolo', () => {
         emitEvents(room, stepRound(room, tickMs / 1000));
         broadcastSnapshots(room);
         // The round just ended: one final snapshot/event pair already went
@@ -68,7 +74,7 @@ export function createGameHandlers(
           clearInterval(loops.get(room.id));
           loops.delete(room.id);
         }
-      }, tickMs),
+      }), tickMs),
     );
   }
 

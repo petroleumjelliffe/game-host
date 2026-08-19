@@ -20,7 +20,12 @@
   "license": "ISC",
   "type": "module",
   "private": true,
+  "exports": {
+    "./*.js": "./*.ts",
+    "./*": "./*.ts"
+  },
   "dependencies": {
+    "@game-host/host": "*",
     "@game-host/lobby": "*",
     "express": "^5.2.1",
     "qrcode": "^1.5.4",
