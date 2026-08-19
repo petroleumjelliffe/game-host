@@ -1,0 +1,474 @@
+{
+ "note": "Hand-verified city names for the map nodes in rail-baron-graph.json. Names must match engine/cities.ts exactly - the build joins the two by name string, not by id. Supersedes the registration proposal from scripts/propose-city-names.mjs; its per-city residuals are dropped because they scored the superseded assignment.",
+ "cities": [
+  {
+   "id": "c0",
+   "name": "Seattle",
+   "region": "Northwest",
+   "x": 160,
+   "y": 13.5
+  },
+  {
+   "id": "c1",
+   "name": "Spokane",
+   "region": "Northwest",
+   "x": 257.4,
+   "y": 26.4
+  },
+  {
+   "id": "c3",
+   "name": "Portland, OR",
+   "region": "Northwest",
+   "x": 130.5,
+   "y": 54
+  },
+  {
+   "id": "c4",
+   "name": "Fargo",
+   "region": "Plains",
+   "x": 667.5,
+   "y": 59.5
+  },
+  {
+   "id": "c6",
+   "name": "Albany",
+   "region": "Northeast",
+   "x": 1145,
+   "y": 73
+  },
+  {
+   "id": "c8",
+   "name": "Butte",
+   "region": "Northwest",
+   "x": 348.6,
+   "y": 82.6
+  },
+  {
+   "id": "c10",
+   "name": "Buffalo",
+   "region": "Northeast",
+   "x": 1046.1,
+   "y": 98.9
+  },
+  {
+   "id": "c12",
+   "name": "Billings",
+   "region": "Northwest",
+   "x": 427.9,
+   "y": 102.9
+  },
+  {
+   "id": "c13",
+   "name": "Minneapolis",
+   "region": "Plains",
+   "x": 748.4,
+   "y": 105.4
+  },
+  {
+   "id": "c95",
+   "name": "St. Paul",
+   "region": "Plains",
+   "x": 755.5,
+   "y": 105.5
+  },
+  {
+   "id": "c15",
+   "name": "New York",
+   "region": "Northeast",
+   "x": 1162,
+   "y": 127
+  },
+  {
+   "id": "c16",
+   "name": "Detroit",
+   "region": "North Central",
+   "x": 965,
+   "y": 132.5
+  },
+  {
+   "id": "c17",
+   "name": "Milwaukee",
+   "region": "North Central",
+   "x": 857.1,
+   "y": 136.9
+  },
+  {
+   "id": "c18",
+   "name": "Cleveland",
+   "region": "North Central",
+   "x": 1005.1,
+   "y": 150.9
+  },
+  {
+   "id": "c19",
+   "name": "Philadelphia",
+   "region": "Northeast",
+   "x": 1150.4,
+   "y": 157
+  },
+  {
+   "id": "c21",
+   "name": "Pocatello",
+   "region": "Northwest",
+   "x": 337.5,
+   "y": 166
+  },
+  {
+   "id": "c24",
+   "name": "Chicago",
+   "region": "North Central",
+   "x": 874.5,
+   "y": 172.5
+  },
+  {
+   "id": "c25",
+   "name": "Pittsburgh",
+   "region": "Northeast",
+   "x": 1048.1,
+   "y": 175.1
+  },
+  {
+   "id": "c26",
+   "name": "Casper",
+   "region": "Northwest",
+   "x": 475,
+   "y": 181
+  },
+  {
+   "id": "c27",
+   "name": "Baltimore",
+   "region": "Northeast",
+   "x": 1127,
+   "y": 182.5
+  },
+  {
+   "id": "c28",
+   "name": "Des Moines",
+   "region": "Plains",
+   "x": 752,
+   "y": 198.5
+  },
+  {
+   "id": "c29",
+   "name": "Columbus",
+   "region": "North Central",
+   "x": 990,
+   "y": 200
+  },
+  {
+   "id": "c30",
+   "name": "Washington DC",
+   "region": "Northeast",
+   "x": 1123.5,
+   "y": 202
+  },
+  {
+   "id": "c31",
+   "name": "Omaha",
+   "region": "Plains",
+   "x": 704,
+   "y": 213.5
+  },
+  {
+   "id": "c32",
+   "name": "Reno",
+   "region": "Southwest",
+   "x": 171.1,
+   "y": 217.1
+  },
+  {
+   "id": "c34",
+   "name": "Indianapolis",
+   "region": "North Central",
+   "x": 921.5,
+   "y": 220
+  },
+  {
+   "id": "c35",
+   "name": "Salt Lake City",
+   "region": "Northwest",
+   "x": 348,
+   "y": 226.5
+  },
+  {
+   "id": "c36",
+   "name": "Cincinnati",
+   "region": "North Central",
+   "x": 964.5,
+   "y": 230
+  },
+  {
+   "id": "c38",
+   "name": "Richmond",
+   "region": "Southeast",
+   "x": 1128.5,
+   "y": 235
+  },
+  {
+   "id": "c40",
+   "name": "San Francisco",
+   "region": "Southwest",
+   "x": 110,
+   "y": 252
+  },
+  {
+   "id": "c41",
+   "name": "Oakland",
+   "region": "Southwest",
+   "x": 115.4,
+   "y": 253
+  },
+  {
+   "id": "c42",
+   "name": "Norfolk",
+   "region": "Southeast",
+   "x": 1167.9,
+   "y": 253.1
+  },
+  {
+   "id": "c44",
+   "name": "Louisville",
+   "region": "South Central",
+   "x": 943,
+   "y": 264
+  },
+  {
+   "id": "c45",
+   "name": "St. Louis",
+   "region": "North Central",
+   "x": 842,
+   "y": 265.5
+  },
+  {
+   "id": "c47",
+   "name": "Denver",
+   "region": "Plains",
+   "x": 503.4,
+   "y": 267.6
+  },
+  {
+   "id": "c50",
+   "name": "Kansas City",
+   "region": "Plains",
+   "x": 738.9,
+   "y": 273.1
+  },
+  {
+   "id": "c55",
+   "name": "Pueblo",
+   "region": "Plains",
+   "x": 510.4,
+   "y": 304.6
+  },
+  {
+   "id": "c57",
+   "name": "Knoxville",
+   "region": "Southeast",
+   "x": 1002.1,
+   "y": 313.1
+  },
+  {
+   "id": "c58",
+   "name": "Charlotte",
+   "region": "Southeast",
+   "x": 1078,
+   "y": 316
+  },
+  {
+   "id": "c59",
+   "name": "Nashville",
+   "region": "South Central",
+   "x": 934.1,
+   "y": 319.1
+  },
+  {
+   "id": "c60",
+   "name": "Las Vegas",
+   "region": "Southwest",
+   "x": 265.9,
+   "y": 333.9
+  },
+  {
+   "id": "c61",
+   "name": "Chattanooga",
+   "region": "Southeast",
+   "x": 979.7,
+   "y": 342.1
+  },
+  {
+   "id": "c62",
+   "name": "Memphis",
+   "region": "South Central",
+   "x": 866.5,
+   "y": 361
+  },
+  {
+   "id": "c64",
+   "name": "Atlanta",
+   "region": "Southeast",
+   "x": 1008,
+   "y": 369
+  },
+  {
+   "id": "c65",
+   "name": "Los Angeles",
+   "region": "Southwest",
+   "x": 188.5,
+   "y": 376.5
+  },
+  {
+   "id": "c66",
+   "name": "Charleston",
+   "region": "Southeast",
+   "x": 1120.9,
+   "y": 376.3
+  },
+  {
+   "id": "c67",
+   "name": "Oklahoma City",
+   "region": "Plains",
+   "x": 688,
+   "y": 376.5
+  },
+  {
+   "id": "c68",
+   "name": "Little Rock",
+   "region": "South Central",
+   "x": 815,
+   "y": 376.5
+  },
+  {
+   "id": "c69",
+   "name": "Birmingham",
+   "region": "South Central",
+   "x": 949.5,
+   "y": 391.5
+  },
+  {
+   "id": "c71",
+   "name": "Tucumcari",
+   "region": "Southwest",
+   "x": 531.5,
+   "y": 392
+  },
+  {
+   "id": "c75",
+   "name": "San Diego",
+   "region": "Southwest",
+   "x": 210,
+   "y": 413
+  },
+  {
+   "id": "c76",
+   "name": "Phoenix",
+   "region": "Southwest",
+   "x": 334.5,
+   "y": 423
+  },
+  {
+   "id": "c77",
+   "name": "Shreveport",
+   "region": "South Central",
+   "x": 789,
+   "y": 443.5
+  },
+  {
+   "id": "c78",
+   "name": "Jacksonville",
+   "region": "Southeast",
+   "x": 1099,
+   "y": 445
+  },
+  {
+   "id": "c79",
+   "name": "Dallas",
+   "region": "South Central",
+   "x": 714,
+   "y": 448
+  },
+  {
+   "id": "c80",
+   "name": "Fort Worth",
+   "region": "South Central",
+   "x": 689.1,
+   "y": 450.9
+  },
+  {
+   "id": "c81",
+   "name": "Mobile",
+   "region": "Southeast",
+   "x": 935,
+   "y": 465
+  },
+  {
+   "id": "c83",
+   "name": "El Paso",
+   "region": "Southwest",
+   "x": 469.2,
+   "y": 482.1
+  },
+  {
+   "id": "c85",
+   "name": "New Orleans",
+   "region": "South Central",
+   "x": 889.1,
+   "y": 499.9
+  },
+  {
+   "id": "c86",
+   "name": "Tampa",
+   "region": "Southeast",
+   "x": 1099,
+   "y": 508
+  },
+  {
+   "id": "c88",
+   "name": "Houston",
+   "region": "South Central",
+   "x": 755.5,
+   "y": 525.5
+  },
+  {
+   "id": "c89",
+   "name": "San Antonio",
+   "region": "South Central",
+   "x": 676.5,
+   "y": 545
+  },
+  {
+   "id": "c90",
+   "name": "Miami",
+   "region": "Southeast",
+   "x": 1170.5,
+   "y": 546
+  },
+  {
+   "id": "c91",
+   "name": "Rapid City",
+   "region": "Northwest",
+   "x": 542,
+   "y": 151
+  },
+  {
+   "id": "c92",
+   "name": "Boston",
+   "region": "Northeast",
+   "x": 1197,
+   "y": 67
+  },
+  {
+   "id": "c93",
+   "name": "Portland, ME",
+   "region": "Northeast",
+   "x": 1197.5,
+   "y": 25.5
+  },
+  {
+   "id": "c94",
+   "name": "Sacramento",
+   "region": "Southwest",
+   "x": 135.1,
+   "y": 231.3
+  }
+ ]
+}

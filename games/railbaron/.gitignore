@@ -1,0 +1,16 @@
+node_modules
+dist
+*.local
+
+# Subagent-driven-development scratch: ledgers, briefs, review packages
+.superpowers
+
+# The Avalon Hill rulebook. The source of truth for Phase 4's rules, and not
+# ours to redistribute from a public repository — keep it locally, quote what
+# you need into the specs.
+/docs/rail_baron.pdf
+
+.DS_Store
+
+# Rooms the server has saved. Real games, not source.
+server/games/

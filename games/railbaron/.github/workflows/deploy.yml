@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time, and let a newer push win rather than queueing behind
+# an older one — but never cancel a run that is already publishing.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # `vendor/lobby` is a submodule, and checkout does not fetch one unless
+      # told to. Without this the directory is present but empty, every import
+      # of it fails to resolve, and `npm run typecheck` below stops the deploy.
+      #
+      # It was harmless for exactly as long as nothing imported the lobby —
+      # which is why six green runs went past after the submodule landed. The
+      # green was honest and vacuous: CI was compiling a tree with no shared
+      # code in it.
+      #
+      # `recursive` rather than `true`: the lobby has no nested submodules
+      # today, so the two are identical, and one of them stays correct if it
+      # ever gains one.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The suite and the typecheck gate the deploy. A companion app that is
+      # wrong about a payout is worse than one that is down.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
