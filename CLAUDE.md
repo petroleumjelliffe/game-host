@@ -52,17 +52,18 @@ npm test        # every package's suite, one command: 1548 tests / 145 files
 npm run typecheck
 ```
 
-`npm test` is four sequential `vitest run --root <package>` invocations, not
-one `vitest run` with a `projects` array covering all four — deliberately.
-Vitest 4 removed the old standalone `vitest.workspace.ts` (`test.workspace`
-now throws, telling you to migrate to `test.projects`), and a `test.projects`
-array that lists `games/acquire` and `games/railbaron` as directory entries
-*resolves* — file counts and environments come out right — but **each
-project's own `setupFiles` silently never runs** when that project is itself
-nested inside an outer aggregator's `test.projects`. Both games rely on their
-`setupFiles` for jest-dom matchers, so this isn't cosmetic: `toBeInTheDocument`
-and friends fail across every jsdom test, real failures, easy to mistake for
-new bugs in the code itself. `vitest.workspace.ts`/`test.projects` support a
+`npm test` runs `scripts/test-all.mjs`, which spawns four independent
+`vitest run --root <package>` invocations rather than one `vitest run` with a
+`projects` array covering all four — deliberately. Vitest 4 removed the old
+standalone `vitest.workspace.ts` (`test.workspace` now throws, telling you to
+migrate to `test.projects`), and a `test.projects` array that lists
+`games/acquire` and `games/railbaron` as directory entries *resolves* — file
+counts and environments come out right — but **each project's own
+`setupFiles` silently never runs** when that project is itself nested inside
+an outer aggregator's `test.projects`. Both games rely on their `setupFiles`
+for jest-dom matchers, so this isn't cosmetic: `toBeInTheDocument` and
+friends fail across every jsdom test, real failures, easy to mistake for new
+bugs in the code itself. `vitest.workspace.ts`/`test.projects` support a
 single level of project splitting; the games' own two-project node/jsdom
 split is doubly nested when included that way, and doubly nested is the case
 that breaks. Confirmed with a `throw` planted at the top of
@@ -70,8 +71,19 @@ that breaks. Confirmed with a `throw` planted at the top of
 games/acquire` (setup runs) and never fires when `games/acquire` is a
 `projects` entry of an outer config (setup doesn't run). Running each package
 as its own top-level `vitest run --root <dir>` sidesteps the whole problem —
-each invocation resolves its own nested projects the normal, single-level way
-— and is still one `npm test`.
+each invocation resolves its own nested projects the normal, single-level
+way.
+
+`scripts/test-all.mjs` runs all four **in parallel**, buffers each one's
+output, and prints it as a single block once that package finishes — so
+concurrent suites don't interleave their output, but still finish in roughly
+the slowest package's time rather than the sum of all four. Critically, it
+lets every package run **regardless of another's outcome** — a plain `&&`
+chain would stop at the first failure, hiding whatever the remaining three
+packages would have said and turning every fix into its own separate
+discovery cycle. The script's own exit code is non-zero if *any* package
+failed, so CI still gates correctly; the printed summary (one line per
+package: pass/fail, exit code, test/file counts) says which one(s).
 
 ## Git history after the subtree merge
 
