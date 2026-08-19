@@ -8,7 +8,13 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "baseUrl": ".",
+    // No `baseUrl`: it is deprecated in TypeScript 6 and stops working in 7,
+    // and it was never needed. `paths` resolve relative to the tsconfig that
+    // *declares* them (TS 4.1+), which is this file at the repo root — so the
+    // "./packages/..." targets below already mean what they say. Editors run
+    // a newer tsc than the workspace's 5.9.3 and flagged the deprecation as an
+    // error in every package that extends this file, while `npm run typecheck`
+    // stayed green.
     "paths": {
       "@game-host/lobby/*.js": ["./packages/lobby/*.ts"],
       "@game-host/lobby/*": ["./packages/lobby/*.ts"]

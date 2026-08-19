@@ -917,6 +917,14 @@ changes."
 - **Rail Baron's NodeNext server split** (deferred from Phase 0's Task 8).
   It reaches into `src/state/`, because Rail Baron's server imports its game
   rules from client-land. That boundary is the composition plan's business.
+- **A root workflow for Rail Baron's GitHub Pages deploy.** Rail Baron's
+  `deploy.yml` came across with the subtree merge but was inert here — GitHub
+  reads workflows only from the repo root — so it was deleted along with
+  Acquire's nested `ci.yml` rather than left looking live. Its Pages deploy
+  still runs from Rail Baron's own repo and is unaffected. The spec's cutover
+  step owes a root workflow with a path filter to replace it; deleting the
+  stale copy makes that debt visible instead of appearing already solved. The
+  original is in this repo's history and in the source repo.
 - **Anything the spec's steps 6–11 cover** — `mount()`, `apps/host`, the
   composition tests, both cutovers, the `/acquire` rename, archiving the
   source repos.
