@@ -23,7 +23,16 @@ is fine — the split existed for reviewability, and the review happened.
 Acquire commits: `42af86b` (CI), `9ede8fe` (source), `3136274` (tests),
 `70ba7db` (flag on).
 
-**Remaining: Task 2, Task 7, Task 8.**
+**Task 8 is deferred to the migration plan** (owner's call, 2026-08-19).
+Nothing else in Phase 0 depends on it; the thing it unblocks — compiling
+`apps/host` — is itself marked "measure first" in the spec; and its blast
+radius reaches `src/state/` because Rail Baron's server imports its game
+rules from client-land. That `src/state/` boundary is getting looked at
+during the migration anyway, so the two are cheaper together than apart.
+
+**Remaining in this plan: Task 2, then Task 7.** They are coupled — Task 7
+edits the same `devSeed.ts` line Task 2 moves, and both touch `dev:server`
+— so run them in order.
 
 ## Global Constraints
 
@@ -620,7 +629,11 @@ serving at the root."
 
 ---
 
-## Task 8: Rail Baron — split the server tsconfig to NodeNext
+## ⏸ DEFERRED — Task 8: Rail Baron — split the server tsconfig to NodeNext
+
+> **Deferred to the migration plan on 2026-08-19.** Kept here in full because
+> the measurements and the method still apply; move it wholesale rather than
+> re-deriving it. Do not execute it as part of Phase 0.
 
 Rail Baron's server runs only because tsx patches Node's resolver to accept extensionless ESM imports. Plain `node` rejects them, which is what would block compiling `apps/host` later. Acquire and Marco Polo both already have this split; Rail Baron is the only repo typechecking its server under `bundler`.
 
@@ -637,7 +650,7 @@ Rail Baron's server runs only because tsx patches Node's resolver to accept exte
 - Consumes: nothing (independent of every Acquire task).
 - Produces: `npm run typecheck` checking the server under NodeNext.
 
-- [ ] **Step 1: Create the server tsconfig, copying Acquire's pattern**
+- [~] **Step 1: Create the server tsconfig, copying Acquire's pattern**
 
 Create `tsconfig.server.json`:
 
@@ -653,7 +666,7 @@ Create `tsconfig.server.json`:
 }
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [~] **Step 2: Run it and watch it fail**
 
 ```bash
 cd ~/Developer/personal/railbaron
@@ -662,7 +675,7 @@ npx tsc -p tsconfig.server.json --noEmit 2>&1 | grep -c "TS2835"
 
 Expected: a non-zero count — `Relative import paths need explicit file extensions`. TypeScript reports only the first level, because it stops at each unresolved import; the count grows as you fix and re-run.
 
-- [ ] **Step 3: Add `.js` to relative imports, re-running until zero**
+- [~] **Step 3: Add `.js` to relative imports, re-running until zero**
 
 Work the loop:
 
@@ -682,7 +695,7 @@ import { createFileStore } from './store.js';
 
 Re-run after each file. The list will expand into `session/protocol.ts` and `src/state/*.ts` as resolution proceeds deeper — that is expected and is the 74-import scope noted above.
 
-- [ ] **Step 4: Confirm both projects typecheck**
+- [~] **Step 4: Confirm both projects typecheck**
 
 The client project must still pass, which is what proves `.js` specifiers are compatible with `bundler`:
 
@@ -692,7 +705,7 @@ npx tsc -p tsconfig.server.json --noEmit && npx tsc -p tsconfig.json --noEmit
 
 Expected: both silent.
 
-- [ ] **Step 5: Make `typecheck` cover both projects**
+- [~] **Step 5: Make `typecheck` cover both projects**
 
 In `package.json`:
 
@@ -700,7 +713,7 @@ In `package.json`:
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
 ```
 
-- [ ] **Step 6: Prove the server actually still boots and serves**
+- [~] **Step 6: Prove the server actually still boots and serves**
 
 The typecheck proves resolution on paper; this proves it in Node.
 
@@ -711,7 +724,7 @@ npm run serve
 
 In another shell: `curl -s localhost:4001/railbaron/health` returns `{"ok":true,...}`. Stop the server.
 
-- [ ] **Step 7: Commit**
+- [~] **Step 7: Commit**
 
 ```bash
 git add tsconfig.server.json package.json server/ session/ src/state/
@@ -739,6 +752,6 @@ checked."
 - [ ] `npm run typecheck` in Acquire enforces `noUncheckedIndexedAccess` with no extra flag.
 - [ ] Acquire's dev and build serve at the same base; `SOCKET_PATH` appears in no Acquire script.
 - [ ] `POST ${BASE_PATH}/dev/rooms` is absent unless `NODE_ENV === 'development'`, and present when it is.
-- [ ] Rail Baron's `npm run typecheck` runs both projects and both pass (or Task 8 is explicitly deferred to the migration plan).
+- [x] Rail Baron's NodeNext split is explicitly deferred to the migration plan — Rail Baron is untouched by Phase 0.
 - [ ] Marco Polo is untouched.
 - [ ] The Acquire Pages deploy still serves from `/acquire-startups-m1/` — nothing in Phase 0 moves it.
