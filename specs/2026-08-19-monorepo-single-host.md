@@ -194,7 +194,46 @@ PORTS.md's server block collapses with it. One process needs one `PORT`, so
 three Vite dev servers still coexist during development. The registry shrinks
 to that one column and the path list.
 
-### 7. Layout
+### 7. Acquire's path becomes `/acquire`
+
+`/acquire-startups-m1` is a GitHub Pages repository name that leaked into the
+URL — PORTS.md already apologises for it, and the menu link exists partly to
+hide it. Retiring the Pages deploy removes its only reason to exist, so the
+rename happens here rather than never.
+
+**It cannot happen any earlier than step 9, and that is a hard constraint.**
+Acquire's `BASE_PATH` *is* its Pages path: `gh-pages` publishes to
+`petroleumjelliffe.github.io/acquire-startups-m1/`, and a built client whose
+base disagrees with where it is served requests every asset from a path that
+does not exist. So the rename is coupled to Pages retirement — the same
+commit, or the deployment breaks.
+
+The consolidation `basePath.ts` already did makes the change small. The
+literal appears in exactly three places in the codebase:
+
+- `basePath.ts` — the one true source
+- `server/clientOverWire.test.ts` — a hardcoded socket path
+- `src/pages/HomePage.test.tsx` — a hardcoded route
+
+Vite's `base`, the router basename, the PWA `start_url` and `scope`, the
+socket mount and the health twin all derive from it and follow for free.
+
+Nothing player-visible is lost: `createIdentityStore('acquire')` is keyed on
+the app id, never the path, so stored identities and remembered names survive
+untouched, and saved rooms are keyed by room id under a directory this spec
+already names `acquire`.
+
+Two costs, both accepted:
+
+- **Old links.** `apps/host` keeps a permanent redirect from
+  `/acquire-startups-m1/*` to `/acquire/*`, preserving the suffix so shared
+  room links keep working. Two lines, kept indefinitely.
+- **Installed PWAs orphan.** An installed app is scoped to the old path.
+  Following the redirect takes it outside its own scope, so it opens in a
+  browser tab instead of standalone until reinstalled. Unavoidable, affects a
+  handful of phones, and the redirect means nothing actually breaks.
+
+### 8. Layout
 
 ```
 game-host/
@@ -207,9 +246,10 @@ game-host/
   specs/  docs/
 ```
 
-Directory names are not URL paths: `games/acquire/` keeps
-`BASE_PATH = '/acquire-startups-m1'` until the rename below is taken up
-separately. The short directory name is free; the short URL is not.
+`games/acquire/` is the directory name from step 3 onward, while
+`BASE_PATH` stays `/acquire-startups-m1` until step 9 renames it (§7).
+Directory names are not URL paths, and the short directory name is free
+immediately — only the URL has to wait for Pages to retire.
 
 npm workspaces — all three are already npm with lockfiles. One
 `tsconfig.base.json`, one vitest workspace, one version each of Vite 8,
@@ -253,10 +293,13 @@ each repo on 2026-08-19:
 5. **Acquire: make the dev seed safe.** `server/devSeed.ts` registers
    `POST /dev/rooms` — unprefixed, and guarded by
    `process.env.NODE_ENV !== 'production'`, which **fails open**: an unset
-   `NODE_ENV` registers a route that installs arbitrary game state. Prefix it
-   under `BASE_PATH` and invert the guard to `=== 'development'`. Verify
-   `NODE_ENV` is explicitly set on the live Render service **now**, ahead of
-   everything else in this document.
+   `NODE_ENV` would register a route that installs arbitrary game state.
+   `NODE_ENV=production` is confirmed set on the live Render service
+   (2026-08-19), so nothing is exposed today — this is hygiene, not an
+   incident. Prefix the route under `BASE_PATH` and invert the guard to
+   `=== 'development'`, so the protection comes from the code rather than
+   from an environment variable staying set. Composition raises the stakes:
+   the route currently sits at the root of what becomes a shared app.
 6. **Acquire: make the dev base symmetric.** `vite.config.ts` sets
    `base: command === 'build' || isPreview ? BASE_PATH : "/"`. That single
    asymmetry is the sole cause of three workarounds — the two-key socket
@@ -288,7 +331,10 @@ Each phase leaves a working tree; nothing below is a flag day except step 10.
 9. Render cutover: point the service at the monorepo, `DATA_DIR=/var/data`,
    `mv /var/data/games /var/data/acquire`, drop `SOCKET_PATH` and
    `VITE_SERVER_URL`, retire Acquire's Pages deploy and its `gh-pages`
-   dependency and `.env.production` and `public/404.html`.
+   dependency and `.env.production` and `public/404.html` — and in the same
+   commit rename `BASE_PATH` to `/acquire`, adding the redirect from the old
+   prefix. The rename and the Pages retirement are one atomic step (§7);
+   splitting them breaks whichever deployment goes second.
 10. LAN cutover: one launchd agent instead of three; the Caddyfile collapses to
     a single `reverse_proxy` for everything on port 80.
 11. Archive the four source repos on GitHub, read-only.
@@ -316,16 +362,15 @@ nothing to keep. Its workflow moves into the monorepo with a path filter.
 6. **Render shape**, on the deployed instance: all three games playable on one
    origin, `/dev/rooms` absent, and Acquire's rooms intact across the disk
    rename.
+7. **The Acquire rename**: `/acquire/` serves the game with every asset
+   resolving; `/acquire-startups-m1/room/ABCD` redirects to `/acquire/room/ABCD`
+   rather than 404ing; and a browser holding a stored identity from before the
+   rename still rejoins its room, proving the app-id keying held.
 
 ## Deferred, deliberately
 
 Named here so they are decisions rather than oversights.
 
-- **Rename `/acquire-startups-m1` to `/acquire`.** The long path is a GitHub
-  Pages repo name that leaked into the URL — PORTS.md already apologises for
-  it — and retiring the Pages deploy removes its only reason to exist. Held
-  back because installed PWAs are scoped to the old path and would orphan; it
-  wants a redirect and its own small plan.
 - **A shared `packages/room-store`.** Rail Baron's and Acquire's stores are
   one design implemented twice: same envelope, same atomic temp-and-rename,
   same validate-on-load. The divergence is naming (`skipped` vs `unreadable`)
