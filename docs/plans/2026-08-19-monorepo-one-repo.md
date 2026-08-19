@@ -10,7 +10,11 @@
 
 **Spec:** [`specs/2026-08-19-monorepo-single-host.md`](../../specs/2026-08-19-monorepo-single-host.md) — this plan implements migration-sequence steps 2–5 only.
 
+**Status:** complete, merged to `main` at `3e06590` on 2026-08-19. Every "Done when" box below holds.
+
 **Predecessor:** [`docs/plans/2026-08-19-phase-0-pre-migration-hardening.md`](2026-08-19-phase-0-pre-migration-hardening.md) — complete and merged. Do not start this plan until Acquire's `main` contains `027d237`.
+
+**Successor:** [`docs/plans/2026-08-19-composition-one-process.md`](2026-08-19-composition-one-process.md) — spec steps 6–8, `mount()` and `apps/host`.
 
 ## Global Constraints
 
