@@ -273,24 +273,29 @@ each repo on 2026-08-19:
 
 | Repo | Errors | Shape |
 | --- | --- | --- |
-| Rail Baron | 0 | flag already on |
-| Marco Polo | 0 | flag off, passes clean anyway |
+| Rail Baron | 0 | flag already on, one project covering client and server |
+| Marco Polo | 0 | flag already on in **both** tsconfigs; both clean |
 | Acquire | 633 | 520 in tests, 113 in source, across 42 files |
 
-1. **Marco Polo: turn on `noUncheckedIndexedAccess`.** Free — zero errors
-   today. Locks the property in before the codebase grows.
-2. **Acquire: add a CI workflow** (test + typecheck). Acquire and Marco Polo
+Marco Polo turns out to be the best-configured of the three and needs no
+Phase 0 work at all. It already carries the flag in `tsconfig.json` and
+`client/tsconfig.json`, and it already has the resolution split this spec
+asks the others to adopt: `nodenext` for `server`/`protocol`, `bundler` for
+the Vite-built `client`. It is the pattern, not a laggard.
+
+1. **Acquire: add a CI workflow** (test + typecheck). Acquire and Marco Polo
    have none; Rail Baron's `deploy.yml` is the only workflow in any repo. A
    633-error refactor should not be gated only by a laptop.
-3. **Acquire: turn on `noUncheckedIndexedAccess`**, tests first (mechanical),
+2. **Acquire: turn on `noUncheckedIndexedAccess`**, tests first (mechanical),
    source second (113 sites, in its own commit — that is where reading the
    code might find a real bug rather than a false positive).
-4. **Rail Baron: split `tsconfig.server.json`** to NodeNext and add `.js`
+3. **Rail Baron: split `tsconfig.server.json`** to NodeNext and add `.js`
    extensions to server imports. Its server currently runs only because tsx
    patches Node's resolver to accept extensionless ESM imports; plain `node`
-   would reject them, which blocks compiling `apps/host` later. Acquire
-   already has exactly this split and is the pattern to copy.
-5. **Acquire: make the dev seed safe.** `server/devSeed.ts` registers
+   would reject them, which blocks compiling `apps/host` later. Acquire and
+   Marco Polo both already have this split; Rail Baron is the only repo
+   typechecking its server under `bundler`.
+4. **Acquire: make the dev seed safe.** `server/devSeed.ts` registers
    `POST /dev/rooms` — unprefixed, and guarded by
    `process.env.NODE_ENV !== 'production'`, which **fails open**: an unset
    `NODE_ENV` would register a route that installs arbitrary game state.
@@ -300,7 +305,7 @@ each repo on 2026-08-19:
    `=== 'development'`, so the protection comes from the code rather than
    from an environment variable staying set. Composition raises the stakes:
    the route currently sits at the root of what becomes a shared app.
-6. **Acquire: make the dev base symmetric.** `vite.config.ts` sets
+5. **Acquire: make the dev base symmetric.** `vite.config.ts` sets
    `base: command === 'build' || isPreview ? BASE_PATH : "/"`. That single
    asymmetry is the sole cause of three workarounds — the two-key socket
    proxy, `SOCKET_PATH=/socket.io` in `dev:server`, and the `__PWA_BASE__`
