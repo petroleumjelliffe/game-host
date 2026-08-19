@@ -1,0 +1,15 @@
+{
+  // Use the TypeScript in node_modules, not the one bundled with the editor.
+  //
+  // Without this the two drift: the workspace was on 5.9.3 while the editor
+  // shipped 6.0.3, so `baseUrl` in tsconfig.base.json lit up red in every
+  // package that extended it while `npm run typecheck` stayed silent. Errors
+  // you cannot reproduce from the command line are the worst kind.
+  //
+  // Pinned to the workspace copy rather than matched to the editor's, because
+  // the editor updates on its own schedule and CI never will — this way what
+  // you see is what CI runs, and a TypeScript bump is a deliberate commit
+  // (package.json) rather than something that happens to you.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
