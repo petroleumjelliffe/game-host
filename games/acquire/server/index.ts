@@ -1,6 +1,13 @@
 // server/index.ts
 // Transport only. The room decides what happened; this file decides who hears
 // about it, and is the single place `project` is ever called.
+//
+// Two entry points. `mount` adds Acquire to an app and an HTTP server it does
+// not own, registering only what is safe to have two other games beside it.
+// `createServer` owns both and adds back the bare `/health` that only makes
+// sense alone in a process — which is why its signature, its options and its
+// handle are unchanged, and the socket harness that hundreds of tests run on
+// never noticed.
 
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
@@ -10,6 +17,9 @@ import { fileURLToPath } from 'node:url';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketServer } from 'socket.io';
 import { BASE_PATH } from '../basePath.js';
+import type { HostContext, MountedGame } from '@game-host/host/contract.js';
+import { closeSockets } from '@game-host/host/close.js';
+import { guardSocket } from '@game-host/host/guard.js';
 import { project } from './projection.js';
 import { createRoomRegistry, type RoomRegistry } from './rooms.js';
 import { createFileStore, createNullStore, SAVE_VERSION, type RoomStore } from './store.js';
@@ -27,6 +37,9 @@ import {
 } from '../session/protocol.js';
 import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol.js';
 import { createLobbyHandlers } from '@game-host/lobby/server/handlers.js';
+
+/** How the menu names this game. */
+const TITLE = 'Acquire';
 
 export interface ServerHandle {
   app: express.Express;
@@ -62,23 +75,59 @@ export interface ServerOptions {
 
 const DEFAULT_DIST = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 
-export function createServer(options: ServerOptions = {}): ServerHandle {
-  const app = express();
-  app.use(cors());
-  /**
-   * Alive, and what it speaks.
-   *
-   * The versions are here because a handshake that fails cannot report why:
-   * a client refused with `versionMismatch` knows only its own number. This
-   * endpoint needs no version of its own to answer, so it stays reachable in
-   * exactly the situation you are trying to diagnose — and it makes "what is
-   * deployed" one curl rather than a trip to the hosting dashboard, which is
-   * what it took on 2026-08-07.
-   */
-  const health = (_req: Request, res: Response): void => {
-    res.json({ ok: true, protocolVersion: PROTOCOL_VERSION, saveVersion: SAVE_VERSION });
-  };
-  app.get('/health', health);
+/**
+ * Alive, and what it speaks.
+ *
+ * The versions are here because a handshake that fails cannot report why:
+ * a client refused with `versionMismatch` knows only its own number. This
+ * endpoint needs no version of its own to answer, so it stays reachable in
+ * exactly the situation you are trying to diagnose — and it makes "what is
+ * deployed" one curl rather than a trip to the hosting dashboard, which is
+ * what it took on 2026-08-07.
+ */
+function health(_req: Request, res: Response): void {
+  res.json({ ok: true, protocolVersion: PROTOCOL_VERSION, saveVersion: SAVE_VERSION });
+}
+
+/** What `build` hands back: the mounted game, plus what only the wrapper wants. */
+interface Built {
+  game: MountedGame;
+  rooms: RoomRegistry;
+  devSeed: boolean;
+}
+
+/**
+ * Adds Acquire to somebody else's app and HTTP server.
+ *
+ * The restore happens here, awaited, rather than in a boot block: the host
+ * awaits every mount before it listens, so finishing the restore inside
+ * `mount` is what makes "no socket can race a half-restored registry" true
+ * by construction. A restore that fails is logged and survived — a broken
+ * Acquire save must not stop Rail Baron and Marco Polo from mounting.
+ */
+export async function mount(ctx: HostContext): Promise<MountedGame> {
+  const store = ctx.dataDir === undefined ? createNullStore() : createFileStore(ctx.dataDir);
+  const built = build(ctx.app, ctx.httpServer, store, {});
+  try {
+    const restored = await built.rooms.restore();
+    if (restored > 0) console.log(`✓ Restored ${restored} room(s)`);
+  } catch (e: unknown) {
+    console.warn('! Restore failed, starting with no rooms:', e);
+  }
+  return built.game;
+}
+
+function build(
+  app: express.Express,
+  httpServer: HttpServer,
+  store: RoomStore,
+  options: Pick<ServerOptions, 'distDir' | 'socketPath'>,
+): Built {
+  // Scoped to the base path, not global. Acquire's `origin: '*'` applying to
+  // its own routes is the existing policy; applying it to another game's
+  // routes and to the menu would be a new one nobody chose. (Narrowing the
+  // policy itself waits for the single public origin the cutover creates.)
+  app.use(BASE_PATH, cors());
   // Twinned under the base path because that is the only route the game-host
   // front door forwards — a bare `/health` is unreachable through the proxy.
   app.get(`${BASE_PATH}/health`, health);
@@ -86,13 +135,15 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
   // The built client, served under its base path so one process can be the
   // whole game on a LAN (the game-host repo's front door points here). No
   // build present is the ordinary dev case — Vite serves the client then —
-  // so it's a boot note, not an error. Render is unaffected: its build may
-  // not produce a dist at all, and the client there comes from Pages.
+  // so it's a boot note, not an error.
   const dist = options.distDir ?? DEFAULT_DIST;
   if (existsSync(join(dist, 'index.html'))) {
     app.use(BASE_PATH, express.static(dist));
     // SPA fallback: a refresh on a client-side route under the base path is
-    // a route, not a file — hand it back to the router.
+    // a route, not a file — hand it back to the router. Prefix-scoped, which
+    // used to be an accident of being alone in a process and is now a
+    // cross-package invariant: unscoped it would answer for the other two
+    // games and for the menu.
     app.use(BASE_PATH, (req, res, next) => {
       if (req.method !== 'GET') { next(); return; }
       res.sendFile(join(dist, 'index.html'));
@@ -102,7 +153,6 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
     console.log(`No built client (${join(dist, 'index.html')} missing) — ${BASE_PATH}/ not served. Run \`npm run build\` to host the client from this server.`);
   }
 
-  const httpServer = createHttpServer(app);
   // Mounted under the base path so sockets ride the same front-door route as
   // pages and assets. Overridden via the boot block's SOCKET_PATH (the
   // options seam): Render sets /socket.io because its Pages client keeps
@@ -114,8 +164,19 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
   const io = new SocketServer(httpServer, {
     cors: { origin: '*' },
     path: options.socketPath ?? `${BASE_PATH}/socket.io`,
+    // destroyUpgrade: engine.io chains `request` listeners across attached
+    // engines but installs `upgrade` listeners additively, so every engine
+    // sees every websocket upgrade and the ones whose path does not match arm
+    // a 1-second timer to end the socket. The handshake beats that timer
+    // almost every time, which is what makes deleting this line so dangerous:
+    // sockets would fail rarely, under load, on the slowest phone at the
+    // table. serveClient: no client loads socket.io from the server, and
+    // leaving it on splices a file-serving handler into the *shared* server's
+    // request listeners.
+    destroyUpgrade: false,
+    serveClient: false,
   });
-  const rooms = createRoomRegistry(options.store ?? createNullStore());
+  const rooms = createRoomRegistry(store);
 
   // Dev only, and absent rather than guarded — see `devSeed.ts`. Fail
   // closed: an unset NODE_ENV is not "probably dev", it is unknown, and the
@@ -125,7 +186,8 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
   // ambient env is the actual input to this decision, and `devSeed.test.ts`
   // exercises it by setting NODE_ENV around this constructor. Hoisting the
   // read to the boot block would move the real decision somewhere no test can
-  // reach.
+  // reach. The route it registers is already prefixed (`${BASE_PATH}/dev/rooms`),
+  // so composition changes nothing about it.
   const devSeed = process.env.NODE_ENV === 'development';
   if (devSeed) registerDevSeed(app, rooms);
 
@@ -142,6 +204,22 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
       if (room.lifecycle() !== 'lobby') sendState(room, playerId, 'resume');
     },
   });
+
+  /**
+   * Save without waiting — a player should not wait on a disk — but not
+   * without handling the failure.
+   *
+   * A bare `void rooms.persist(room)` is a floating promise, and an unhandled
+   * rejection ends the process. Alone that cost Acquire a restart it recovers
+   * from, since the rooms are on disk. Composed it ends a live Marco Polo
+   * round, which persists nothing and cannot be restored at all — the same
+   * line of code with a much larger blast radius.
+   */
+  function save(room: GameRoom): void {
+    void rooms.persist(room).catch((error: unknown) => {
+      console.error('[acquire] save failed', error);
+    });
+  }
 
   /** The one send site. Everything a client ever sees is projected here. */
   function sendState(room: GameRoom, playerId: string, reason: StateReason): void {
@@ -184,7 +262,7 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
         return;
       case 'commit':
         for (const p of room.players) sendState(room, p.id, 'commit');
-        void rooms.persist(room);
+        save(room);
         return;
       case 'correction':
         sendState(room, delivery.to, 'correction');
@@ -199,6 +277,13 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
   }
 
   io.on('connection', (socket) => {
+    // Guard first: it patches `on`, so it covers every handler registered
+    // after it — the lobby's included, which nothing here could otherwise
+    // reach, and `ping-settle` too, which hundreds of tests order their
+    // assertions with and which therefore belongs inside the boundary rather
+    // than beside it.
+    guardSocket(socket, 'acquire');
+
     /**
      * Answers immediately, and does nothing else.
      *
@@ -235,10 +320,10 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
       // `{ type: 'tradeInDeadTiles', coords: 5 }`. Every such handler in
       // `engine/intents.ts` dereferences that field before validating it
       // (`.length`, a `for...of`, a spread into `Set`), which throws
-      // synchronously and takes the whole process down for every room, not
-      // just this one — exactly the crash `isWireIntent` exists to turn into
-      // a clean rejection, same as the shape checks on `createRoom`/`joinRoom`/
-      // `undo`.
+      // synchronously. The host's socket guard now contains such a throw
+      // rather than letting it end the process — but this check is what turns
+      // it into a clean rejection with a reason, which a contained crash is
+      // not. Defence in depth, and this is the layer that can say why.
       if (!isWireIntent(wire)) {
         socket.emit(LOBBY_SERVER_EVENTS.rejected, {
           code: 'unknownIntent',
@@ -271,7 +356,60 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
     });
   });
 
-  return { app, httpServer, io, rooms, devSeed };
+  return {
+    rooms,
+    devSeed,
+    game: {
+      basePath: BASE_PATH,
+      title: TITLE,
+      version: () => ({ protocolVersion: PROTOCOL_VERSION, saveVersion: SAVE_VERSION }),
+      io,
+      async close() {
+        // Not io.close(): that would close the HTTP server, which composed
+        // belongs to the host and to two other games. See close.ts.
+        closeSockets(io);
+        return Promise.resolve();
+      },
+    },
+  };
+}
+
+/**
+ * Acquire alone in a process: its own app, its own HTTP server, and the bare
+ * `/health` that only makes sense that way.
+ *
+ * A host with one game in it. Deliberately does *not* restore — the boot
+ * block below owns that, and `recovery.test.ts` calls `rooms.restore()`
+ * itself on a second server to prove a save survives a restart. `mount` is
+ * where the restore is awaited, because that is where it can be.
+ */
+export function createServer(options: ServerOptions = {}): ServerHandle {
+  const app = express();
+  // Global, unlike the mounted path's: alone in a process this app is
+  // Acquire's alone, so there is nothing else for the policy to leak onto.
+  // The scoped `cors()` inside `build` also applies under the base path; two
+  // header-setting middlewares in a row cost a function call and set the same
+  // headers.
+  app.use(cors());
+  // Unreachable through the front door, which forwards only the prefix — but
+  // it is how `curl localhost:4002/health` answers, and that is the situation
+  // you are in when you are asking. Composed, the host owns this route and
+  // answers for all three games at once.
+  app.get('/health', health);
+
+  const httpServer = createHttpServer(app);
+  const built = build(app, httpServer, options.store ?? createNullStore(), {
+    distDir: options.distDir,
+    socketPath: options.socketPath,
+  });
+
+  return {
+    app,
+    httpServer,
+    io: built.game.io,
+    rooms: built.rooms,
+    devSeed: built.devSeed,
+  };
 }
 
 function randomSeed(): string {
@@ -295,7 +433,8 @@ function randomSeed(): string {
  *
  * Exported, and taking its environment as an argument, so the fallback is
  * testable — it is reached only from the run-directly block below, which no
- * test executes.
+ * test executes. Composed, the host allocates `${DATA_DIR}/acquire` and hands
+ * it to `mount` instead, and this function goes with the boot block.
  */
 export function gamesDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.GAMES_DIR?.trim();

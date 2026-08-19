@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "exports": {
+    "./*.js": "./*.ts",
+    "./*": "./*.ts"
+  },
   "scripts": {
     "dev": "vite --host",
     "predev:server": "node scripts/check-port.mjs 4002",
@@ -23,6 +27,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@game-host/host": "*",
     "@game-host/lobby": "*",
     "cors": "^2.8.5",
     "express": "^5.1.0",
