@@ -1,8 +1,8 @@
 // The match around the sim: rounds, scores, whose turn it is to be Marco.
 // Still socket-free — `gameHandlers.ts` owns the wire.
 
-import type { Lifecycle } from '../vendor/lobby/protocol/protocol.js';
-import type { SeatHolder } from '../vendor/lobby/server/rooms.js';
+import type { Lifecycle } from '@game-host/lobby/protocol/protocol.js';
+import type { SeatHolder } from '@game-host/lobby/server/rooms.js';
 import type { GameEvent } from '../protocol/game.js';
 import { pickNextMarco, survivors } from './sim/rounds.js';
 import { createRound, tick, type SimState } from './sim/sim.js';

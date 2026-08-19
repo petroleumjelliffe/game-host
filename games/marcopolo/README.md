@@ -28,7 +28,7 @@ assets and sockets at `/marcopolo/` (and behind the game-host front door,
     server/sim/    pure simulation: movement, turbo, shrink, calls, catches
     server/        rooms, role-filtered snapshots, socket handlers, app
     client/        React + canvas: tile shader, swimmers, deck screens
-    vendor/lobby   rooms/seats/tokens/presence — git submodule, compiled here
+    @game-host/lobby   rooms/seats/tokens/presence — shared workspace package
 
 The look comes from the Claude Design project *Minimalist Marco Polo game*
 (`Tile Concepts.dc.html`): a WebGL tile floor with four skins, ring-and-emoji

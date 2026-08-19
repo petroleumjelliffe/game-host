@@ -12,8 +12,6 @@ export default defineConfig({
           include: [
             'protocol/**/*.test.ts',
             'server/**/*.test.ts',
-            'vendor/lobby/protocol/**/*.test.ts',
-            'vendor/lobby/server/**/*.test.ts',
           ],
         },
       },
@@ -23,7 +21,7 @@ export default defineConfig({
           globals: true,
           environment: 'jsdom',
           setupFiles: ['./vitest.jsdom.setup.ts'],
-          include: ['client/**/*.test.{ts,tsx}', 'vendor/lobby/client/**/*.test.ts'],
+          include: ['client/**/*.test.{ts,tsx}'],
         },
       },
     ],

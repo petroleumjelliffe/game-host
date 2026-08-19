@@ -1,14 +1,10 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "target": "es2022",
     "lib": ["es2022"],
-    "types": ["node", "vitest/globals"],
-    "skipLibCheck": true
+    "types": ["node", "vitest/globals"]
   },
-  "include": ["protocol", "server", "vendor/lobby/protocol", "vendor/lobby/server"]
+  "include": ["protocol", "server"]
 }

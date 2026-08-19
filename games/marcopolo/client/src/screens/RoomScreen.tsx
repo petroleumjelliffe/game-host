@@ -1,5 +1,5 @@
-import { useLobbyRoom } from '../../../vendor/lobby/client/useLobbyRoom';
-import { lobbyView } from '../../../vendor/lobby/client/view';
+import { useLobbyRoom } from '@game-host/lobby/client/useLobbyRoom';
+import { lobbyView } from '@game-host/lobby/client/view';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
 import { connection, identity } from '../net/singletons';
 import { useGameSession } from '../net/useGameSession';

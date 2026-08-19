@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SeatHolder } from '../vendor/lobby/server/rooms.js';
+import type { SeatHolder } from '@game-host/lobby/server/rooms.js';
 import { TUNING } from '../protocol/game.js';
 import { makeRoom, startMatch, stepRound, type MarcoPoloRoom } from './game.js';
 import { snapshotFor } from './snapshot.js';

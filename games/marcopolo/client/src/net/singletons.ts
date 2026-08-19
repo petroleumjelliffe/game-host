@@ -1,11 +1,11 @@
 // One identity store and one socket for the whole tab. Module-level because
 // remounting a screen must not reconnect the transport.
 
-import { createIdentityStore } from '../../../vendor/lobby/client/identity';
+import { createIdentityStore } from '@game-host/lobby/client/identity';
 import {
   createLobbyConnection,
   type LobbyConnection,
-} from '../../../vendor/lobby/client/connection';
+} from '@game-host/lobby/client/connection';
 import { APP_ID, PROTOCOL_VERSION } from '../../../protocol/game';
 
 export const identity = createIdentityStore(APP_ID);

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { LobbyView } from '../../../vendor/lobby/client/view';
+import type { LobbyView } from '@game-host/lobby/client/view';
 import { TUNING } from '../../../protocol/game';
 import type { GameSession } from '../net/useGameSession';
 import { liveRipples } from '../game/sessionState';

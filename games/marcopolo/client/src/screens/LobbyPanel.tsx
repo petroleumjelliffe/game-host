@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import type { LobbyRoomState } from '../../../vendor/lobby/client/useLobbyRoom';
-import type { LobbyView } from '../../../vendor/lobby/client/view';
+import type { LobbyRoomState } from '@game-host/lobby/client/useLobbyRoom';
+import type { LobbyView } from '@game-host/lobby/client/view';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
 import { creatureFor } from '../render/creatures';
 import { drawIdlePool } from '../render/idle';

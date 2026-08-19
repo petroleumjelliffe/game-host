@@ -3,9 +3,9 @@
 // routes bytes and enforces WHO may say what (marco calls, host advances).
 
 import type { Server as SocketServer, Socket } from 'socket.io';
-import { LOBBY_SERVER_EVENTS } from '../vendor/lobby/protocol/protocol.js';
-import type { LobbyRegistry } from '../vendor/lobby/server/rooms.js';
-import type { LobbyWiring } from '../vendor/lobby/server/handlers.js';
+import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol.js';
+import type { LobbyRegistry } from '@game-host/lobby/server/rooms.js';
+import type { LobbyWiring } from '@game-host/lobby/server/handlers.js';
 import {
   GAME_CLIENT_EVENTS,
   GAME_SERVER_EVENTS,
