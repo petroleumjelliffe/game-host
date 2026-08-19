@@ -6,6 +6,11 @@
     "packages/*",
     "games/*"
   ],
+  "scripts": {
+    "test": "vitest run --root packages/lobby && vitest run --root games/marcopolo && vitest run --root games/railbaron && vitest run --root games/acquire",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
   "engines": {
     "node": ">=24"
   },

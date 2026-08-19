@@ -1,9 +1,10 @@
 # game-host
 
-The front-door configuration for the machine that hosts game night: a Caddy
+An npm workspace monorepo: three games (`games/marcopolo`, `games/railbaron`,
+`games/acquire`) and their shared lobby package (`packages/lobby`), plus the
+front-door configuration for the machine that hosts game night — a Caddy
 reverse proxy that gives every game a portless path on the LAN, a flat menu
-page at the root, and the canonical [port registry](PORTS.md). No game code
-lives here, and no game repo owns this — that is the point.
+page at the root, and the canonical [port registry](PORTS.md).
 
 Friends on the wifi see one address:
 
@@ -11,6 +12,22 @@ Friends on the wifi see one address:
 http://<machine-name>.local/            → the menu
 http://<machine-name>.local/railbaron/  → Rail Baron
 ```
+
+## Build and test
+
+```bash
+npm install       # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
+npm test          # every package's suite in one command: 1548 tests / 145 files
+npm run typecheck
+```
+
+This is a plain library-and-server checkout for developing the games — it
+works on any machine. The rest of this README (Caddy, launchd, the port
+registry, `saves/`) is about the *hosting* side: turning built games into
+one address on the LAN, which is the host machine's job, still done with the
+start scripts and Caddyfile below. **Composition into a single process has
+not happened** — the three games still run as three separate processes, each
+on its own port, until a later plan changes that.
 
 ## Setup (once per machine)
 

@@ -26,6 +26,13 @@ ephemeral range (49152+, which the OS hands out randomly):
 A game's two numbers share an offset on purpose: server 400N pairs with
 client 793N (7930 + N).
 
+All six numbers are still real today: the games moved into this repo as npm
+workspaces, but nothing runs them as one process yet, so each still needs its
+own server port and its own dev-client port. When the composition plan lands
+and the three servers become one process, the three server numbers collapse
+to one and this table shrinks — the dev-client slots are unaffected, since
+those stay per-package build tooling either way.
+
 The proxy path must equal the client's built base path, because assets are
 requested at `<base>/assets/…` and nothing rewrites them. Acquire's is its
 GitHub Pages path (`basePath.ts`: the repo name), hence the long one — the

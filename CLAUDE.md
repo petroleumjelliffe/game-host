@@ -4,25 +4,101 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Host-machine configuration, not application code. It is the front door for the
-machine that hosts game night: a Caddy reverse proxy on port 80, a static menu
-page, launchd agents, start scripts, and the canonical cross-game port
-registry. The games themselves live in separate sibling repos
-(`~/Developer/railbaron`, `~/Developer/acquire-startups-m1`,
-`~/Developer/marco-polo`) which this repo only references by path.
+An npm workspace monorepo, and the front door for the machine that hosts game
+night. Both are true at once, and neither replaces the other.
 
-No build, no tests, no package manager. Changes are shell, plists, a Caddyfile,
-one HTML file, and docs.
+It is the host-machine configuration: a Caddy reverse proxy on port 80, a
+static menu page, launchd agents, start scripts, and the canonical cross-game
+port registry — none of that moved.
+
+It is also, as of this migration, where the game code itself lives:
+
+| Path | What it is |
+| --- | --- |
+| `packages/lobby` | `@game-host/lobby` — the shared lobby package (seating, join/rejoin, presence) that Rail Baron and Acquire both depend on as a workspace package, not a git submodule. |
+| `games/marcopolo` | Marco Polo — server (`server/`), client (`client/`), protocol (`protocol/`). |
+| `games/railbaron` | Rail Baron — engine, session, server and a React client. |
+| `games/acquire` | Acquire — engine, session, server and a React client; still deploys to GitHub Pages under `/acquire-startups-m1`. |
+
+`npm install` at the root links all four workspaces; `npm test` and
+`npm run typecheck` at the root cover all four in one command (see Testing,
+below).
+
+**Composition has *not* happened yet.** The three games still run as three
+separate processes, each on its own port (`400N`), each serving its own built
+client under its own path prefix, with Caddy routing `/<game>/*` to the right
+port. There is no `apps/host`, no `mount()`, nothing that runs them as one
+process — that is a later plan's job. Until it lands, PORTS.md's six numbers
+(three server, three dev-client) are all still real; see PORTS.md for the
+one-line note on what changes when composition does.
 
 ## This clone is not the host machine
 
 Every script, plist, and the README assume the repo is cloned at
-`~/Developer/game-host` with the game repos as its siblings. This checkout is
-at `~/Developer/personal/game-host`, and neither Caddy, the
-`/opt/homebrew/etc/game-host` symlink, nor any game repo exists here. Treat
-edits as configuration authoring; do not expect to run or smoke-test them
+`~/Developer/game-host`. This checkout is at `~/Developer/personal/game-host`,
+and neither Caddy nor the `/opt/homebrew/etc/game-host` symlink exists here.
+Treat edits to `Caddyfile`, `menu/`, `launchd/`, `saves/` and the `start-*.sh`
+scripts as configuration authoring; do not expect to run or smoke-test them
 locally, and do not "fix" the hardcoded `~/Developer/game-host` paths unless
-asked — they describe the host, not this working copy.
+asked — they describe the host, not this working copy. The games themselves
+(under `games/` and `packages/`), by contrast, build and test fine right here
+— see Testing, below.
+
+## Testing
+
+```bash
+npm install     # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
+npm test        # every package's suite, one command: 1548 tests / 145 files
+npm run typecheck
+```
+
+`npm test` is four sequential `vitest run --root <package>` invocations, not
+one `vitest run` with a `projects` array covering all four — deliberately.
+Vitest 4 removed the old standalone `vitest.workspace.ts` (`test.workspace`
+now throws, telling you to migrate to `test.projects`), and a `test.projects`
+array that lists `games/acquire` and `games/railbaron` as directory entries
+*resolves* — file counts and environments come out right — but **each
+project's own `setupFiles` silently never runs** when that project is itself
+nested inside an outer aggregator's `test.projects`. Both games rely on their
+`setupFiles` for jest-dom matchers, so this isn't cosmetic: `toBeInTheDocument`
+and friends fail across every jsdom test, real failures, easy to mistake for
+new bugs in the code itself. `vitest.workspace.ts`/`test.projects` support a
+single level of project splitting; the games' own two-project node/jsdom
+split is doubly nested when included that way, and doubly nested is the case
+that breaks. Confirmed with a `throw` planted at the top of
+`games/acquire/src/test/setup.ts`: it fires under `vitest run --root
+games/acquire` (setup runs) and never fires when `games/acquire` is a
+`projects` entry of an outer config (setup doesn't run). Running each package
+as its own top-level `vitest run --root <dir>` sidesteps the whole problem —
+each invocation resolves its own nested projects the normal, single-level way
+— and is still one `npm test`.
+
+## Git history after the subtree merge
+
+Every game's original commit history was grafted onto this repo with `git
+subtree add`, and `git blame` works fully on the result: a merged file's
+lines attribute to the commits that actually wrote them (88 of
+`games/marcopolo/server/game.ts`'s 90 lines blame to its original authoring
+commit, not to the merge). `git log --follow -- <new path>` does **not** work,
+though — historical commits record each file at its *old* path
+(`server/game.ts`, not `games/marcopolo/server/game.ts`), and `--follow`
+can't see across that rename because the subtree merge is not, from git's
+point of view, a rename it can detect. For file archaeology, search the old
+path across all history instead — but plain `git log --all -- <old path>`
+**also** comes back empty, and for a related reason: at the subtree-add merge
+commit, the old path (`server/game.ts`) is absent from *both* the mainline
+parent and the merge result (the result has it at the new, prefixed path
+instead), so git's default merge-history simplification calls that a
+TREESAME non-event and prunes the graft parent's whole line out of the
+path-limited walk before it ever reaches the pre-migration commits. The
+command that actually reaches them is `git log --all --full-history -- <old
+path>` — `--full-history` disables that pruning. Confirmed for both Marco
+Polo (`git log --all --full-history -- server/game.ts` finds the original
+authoring commit `7a7fae9` and the subtree-add commit) and Acquire (`git log
+--all --full-history -- engine/gameTypes.ts` finds 11 commits; the plain form
+finds 0 for both). Don't conclude the history was lost just because
+`--follow` on the new path, or a bare `--all` on the old one, comes back
+empty.
 
 ## Architecture
 
