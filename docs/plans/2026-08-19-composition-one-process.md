@@ -573,6 +573,26 @@ third copy gets it wrong.
 seats seven players across three lobbies is slow by construction, and vitest's
 5 s default is a unit-test budget.
 
+**`tsx` moved from `devDependencies` to `dependencies`** in `apps/host` and
+Marco Polo, which is a correction rather than a preference. Rail Baron and
+Acquire already had it there. `tsx` is what *runs the server* — the composed
+host's start command is `tsx apps/host/main.ts` — so calling it a development
+dependency was a mislabel, and one that only shows up in production.
+
+It was surviving by luck: Rail Baron and Acquire declare it properly, so npm
+installed it anyway. The audit that made the point is worth keeping —
+
+```
+npm ls tsx --omit=dev     # present, from all four packages that run it
+npm ls vite --omit=dev    # (empty) — genuinely build-only
+```
+
+— because it draws the line that matters. `vite`, `typescript` and
+`tailwindcss` are needed to *build* and never to *run*, so they belong in
+`devDependencies` and the fix for them is at install time, not in a manifest.
+`tsx` is needed to run, forever. See the spec's step 9 for what that means for
+Render.
+
 ## Deliberately not in this plan
 
 - **Anything the cutover touches** — Render, `DATA_DIR` on the instance, the `mv /var/data/games /var/data/acquire`, the `/acquire` rename and its redirect, retiring Pages, the Caddyfile collapse, the single launchd agent, archiving the four source repos. Spec steps 9–11.

@@ -350,6 +350,50 @@ Each phase leaves a working tree; nothing below is a flag day except step 10.
    commit rename `BASE_PATH` to `/acquire`, adding the redirect from the old
    prefix. The rename and the Pages retirement are one atomic step (§7);
    splitting them breaks whichever deployment goes second.
+
+   **The live service, read on 2026-08-19** (`srv-d3klnhnfte5s73diht90`,
+   `acquire-multiplayer`, starter plan, one instance, auto-deploy on commit to
+   `main` of the *old* `acquire-startups-m1` repo):
+
+   | Setting | Now | After |
+   | --- | --- | --- |
+   | build | `npm install && npm run build:server` | `npm install --include=dev && npm run build` |
+   | start | `npm run start:server` | `npm run start:host` |
+   | health check | `/health` | unchanged — but now answers for all three games |
+   | disk | `dsk-d9rafvlbedkc73coe2k0` at `/var/data` | unchanged |
+   | `GAMES_DIR` | `/var/data/games` | delete; `DATA_DIR=/var/data` |
+   | `SOCKET_PATH` | `/socket.io` | delete |
+   | `NODE_ENV` | `production` | unchanged |
+
+   Two of those would fail a deploy rather than degrade one, and both were
+   found by reading the service rather than by deploying into them:
+
+   - **`build:server` no longer exists.** It was one of the guard scripts
+     deleted when the lobby stopped being a submodule, so the first build
+     against the monorepo fails on a missing script.
+   - **`NODE_ENV=production` makes `npm install` omit `devDependencies`** —
+     verified, `npm config get omit` returns `dev`. Harmless today, because
+     Render never builds a client: Acquire's comes from Pages. After the
+     cutover it builds three, and `vite`, `typescript`, `@vitejs/plugin-react`
+     and Acquire's `tailwindcss`/`postcss`/`autoprefixer` all live in
+     `devDependencies`. `--include=dev` overrides the omission (verified the
+     same way). Keep `NODE_ENV=production` regardless — it is what keeps
+     Acquire's dev-seed route out of production.
+
+   `SOCKET_PATH` is already inert for the composed host: only Acquire's
+   standalone boot block reads it, and the host does not use that path. Delete
+   it for clarity, not for safety.
+
+   The dev/production dependency split earns very little here and has now
+   cost twice. It exists so that installing a *published* package does not
+   drag in its test framework, and nothing in this repo is published. What
+   survives is one real distinction, which the manifests now state honestly:
+   `tsx` runs the server and is a `dependency`; `vite` and friends only build
+   it and stay in `devDependencies`, with `--include=dev` at install time.
+   Compiling `apps/host` (deferred, below) is what would retire the problem
+   rather than manage it — a compiled server needs no toolchain at runtime at
+   all.
+
 10. LAN cutover: one launchd agent instead of three; the Caddyfile collapses to
     a single `reverse_proxy` for everything on port 80.
 11. Archive the four source repos on GitHub, read-only.
