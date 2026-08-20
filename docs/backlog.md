@@ -116,3 +116,38 @@ knowingly, not a bug to squash.
 
 **Note it does not close the window**, only shrinks it to ~0.6s. Item 1 is
 what makes the remaining window survivable.
+
+
+## 3. `KeepAlive` does not restart the agent when the process is killed
+
+Found 2026-08-20, by accident: a `pkill -f "tsx apps/host/main.ts"` aimed at a
+stray test server also matched the launchd agent, and **the agent did not come
+back**. `launchctl list` showed the label with no PID and last exit status 0;
+the front door served 502 until `launchctl kickstart -k` by hand.
+
+`launchd/com.game-host.plist` sets `KeepAlive` / `SuccessfulExit: false`, and
+its comment reads: "Restart on crash, not on clean exit — so `launchctl
+bootout` (and a deliberate stop) stays stopped, but a wedged process comes
+back… this is the only thing standing between one bad payload and an evening
+ending."
+
+That protection is weaker than it claims. The agent runs `npm run start:host`,
+and npm exits **0** when its child is signalled — so launchd sees a successful
+exit and leaves it down. Anything that signals the process rather than
+crashing it inside node lands in that hole: an OOM kill, a stray `pkill`, a
+`killall node`.
+
+**Open question before fixing:** does it restart on a *real* crash — an
+unhandled rejection inside the host, which is the case the comment is actually
+about? That exits non-zero through npm and probably does restart. Worth
+proving rather than assuming, because the answer decides whether this is a
+narrow gap or a broken guarantee.
+
+**Candidate fixes**, once that is known: `exec` the server directly from the
+plist instead of going through npm, so the exit status is node's own; or drop
+`SuccessfulExit: false` and accept that `bootout` is the only way to stop it
+deliberately.
+
+**Related:** item 2. Both are about what happens when the one process serving
+every game goes away — one measures how long it takes to come back, this one
+is about whether it comes back at all.
