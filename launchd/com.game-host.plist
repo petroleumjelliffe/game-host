@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- One agent for every game. Replaces com.game-host.{railbaron,acquire,
+	     marcopolo}.plist, which differed only in label, script and log path —
+	     there is one process now, so there is one of these.
+
+	     Paths go through the /opt/homebrew/etc/game-host symlink (created in
+	     README setup) so no username or clone location is baked in. That
+	     symlink outlives the Caddyfile's menu root, which used it too and is
+	     gone: the composed host serves its own menu. -->
+	<key>Label</key>
+	<string>com.game-host</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>/opt/homebrew/etc/game-host/start-host.sh</string>
+	</array>
+	<!-- launchd gives agents a bare PATH. node comes first from the repo's
+	     node-bin symlink (created in README setup, pointing at fnm's default
+	     alias) — NOT /usr/local/bin, where a leftover x86_64 node once broke
+	     every native binding (esbuild, rollup) under Rosetta, 2026-08-17.
+	     This agent builds three Vite clients at boot, so it needs esbuild and
+	     rollup working more than the old per-game agents did. -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/etc/game-host/node-bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<!-- Restart on crash, not on clean exit — so `launchctl bootout` (and a
+	     deliberate stop) stays stopped, but a wedged process comes back.
+
+	     This matters more than it did with three agents: a crash now takes
+	     every game down at once, so the restart is the only thing standing
+	     between one bad payload and an evening ending. The per-game error
+	     boundary (packages/host/guard.ts) is what makes that rare; this is
+	     what covers the rest. -->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/opt/homebrew/var/log/game-host.log</string>
+	<key>StandardErrorPath</key>
+	<string>/opt/homebrew/var/log/game-host.log</string>
+</dict>
+</plist>
