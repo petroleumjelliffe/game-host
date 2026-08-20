@@ -1,6 +1,6 @@
 # Compile the host
 
-**Status:** proposed, 2026-08-20. Measured, not started.
+**Status:** in progress, 2026-08-20. Task 1 done; Tasks 2-4 open.
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md), which deferred this
 as "Compiling `apps/host` — measure first; the spec says so and it is still
 right." This is that measurement, and it moved two of the spec's assumptions.
@@ -95,14 +95,37 @@ not where the source was:
 There is no emit shape where module-location inference survives. This is the
 actual work of the plan; the emit itself is a build script.
 
-**The fix, proposed:** `distDir` joins `dataDir` on `HostContext` — absolute,
-allocated by the host, injected per game, for exactly the reason `dataDir`
-already is. The standalone wrappers keep their current `import.meta.url`
-default, because standalone still runs unbundled under `tsx` and the
-inference is still correct there. That keeps the promise the CLAUDE.md makes —
-"the standalone path still works and must keep working" — without a second
-code path in the games: one parameter, defaulted where it can be inferred,
-required where it cannot.
+**The fix, as proposed:** `distDir` joins `dataDir` on `HostContext` —
+absolute, allocated by the host, injected per game, for exactly the reason
+`dataDir` already is.
+
+**The fix, as built** (2026-08-20): not that. Writing the test first is what
+killed it. Injection from the host requires the host to know each game's
+client layout, and the layouts differ — Marco Polo builds to `client/dist`,
+the other two to their package root. `dataDir` can be a host decision because
+the host genuinely chooses it; a dist path is a fact about the game, and
+moving it into `apps/host` would have put a per-game detail in the one file
+whose entire promise is that adding a game is one row.
+
+Each game resolves its own package root by name instead:
+
+```ts
+const DEFAULT_DIST = fileURLToPath(
+  new URL('dist', import.meta.resolve('@game-host/railbaron/package.json')),
+);
+```
+
+That asks the same question the host's own `@game-host/railbaron/server/index.js`
+import already asks, so the answer is true from anywhere — inside the package
+under `tsx`, and from a bundle three directories away. It needed one line per
+game: an explicit `"./package.json": "./package.json"` entry in `exports`,
+because the existing `"./*": "./*.ts"` pattern otherwise rewrites the request
+to `package.json.ts` and resolves a file that does not exist. `import.meta.resolve`
+survives esbuild untouched, which the suite proves rather than assumes.
+
+No contract change, no new required field for a fourth game, and the
+standalone and composed paths stay identical rather than diverging by one
+parameter.
 
 ## The change this unlocks, which is bigger than either half
 
@@ -132,12 +155,23 @@ not notice one at all.
 
 ## Tasks
 
-1. **`distDir` on `HostContext`.** Contract, host allocation, three games,
-   standalone wrappers keep their inferred default. Tests first — the
-   composition suite can assert each game serves its own `index.html` from a
-   directory the host chose. No emit yet, nothing about the build changes, and
-   `tsx` still runs everything. This task is independently correct: it removes
-   a path inference that was always going to break something.
+1. ~~**`distDir` on `HostContext`.**~~ **Done 2026-08-20**, by the different
+   route above. `apps/host/compiled.test.ts` is the gate: it bundles the real
+   composition into a directory at a different depth, boots it under plain
+   `node`, and reads back which dist directory each game resolved. It failed
+   the way the analysis predicted and slightly worse — Rail Baron and Acquire
+   both reported `apps/host/dist`, the same wrong path, because a bundle gives
+   them the same module location.
+
+   Marco Polo needed one thing more: it was the only game that never logged
+   which client it was serving, so it was also the only one the test could not
+   check. It says now, in the same words as the other two. "Which build is
+   this?" being unanswerable for exactly one game is the sort of asymmetry
+   that stays invisible until it is the one you need.
+
+   Nothing about the build changed and `tsx` still runs everything — this task
+   only removes a path inference that was always going to break something.
+   1604 tests pass; all three games still serve their client under `tsx`.
 2. **Emit.** esbuild bundle per the measurement above, sourcemaps on, output
    under `apps/host/dist/`. `tsc --noEmit` becomes the gate that runs *with*
    the emit rather than beside it, so a type error fails the build.

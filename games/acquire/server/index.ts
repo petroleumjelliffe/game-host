@@ -12,7 +12,7 @@
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketServer } from 'socket.io';
@@ -73,7 +73,28 @@ export interface ServerOptions {
   socketPath?: string;
 }
 
-const DEFAULT_DIST = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+/**
+ * Where this game's built client lives, resolved from **this package's root**
+ * rather than from this module's location.
+ *
+ * The working directory is still not an option, and for the original reason —
+ * the GAMES_DIR lesson: a service's cwd is wherever its plist says, and a
+ * relative path would quietly serve nothing. What changed is that
+ * `import.meta.url` is not an option either. It names where this *module*
+ * ended up, and compiling moves modules: an `outDir` changes their depth and
+ * a bundle collapses every game into one file, at which point all three
+ * compute the same path and at most one can be right. Verified — bundled,
+ * Rail Baron and Acquire both looked in `apps/host/dist`.
+ *
+ * Resolving the package by name asks the same question the host's own
+ * imports already ask, and gets an answer that is true from anywhere: inside
+ * the package under `tsx`, and from a bundle three directories away.
+ * `apps/host/compiled.test.ts` boots the compiled host and reads this path
+ * back.
+ */
+const DEFAULT_DIST = fileURLToPath(
+  new URL('dist', import.meta.resolve('@game-host/acquire/package.json')),
+);
 
 /**
  * Alive, and what it speaks.

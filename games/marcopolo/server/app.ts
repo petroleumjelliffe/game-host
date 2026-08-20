@@ -6,8 +6,9 @@
 // `createAppServer` owns both, and adds back the things that only make sense
 // when Marco Polo is alone in a process.
 
+import { existsSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server as SocketServer } from 'socket.io';
@@ -37,9 +38,28 @@ const TITLE = 'Marco Polo';
  */
 export const SOCKET_PATH = `${BASE_PATH}/socket.io`;
 
-// Resolved from this module's location, never the working directory: a
-// service's cwd is wherever its plist says.
-const DIST = join(dirname(fileURLToPath(import.meta.url)), '../client/dist');
+/**
+ * Where this game's built client lives, resolved from **this package's root**
+ * rather than from this module's location.
+ *
+ * The working directory is still not an option, and for the original reason —
+ * the GAMES_DIR lesson: a service's cwd is wherever its plist says, and a
+ * relative path would quietly serve nothing. What changed is that
+ * `import.meta.url` is not an option either. It names where this *module*
+ * ended up, and compiling moves modules: an `outDir` changes their depth and
+ * a bundle collapses every game into one file, at which point all three
+ * compute the same path and at most one can be right. Verified — bundled,
+ * Rail Baron and Acquire both looked in `apps/host/dist`.
+ *
+ * Resolving the package by name asks the same question the host's own
+ * imports already ask, and gets an answer that is true from anywhere: inside
+ * the package under `tsx`, and from a bundle three directories away.
+ * `apps/host/compiled.test.ts` boots the compiled host and reads this path
+ * back.
+ */
+const DIST = fileURLToPath(
+  new URL('client/dist', import.meta.resolve('@game-host/marcopolo/package.json')),
+);
 
 // "Which server is this?" has to be answerable without reading a deploy log.
 // No save version: Marco Polo persists nothing.
@@ -69,6 +89,20 @@ function mountSync({ app, httpServer }: HostContext): MountedGame {
   // proxy.
   app.get(`${BASE_PATH}/health`, health);
   app.use(BASE_PATH, express.static(DIST));
+
+  // Which client this process is serving, said out loud, in the same words
+  // Rail Baron and Acquire use. Marco Polo was the only game that never said,
+  // and "which build is this?" was correspondingly unanswerable for it
+  // without reading the code — the exact question the aggregate /health
+  // exists to answer for everything else. Unlike the other two this does not
+  // gate the static mount: a missing directory is already harmless to
+  // express.static, and changing routing is not what a log line is for.
+  const index = join(DIST, 'index.html');
+  if (existsSync(index)) {
+    console.log(`Serving built client at ${BASE_PATH}/ from ${DIST}`);
+  } else {
+    console.log(`No built client (${index} missing) — ${BASE_PATH}/ will 404. Run \`npm run build\` to host the client from this server.`);
+  }
 
   const io = new SocketServer(httpServer, {
     path: SOCKET_PATH,

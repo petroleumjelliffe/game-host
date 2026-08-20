@@ -21,6 +21,7 @@
   "type": "module",
   "private": true,
   "exports": {
+    "./package.json": "./package.json",
     "./*.js": "./*.ts",
     "./*": "./*.ts"
   },
