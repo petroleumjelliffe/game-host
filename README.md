@@ -85,10 +85,19 @@ rerunning the installer. Note a service and a by-hand start script fight over
 the same port — stop the service first if you want a foreground run.
 
 `install-services.sh` installs whatever plists are in `launchd/`, and can only
-*remove* agents whose plists are still there. So when replacing agents, run
-`./install-services.sh remove` **before** pulling the change that deletes the
-old plists — otherwise the old agents stay bootstrapped and nothing in this
-repo knows how to stop them.
+*remove* agents whose plists are still there. Both halves of that bite, in
+opposite directions, and the 2026-08-20 cutover hit each in turn:
+
+- **Remove before pulling** the change that deletes the old plists. Otherwise
+  the old agents stay bootstrapped and nothing in this repo knows how to stop
+  them.
+- **Delete the old plists before installing.** A `remove` followed by an
+  `install` while the retired plists are still in `launchd/` cheerfully brings
+  them back — three agents on 4001–4003 alongside the composed host, two of
+  them writing the same `saves/` directories it is using.
+
+The safe order when replacing agents is therefore: `remove`, then land the
+commit that both adds the new plist and deletes the old ones, then `install`.
 
 Smoke check — the aggregate says what is deployed in one request, and each
 game still answers for itself:
