@@ -21,7 +21,7 @@ export type { ConnectionStatus } from '@game-host/lobby/client/connection';
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || window.location.origin;
 const SOCKET_PATH = import.meta.env.VITE_SERVER_URL
   ? undefined
-  : `${import.meta.env.BASE_URL}socket.io`;
+  : `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}socket.io`;
 
 /**
  * The lobby half of the wire, plus the transport the game half uses.

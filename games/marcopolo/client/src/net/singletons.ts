@@ -18,7 +18,7 @@ export function connection(): LobbyConnection {
     // '/marcopolo/socket.io' — base is '/marcopolo/' in dev and build alike,
     // so no branching: whoever serves the page (Vite's proxy in dev, the
     // game server itself hosted) answers at the prefixed path.
-    socketPath: `${import.meta.env.BASE_URL}socket.io`,
+    socketPath: `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}socket.io`,
   });
   return conn;
 }
