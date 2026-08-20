@@ -1,6 +1,7 @@
 # Compile the host
 
-**Status:** in progress, 2026-08-20. Task 1 done; Tasks 2-4 open.
+**Status:** implemented, 2026-08-20. All four tasks run; merge and the
+Render dashboard edit are outstanding.
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md), which deferred this
 as "Compiling `apps/host` — measure first; the spec says so and it is still
 right." This is that measurement, and it moved two of the spec's assumptions.
@@ -240,9 +241,18 @@ not notice one at all.
    **Render needs a dashboard edit** to finish this task: start command
    `npm run start:host` → `npm run start:host:compiled`. Merging before that
    edit is safe — the old start command still works, since Task 4 has not run.
-4. **`tsx` leaves `dependencies`.** It stays in `devDependencies` for
-   `dev:server` and `dev:host`. Render's start command stops needing it at
-   runtime.
+4. ~~**`tsx` leaves `dependencies`.**~~ **Done 2026-08-20.** Moved to
+   `devDependencies` in all four packages that declared it — `apps/host` and
+   the three games, which use it for `dev:server` and the standalone boot.
+
+   Checked rather than asserted: the shipped bundle's entire external surface
+   is `cors`, `express`, `socket.io` and node builtins, and all three are
+   production dependencies of the packages that need them. Nothing the server
+   loads at runtime is a dev dependency any more.
+
+   `--include=dev` still does not go away — Render builds three Vite clients,
+   and that is a build-time need. What changed is that the *runtime* no longer
+   has one.
 
 ## Deliberately not in this plan
 
