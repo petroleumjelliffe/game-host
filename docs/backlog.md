@@ -117,6 +117,25 @@ knowingly, not a bug to squash.
 **Note it does not close the window**, only shrinks it to ~0.6s. Item 1 is
 what makes the remaining window survivable.
 
+### Done, 2026-08-20
+
+Both halves, in
+[the compile plan](plans/2026-08-20-compile-the-host.md): the build moved to
+`deploy.sh` and the agent now execs a prebuilt bundle instead of `tsx`, so the
+0.6s floor became **179ms**. Measured spawn-to-served-`/health`, not
+log-line-to-guess.
+
+The larger gain was not the seconds. Building before stopping anything means a
+broken build now leaves the old version serving, where before the old process
+was already gone by the time the failure was discovered — and it is what made
+the 9.1s `tsc` gate affordable, so a type error fails the deploy instead of
+booting happily. It was verified to ship before: a planted
+`const x: number = "..."` built clean under Vite and served all three games.
+
+Still does not close the socket.io backoff window — item 1 remains what makes
+that survivable — but ~0.2s is short enough that most clients will not notice
+one at all.
+
 
 ## 3. `KeepAlive` does not restart the agent when the process is killed
 
@@ -137,16 +156,28 @@ exit and leaves it down. Anything that signals the process rather than
 crashing it inside node lands in that hole: an OOM kill, a stray `pkill`, a
 `killall node`.
 
-**Open question before fixing:** does it restart on a *real* crash — an
-unhandled rejection inside the host, which is the case the comment is actually
-about? That exits non-zero through npm and probably does restart. Worth
-proving rather than assuming, because the answer decides whether this is a
-narrow gap or a broken guarantee.
+### Answered, 2026-08-20 — and the diagnosis above is wrong
 
-**Candidate fixes**, once that is known: `exec` the server directly from the
-plist instead of going through npm, so the exit status is node's own; or drop
-`SuccessfulExit: false` and accept that `bootout` is the only way to stop it
-deliberately.
+Reproduced under scratch launchd agents rather than reasoned about. **npm is
+not the culprit; `tsx` is.** With npm running `node` directly, a signalled
+child came back as `-15` and launchd restarted it. The agent's real chain was
+`sh -> npm -> tsx -> node`, and `pkill -f "tsx apps/host/main.ts"` matches the
+**tsx wrapper** — `tsx` treats SIGTERM as a graceful shutdown and exits **0**,
+npm faithfully reports that 0, and `SuccessfulExit: false` reads a clean exit.
+A scratch agent running the exact chain reproduced `-  0  <label>`, stopped,
+first try.
+
+**Partly fixed** by compiling: `start-host.sh` now `exec`s `node` on a bundle,
+so there is no wrapper, the PID launchd tracks is the server itself, and a
+`pkill -f tsx` cannot match it at all. Verified on the real artifact under a
+scratch agent: **SIGKILL restarts it, `bootout` stays stopped.**
+
+**Not fixed, and should not be:** a SIGTERM still leaves it down, because
+`apps/host/main.ts` handles SIGTERM by draining and exiting 0 — which is
+exactly what `launchctl bootout` sends. Nothing can distinguish a deliberate
+stop from a stray `kill -TERM` without breaking the deliberate stop. The
+operational lesson is the durable one: **never `pkill -f` on the host
+machine.**
 
 **Related:** item 2. Both are about what happens when the one process serving
 every game goes away — one measures how long it takes to come back, this one

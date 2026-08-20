@@ -211,10 +211,35 @@ not notice one at all.
    and 9.1s of typechecking there would take the restart outage from 2.3s to
    over eleven. The gate is affordable exactly when the build stops being
    something a restart waits for, and not one commit before.
-3. **Move the build out of the service start path.** `start-host.sh` execs the
-   artifact; a deploy step builds it. Closes backlog item 2, and is what makes
-   the type gate affordable — 9.1s of `tsc` in the restart path would make the
-   outage five times worse, and in a deploy step it costs nothing anyone sees.
+3. ~~**Move the build out of the service start path.**~~ **Done 2026-08-20.**
+   `start-host.sh` execs `node` on the artifact; the new `deploy.sh` pulls,
+   installs, builds and only then restarts, so everything that can fail
+   happens while the old version is still serving. Restart outage 2.3s →
+   ~0.2s. The root `build` script now runs `npm run typecheck` first, and that
+   gate was verified the way the hole was: a planted
+   `const _probe: number = "definitely not a number"` used to build clean and
+   serve, and now fails the build naming `menu.ts(71,7)`.
+
+   `exec node`, not `exec npm run start:host:compiled`, and that turned out to
+   matter. Chasing backlog item 3 under scratch launchd agents showed its
+   diagnosis was wrong: **npm is not the culprit, `tsx` is.** npm running
+   `node` directly reports a signalled child as `-15` and launchd restarts it.
+   The agent's real chain was `sh -> npm -> tsx -> node`, `pkill -f "tsx
+   apps/host/main.ts"` matches the *tsx wrapper*, and `tsx` treats SIGTERM as
+   a graceful shutdown and exits 0 — which npm faithfully reports, and which
+   `SuccessfulExit: false` reads as a clean stop. A scratch agent running that
+   exact chain reproduced `-  0  <label>` first try.
+
+   With no wrapper the tracked PID is the server itself, and SIGKILL now
+   restarts it (verified on the real artifact). A SIGTERM still does not, and
+   should not: `bootout` stops a service by sending SIGTERM and `main.ts`
+   drains and exits 0, so nothing can tell a deliberate stop from a stray
+   `kill` without breaking the deliberate one. Backlog item 3's remaining
+   half is an operational rule, not a code fix — never `pkill -f` on the host.
+
+   **Render needs a dashboard edit** to finish this task: start command
+   `npm run start:host` → `npm run start:host:compiled`. Merging before that
+   edit is safe — the old start command still works, since Task 4 has not run.
 4. **`tsx` leaves `dependencies`.** It stays in `devDependencies` for
    `dev:server` and `dev:host`. Render's start command stops needing it at
    runtime.

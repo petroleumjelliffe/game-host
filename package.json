@@ -13,7 +13,7 @@
     "dev:host": "tsx watch apps/host/main.ts",
     "test": "node scripts/test-all.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run typecheck && npm run build --workspaces --if-present"
   },
   "engines": {
     "node": ">=24"

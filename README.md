@@ -124,30 +124,40 @@ repo names an origin**. Do not reintroduce one.
 
 ```bash
 cd ~/Developer/game-host
-git pull                                          # on main
-launchctl kickstart -k gui/$(id -u)/com.game-host
+./deploy.sh
 ```
 
-That is the whole deploy. `start-host.sh` rebuilds all three clients and
-restarts the process, because a service restarted after a `git pull` should
-serve the code that was pulled. Verify:
+That is the whole deploy: pull, install, typecheck, build all three clients
+and the server bundle, restart the agent, then poll `/health` and print it. It
+stops on the first failure, and every step that can fail happens **while the
+old version is still serving** — a broken build leaves the previous one up
+instead of taking everything down and then discovering the problem.
 
-```bash
-curl -s localhost/health          # three games and their versions
-curl -s localhost/ | head         # the generated menu
-```
+**A restart is a ~0.2s outage.** The agent execs a prebuilt bundle rather than
+building at boot: measured 179ms from spawn to a served `/health`, against
+2.3s when the build ran with the old process already gone. Clients still
+reconnect on socket.io's own backoff, which is longer than the outage — see
+the backlog. It is no longer a reason to avoid deploying mid-evening, though
+rebuilding the clients does swap content-hashed assets out from under pages
+that are already loaded.
 
-**A restart is a ~2.3s outage**, not a blip: the build runs *after* the old
-process is gone. Clients reconnect on their own — socket.io buffers and
-retries — but a game in progress will pause. Do not deploy mid-evening.
+`git pull && launchctl kickstart -k gui/$(id -u)/com.game-host` still works
+and is *not* a deploy any more: it restarts the agent on whatever artifact was
+last built. That is the right behaviour for a restart — it is also why
+forgetting `./deploy.sh` looks like a deploy that silently did nothing.
 
 **Do not run `npm run start:host` by hand here.** It fights the agent for port
 4000, and `DATA_DIR` is deliberately unset outside the start script. Do not
-run `npm run build` here either while people are playing: the agent serves
-`games/*/dist` from disk per request, and a rebuild swaps content-hashed
-assets out from under loaded pages. Develop in a worktree instead
+run `npm run build` here either while people are playing, for the asset reason
+above. Develop in a worktree instead
 (`git worktree add ~/Developer/game-host-dev -b <branch>`), which also makes
 it impossible for a stray branch to be what an unattended restart deploys.
+
+**Never `pkill -f` on this machine.** Twice on 2026-08-20 a `pkill` aimed at a
+worktree's test server matched the agent instead and left the front door
+serving 502. The compiled artifact no longer shares a command line with a
+`tsx` dev server, which removes that particular collision, but the general
+hazard stands: kill background servers by the PID your shell gave you.
 
 ### To Render (online)
 
@@ -161,7 +171,7 @@ serves all three games regardless.
 | --- | --- |
 | Repo / branch | `github.com/petroleumjelliffe/game-host`, `main` |
 | Build command | `npm install --include=dev && npm run build` |
-| Start command | `npm run start:host` |
+| Start command | `npm run start:host:compiled` |
 | Health check path | `/health` |
 | Environment | `DATA_DIR=/var/data`, `NODE_ENV=production` |
 | Disk | `dsk-d9rafvlbedkc73coe2k0` at `/var/data`; the host creates `acquire/` and `railbaron/` beneath it |
@@ -185,6 +195,11 @@ Four things there are load-bearing in ways that are not obvious:
   and moved nothing, 2026-08-20.
 - **Every deploy drops every socket.** Clients reconnect, but see the backlog:
   Marco Polo still gives no feedback while disconnected.
+- **The start command must be `start:host:compiled`.** `npm run build` emits
+  `apps/host/dist/main.mjs`, and the start command runs plain `node` on it —
+  no `tsx`, no transpiling three game servers on every cold start. The
+  uncompiled `npm run start:host` still works and is what `dev:host` uses;
+  running it here would just be slower and would need `tsx` at runtime.
 
 Verify a deploy:
 
