@@ -172,4 +172,33 @@ describe('two games sharing one HTTP server', () => {
     expect(rail.connected).toBe(false);
     expect(marco.connected).toBe(true);
   });
+
+  it('leaves a disconnected client free to come back, which every deploy needs', async () => {
+    // The test above asserts the socket goes away. It says nothing about
+    // whether it can return, and that gap hid a real bug for as long as the
+    // composed host existed: `closeSockets` opened with
+    // `disconnectSockets(true)`, whose comment reasonably said "clients go
+    // away rather than reconnecting into a server that is shutting down".
+    //
+    // What it actually bought was permanence. socket.io's client treats a
+    // *server-initiated* disconnect as final — reason `io server disconnect`,
+    // `active` false — and the manager never retries again. Not on a longer
+    // backoff: never. So every deploy and every restart left every open page
+    // dead until somebody reloaded it by hand. Seen in a browser against the
+    // real build, then fixed by closing the engine instead.
+    //
+    // The reason string is what the client branches on, so it is what this
+    // asserts. `active` is the consequence and the thing anyone actually
+    // cares about: it is socket.io's own word for "will try again".
+    const { url, railbaron } = await boot();
+    const rail = await client(url, '/railbaron/socket.io');
+
+    const reason = await new Promise<string>((resolve) => {
+      rail.on('disconnect', (r) => { resolve(r); });
+      void railbaron.close();
+    });
+
+    expect(reason).not.toBe('io server disconnect');
+    expect(rail.active).toBe(true);
+  });
 });

@@ -16,8 +16,8 @@ CORS, a shared remembered name. Those are scoped decisions, not oversights.
 "Marco Polo and Acquire both hung on creating a room the first time; I had to
 reload the page and try again."
 
-**Root cause, in three parts.** The transport is not the problem — it
-recovers. `createRoom` is fire-and-forget (no ack, no timeout,
+**Root cause, in three parts.** ~~The transport is not the problem — it
+recovers.~~ **That claim was false** — see the correction below. `createRoom` is fire-and-forget (no ack, no timeout,
 `packages/lobby/client/connection.ts`), socket.io buffers the emit while
 disconnected and flushes it on reconnect. Verified in isolation: clicking with
 the server down produced the room 2s after it came back, with no reload.
@@ -49,18 +49,39 @@ genuinely dead server. This is the fix that makes the symptom explain itself.
 **Acquire: done.** 8s timeout, tested — the sibling of the rejection test that
 was already there.
 
-**Marco Polo: open.** It needs the same treatment and has none of it: no
-waiting state, no status check, no timeout. Two ways in, and the smaller one
-is deliberately preferred for now:
+**Marco Polo: done**, the smaller way, as planned. The button reads the
+connection status it was always handed and shows `CONNECTING…` disabled while
+`status !== 'open'`, and `onRejected` — which had no subscriber anywhere in
+that client, on any screen — now puts a line under the buttons. Still no
+component test: its client has a jsdom project but no `@testing-library`, and
+that decision stands. Verified in a browser against the real build instead.
 
-- _Now, when someone picks it up:_ the button reads the connection status it
-  is already handed and shows `CONNECTING…` while `status !== 'open'` instead
-  of swallowing the click. ~10 lines, no new dependency. It does not cover
-  connected-but-silent — that is what the shared timeout below is for.
-- _Not now:_ a component test. Marco Polo's client has a jsdom project but no
-  `@testing-library`, so testing this means adding a dev dependency, and a
-  dependency added mid-cutover is the linter argument again. **Testing follows
-  once the shared extraction lands** — decided 2026-08-20.
+It does not cover connected-but-silent. That is the shared timeout below, and
+it is the only piece of this item still open.
+
+### The correction, 2026-08-20 — "the transport recovers" was false
+
+Found while verifying the Marco Polo fix in a browser, which is the only
+reason it was found at all: with the server killed and brought back, the page
+sat dead thirty seconds after a five-second outage, while a raw websocket to
+the very same socket.io path opened fine.
+
+`packages/host/close.ts` opened with `disconnectSockets(true)`. socket.io's
+client treats a **server-initiated** disconnect as final — reason
+`io server disconnect`, `socket.active` false — and the manager never retries
+again. Not on a longer backoff. Never.
+
+So **every deploy left every open page permanently dead**, recoverable only by
+a manual reload, for as long as the composed host has existed. The original
+verification saw a recovery because it killed and restarted a server without
+going through the graceful shutdown path — which is exactly the path a real
+deploy takes.
+
+Fixed by closing the engine alone, so the client sees a transport close and
+retries by itself: connected → `CONNECTING…` at +0.4s → connected at +8.8s,
+no reload. `twoGames.test.ts` asserted that a closing game disconnects its own
+sockets and only its own; it never asked whether they could come back, and now
+it does.
 
 ### The shared extraction — deferred on purpose
 
