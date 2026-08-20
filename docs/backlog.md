@@ -24,11 +24,11 @@ the server down produced the room 2s after it came back, with no reload.
 
 What fails is the UI, and only in two of the three games:
 
-| Game | On click with the server unreachable |
-| --- | --- |
-| **Rail Baron** | 8s timeout clears state and says "No answer through … — is the game server behind it running?" (`src/OnlineApp.tsx`). **The reference.** |
-| **Acquire** | `setWaiting(true)`, cleared only by `joined` or `rejected` (`src/pages/OnlineLobbyPage.tsx`). An *absent* server sends neither, so the spinner latches on a disabled button. |
-| **Marco Polo** | Bare `onClick` (`client/src/screens/HomeScreen.tsx`). No waiting state, no status check, no timeout — the click vanishes into the buffer with no feedback at all. |
+| Game           | On click with the server unreachable                                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Rail Baron** | 8s timeout clears state and says "No answer through … — is the game server behind it running?" (`src/OnlineApp.tsx`). **The reference.**                                     |
+| **Acquire**    | `setWaiting(true)`, cleared only by `joined` or `rejected` (`src/pages/OnlineLobbyPage.tsx`). An _absent_ server sends neither, so the spinner latches on a disabled button. |
+| **Marco Polo** | Bare `onClick` (`client/src/screens/HomeScreen.tsx`). No waiting state, no status check, no timeout — the click vanishes into the buffer with no feedback at all.            |
 
 Acquire's file already carries a comment about this failure class — "a server
 that is down or slow must not leave `waiting` latched forever on a disabled
@@ -53,11 +53,11 @@ was already there.
 waiting state, no status check, no timeout. Two ways in, and the smaller one
 is deliberately preferred for now:
 
-- *Now, when someone picks it up:* the button reads the connection status it
+- _Now, when someone picks it up:_ the button reads the connection status it
   is already handed and shows `CONNECTING…` while `status !== 'open'` instead
   of swallowing the click. ~10 lines, no new dependency. It does not cover
   connected-but-silent — that is what the shared timeout below is for.
-- *Not now:* a component test. Marco Polo's client has a jsdom project but no
+- _Not now:_ a component test. Marco Polo's client has a jsdom project but no
   `@testing-library`, so testing this means adding a dev dependency, and a
   dependency added mid-cutover is the linter argument again. **Testing follows
   once the shared extraction lands** — decided 2026-08-20.
@@ -93,12 +93,12 @@ whole reason the current version went untested and unwritten in two games.
 ## 2. Every restart takes all three games down for ~2.3 seconds
 
 `start-host.sh` runs `npm run build` and only then `exec npm run start:host`,
-so the build happens *after* the old process is gone. Measured:
+so the build happens _after_ the old process is gone. Measured:
 
-| | before the first request is served |
-| --- | --- |
-| `npm run build && npm run start:host` (what the agent runs) | **2.3s** |
-| `npm run start:host` alone | **0.6s** |
+|                                                             | before the first request is served |
+| ----------------------------------------------------------- | ---------------------------------- |
+| `npm run build && npm run start:host` (what the agent runs) | **2.3s**                           |
+| `npm run start:host` alone                                  | **0.6s**                           |
 
 Client-visible dead time is longer — 3.6–5.9s measured on the live host, with
 2–3 `xhr poll error`s first — because socket.io's retry backoff (500ms,
@@ -135,7 +135,6 @@ booting happily. It was verified to ship before: a planted
 Still does not close the socket.io backoff window — item 1 remains what makes
 that survivable — but ~0.2s is short enough that most clients will not notice
 one at all.
-
 
 ## 3. `KeepAlive` does not restart the agent when the process is killed
 
@@ -182,3 +181,29 @@ machine.**
 **Related:** item 2. Both are about what happens when the one process serving
 every game goes away — one measures how long it takes to come back, this one
 is about whether it comes back at all.
+
+## Per game improvmeents
+
+### Lobby
+
+- spectator mode for all games
+- better create room feedback while server responding or down
+
+### Rail baron
+
+- earn money from deliveries, pay money to track owners, buy lines
+- map animation for desination rolls and region picking
+- auto pan/zoom when moving
+- better controls to select next node
+
+### Marco polo
+
+- splashing water action
+- tap to move farther but make a splash
+- turbo meter?
+
+### Acquire
+
+- finish applying reskin
+- broadcast per step moves to minimize other players wait times
+- move lobby in game?
