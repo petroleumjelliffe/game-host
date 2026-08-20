@@ -111,6 +111,13 @@ wants to be a pure module beside it, taking the ask and the two answer
 channels as arguments. Then it is testable without a socket, which is the
 whole reason the current version went untested and unwritten in two games.
 
+**Planned, 2026-08-20:**
+[the lobby pass](plans/2026-08-20-the-lobby-pass.md) takes all three, plus a
+fourth thing that only became visible while verifying this item — the three
+games' test infrastructure has diverged far enough to hide bugs, and Marco
+Polo cannot render a component at all, which is why this item's Marco Polo
+half was verified in a browser instead of in a test.
+
 ## 2. Every restart takes all three games down for ~2.3 seconds
 
 `start-host.sh` runs `npm run build` and only then `exec npm run start:host`,
