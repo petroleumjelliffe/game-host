@@ -172,9 +172,45 @@ not notice one at all.
    Nothing about the build changed and `tsx` still runs everything — this task
    only removes a path inference that was always going to break something.
    1604 tests pass; all three games still serve their client under `tsx`.
-2. **Emit.** esbuild bundle per the measurement above, sourcemaps on, output
-   under `apps/host/dist/`. `tsc --noEmit` becomes the gate that runs *with*
-   the emit rather than beside it, so a type error fails the build.
+2. ~~**Emit.**~~ **Done 2026-08-20.** `apps/host/build.ts` bundles with
+   esbuild to `apps/host/dist/main.mjs`, sourcemaps on, `node_modules`
+   external and every `@game-host/*` source inlined. 33ms. `npm run
+   start:host:compiled` runs it with `--enable-source-maps`; the default
+   `start:host` still runs `tsx`, and **neither deployment's start command
+   changed** — that is Task 3.
+
+   Re-measured on the shipped artifact rather than the throwaway bundle:
+
+   | | median, spawn to a served /health |
+   | --- | --- |
+   | `tsx apps/host/main.ts` | 478ms |
+   | compiled, `--enable-source-maps` | **179ms** |
+   | compiled, no source maps | 153ms |
+
+   Readable stack traces cost 26ms of boot, which is not a trade worth
+   thinking about twice.
+
+   `hostBuildOptions` is exported and `compiled.test.ts` builds through it, so
+   the suite exercises the shipped configuration rather than a copy. That is
+   load-bearing: every bug this suite catches is a consequence of how modules
+   get resolved and merged, so a test bundling by its own rules could pass
+   green while the real build resolved something else.
+
+   The suite gained the check the analysis had not asked for and should have.
+   Every game's `mount` is emphatic that three socket.io servers on one HTTP
+   server is a delicate arrangement — `destroyUpgrade: false`,
+   `serveClient: false`, never `io.close()` — and every one of those hazards
+   is module-level wiring that a bundler may reorder and deduplicate. Nothing
+   about bundling *should* disturb it, and "should" was doing enough work
+   there to deserve a real client: the compiled host now takes a websocket
+   connection on each game's own socket path, one at a time so a failure
+   cannot land on whichever game lost a race. 1606 tests pass.
+
+   **The `tsc --noEmit` gate moved to Task 3**, deliberately. It belongs with
+   the emit, but `npm run build` is still inside the service start path today,
+   and 9.1s of typechecking there would take the restart outage from 2.3s to
+   over eleven. The gate is affordable exactly when the build stops being
+   something a restart waits for, and not one commit before.
 3. **Move the build out of the service start path.** `start-host.sh` execs the
    artifact; a deploy step builds it. Closes backlog item 2, and is what makes
    the type gate affordable — 9.1s of `tsc` in the restart path would make the
