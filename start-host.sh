@@ -20,7 +20,9 @@ GAME_HOST="$HOME/Developer/game-host"
 #
 # The subdirectory names are the ones the three retired scripts already
 # created, so this finds every existing room with nothing to migrate. (Render
-# is not so lucky: its disk says games/, and the cutover renames it once.)
+# was not so lucky: its disk said games/, the pre-deploy mv meant to rename it
+# could not see the disk at all, and its pre-cutover rooms were abandoned
+# rather than moved -- 2026-08-20. Nothing on this machine was at risk.)
 DATA_DIR="$GAME_HOST/saves"
 export DATA_DIR
 

@@ -24,10 +24,13 @@ import { renderMenu } from './menu.js';
  * `dataDir` is a *name*, not a path — the host joins it to DATA_DIR. It is
  * `acquire`, not `acquire-startups-m1`: a directory name is not a URL path,
  * and the long one is a GitHub Pages repository name that leaked into
- * Acquire's URL and is being retired at cutover. On the Render instance the
- * existing disk holds `/var/data/games`, so the cutover does a one-shot
- * `mv /var/data/games /var/data/acquire` — a permanent special case here
- * would be the wrong trade against a single move.
+ * Acquire's URL and was retired at cutover. Render's disk still holds an
+ * orphaned `/var/data/games` from before it: the one-shot
+ * `mv /var/data/games /var/data/acquire` was set as a pre-deploy command, and
+ * a Render pre-deploy command cannot see the persistent disk — it reported
+ * success and moved nothing. Those rooms were abandoned by decision
+ * (2026-08-20) rather than recovered, which is why this row still says
+ * `acquire` and no special case was ever added here.
  *
  * `undefined` means the game persists nothing, and gets no directory at all
  * rather than an empty one somebody has to ask about later.
