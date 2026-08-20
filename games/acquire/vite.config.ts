@@ -32,10 +32,10 @@ export default defineConfig(() => ({
     // asset-URL rewrite), and base is now BASE_PATH uniformly in both (it
     // used to be "/" in dev only). Substituting BASE_PATH here too made Vite
     // prepend it a *second* time, doubling the path to
-    // "/acquire-startups-m1/acquire-startups-m1/manifest.webmanifest" — which
+    // "/acquire/acquire/manifest.webmanifest" — which
     // the SPA fallback answered with a silent 200 text/html instead of a
     // 404. A bare "/" lets Vite's own base-prefixing run exactly once, so
-    // dev and build both end up at "/acquire-startups-m1/manifest.webmanifest".
+    // dev and build both end up at "/acquire/manifest.webmanifest".
     //
     // replaceAll, not replace: the first __THEME_COLOR__ in the file is in
     // the comment explaining it, and .replace() substituted the comment and

@@ -27,7 +27,7 @@ afterEach(async () => {
 
 const PATHS = {
   railbaron: '/railbaron',
-  acquire: '/acquire-startups-m1',
+  acquire: '/acquire',
   marcopolo: '/marcopolo',
 };
 
@@ -180,5 +180,53 @@ describe('one game\'s SPA fallback', () => {
     const res = await fetch(`${host.url}${PATHS.railbaron}/room/ABCD`, { method: 'POST' });
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe('the old Acquire path, kept working indefinitely', () => {
+  // `/acquire-startups-m1` was a GitHub Pages repository name that leaked into
+  // the URL (spec §7). The rename to `/acquire` broke every link anyone had
+  // ever shared — a room code is the thing people paste to each other, so a
+  // redirect that drops the suffix is a redirect that loses the room.
+  //
+  // Not a 302: this is permanent, and a browser that caches it is doing the
+  // right thing. Kept indefinitely rather than for a deprecation window,
+  // because the cost is two lines and the failure is someone's evening.
+  it('redirects a shared room link to the new path, suffix intact', async () => {
+    host = await startTestHost();
+
+    const res = await fetch(`${host.url}/acquire-startups-m1/room/ABCD`, { redirect: 'manual' });
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('/acquire/room/ABCD');
+  });
+
+  it('redirects the bare path to the new base', async () => {
+    host = await startTestHost();
+
+    const res = await fetch(`${host.url}/acquire-startups-m1/`, { redirect: 'manual' });
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('/acquire/');
+  });
+
+  // A query string is how a room link arrives from some chat clients, and
+  // dropping it silently is the same class of loss as dropping the suffix.
+  it('keeps the query string', async () => {
+    host = await startTestHost();
+
+    const res = await fetch(`${host.url}/acquire-startups-m1/room/ABCD?seat=red`, { redirect: 'manual' });
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('/acquire/room/ABCD?seat=red');
+  });
+
+  // The redirect must not shadow the game that now lives there.
+  it('does not touch the new path', async () => {
+    host = await startTestHost();
+
+    const res = await fetch(`${host.url}/acquire/health`);
+
+    expect(res.status).toBe(200);
   });
 });

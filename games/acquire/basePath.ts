@@ -11,4 +11,4 @@
  * Root-level rather than in `src/` because `vite.config.ts` and build scripts
  * run under Node, outside the app graph.
  */
-export const BASE_PATH = '/acquire-startups-m1';
+export const BASE_PATH = '/acquire';

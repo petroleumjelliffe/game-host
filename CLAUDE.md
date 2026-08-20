@@ -18,7 +18,7 @@ It is also, as of this migration, where the game code itself lives:
 | `packages/lobby` | `@game-host/lobby` — the shared lobby package (seating, join/rejoin, presence) that Rail Baron and Acquire both depend on as a workspace package, not a git submodule. |
 | `games/marcopolo` | Marco Polo — server (`server/`), client (`client/`), protocol (`protocol/`). |
 | `games/railbaron` | Rail Baron — engine, session, server and a React client. |
-| `games/acquire` | Acquire — engine, session, server and a React client; still deploys to GitHub Pages under `/acquire-startups-m1`. |
+| `games/acquire` | Acquire — engine, session, server and a React client. Served at `/acquire`; its GitHub Pages deploy is retired. |
 
 `npm install` at the root links all six workspaces; `npm test` and
 `npm run typecheck` at the root cover them all in one command (see Testing,
@@ -225,7 +225,7 @@ caddy run --config Caddyfile         # foreground, for trying it
 ./install-services.sh remove         # stop and uninstall
 
 curl http://localhost/railbaron/health            # smoke check through Caddy
-curl http://localhost/acquire-startups-m1/health
+curl http://localhost/acquire/health
 curl http://localhost/marcopolo/health
 ```
 
@@ -244,8 +244,10 @@ When a number changes, PORTS.md changes first and the games follow; its "known
 consumers" list names the exact files in each game repo to update.
 
 A game's proxy path must equal its client's built base path, because assets are
-requested at `<base>/assets/…` and nothing rewrites them. That is why Acquire's
-path is its long GitHub Pages repo name.
+requested at `<base>/assets/…` and nothing rewrites them. Acquire's path used to
+be its long GitHub Pages repo name for exactly that reason; it is `/acquire`
+since 2026-08-20, and `apps/host` redirects the old one permanently with the
+suffix intact, because a room code is the thing people paste to each other.
 
 ## Adding a game
 

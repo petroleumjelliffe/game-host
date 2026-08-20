@@ -357,7 +357,7 @@ describe('a socket that drops mid-segment and comes back', () => {
  * than both paths happening to work.
  */
 describe('createLobbyConnection against a socket.io mount moved off /socket.io', () => {
-  const SOCKET_PATH = '/acquire-startups-m1/socket.io';
+  const SOCKET_PATH = '/acquire/socket.io';
 
   let prefixed: { httpServer: HttpServer; io: SocketServer; port: number };
 

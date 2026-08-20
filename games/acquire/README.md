@@ -27,7 +27,8 @@ Largely the same as the board game
 * Game ends when no more tiles can be played, because there are no spaces left that won'tconnect 2 unmergable Startups
 
 # Play Now
-[Start New Game](https://petroleumjelliffe.github.io/acquire-startups-m1/)
+Served by the game host at `/acquire` — on the house machine over the wifi, and
+on Render for online play. The GitHub Pages deploy is retired.
 
 # Local development
 The lobby is the `@game-host/lobby` workspace package, resolved by `npm install` at the

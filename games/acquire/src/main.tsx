@@ -10,7 +10,7 @@ registerServiceWorker();
 // The router's basename comes from Vite's own BASE_URL, which the config
 // builds from the one copy of the path in `basePath.ts` — this file used to
 // hold a second hardcoded copy. BASE_URL carries a trailing slash
-// ('/acquire-startups-m1/'); the router wants none.
+// ('/acquire/'); the router wants none.
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 
 // StrictMode double-invokes mount effects and state updaters on purpose, to

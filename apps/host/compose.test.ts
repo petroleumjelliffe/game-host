@@ -51,7 +51,7 @@ afterEach(async () => {
 // which failed loudly only because the round never started.
 const MARCOPOLO = { base: '/marcopolo', version: MP_VERSION };
 const RAILBARON = { base: '/railbaron', version: RB_PROTOCOL_VERSION };
-const ACQUIRE = { base: '/acquire-startups-m1', version: AQ_VERSION };
+const ACQUIRE = { base: '/acquire', version: AQ_VERSION };
 
 /** Rail Baron's first legal append: red arrives at Chicago (city 20, NC). */
 const RED_HOME = { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: null };

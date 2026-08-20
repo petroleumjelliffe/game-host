@@ -277,17 +277,20 @@ npm run verify:layout  # drives a real Chrome over CDP — see the caveat below
 
 ## Environment and deployment
 
-Client on GitHub Pages under the base path `/acquire-startups-m1` — **one copy, in `basePath.ts`**
+Client served by the game host under the base path `/acquire` — **one copy, in `basePath.ts`**
 (the old duplicate hardcodes in `vite.config.ts` and `src/main.tsx` are gone; the config imports
 it, the router derives its basename from Vite's `BASE_URL`, and the manifest generator reads it
 too); server on Render, service `srv-d3klnhnfte5s73diht90`, **plan `starter`** (paid) —
 *not* free, whatever older notes say. The client is origin-relative (`src/net/connection.ts`):
 with no `VITE_SERVER_URL` set, pages, assets and sockets all ride the page's own origin, sockets
 at `${BASE_URL}socket.io` — so a phone on the LAN works for free, and no client code names a host
-or port. A build that sets `VITE_SERVER_URL` (Pages → Render) wins outright and keeps socket.io's
-default path; the Render service sets `SOCKET_PATH=/socket.io` (env, read at the boot seam) so its
-mount matches — the server's own default mount is `/acquire-startups-m1/socket.io`, which is what
-`npm run serve` and the game-host front door use. The server reads `PORT` (4002; Acquire's slot in
+or port. Nothing in this repo sets `VITE_SERVER_URL` any more — `.env.production` went with the Pages
+deploy on 2026-08-20 — so every build is origin-relative and the socket mount is always
+`/acquire/socket.io`. The `VITE_SERVER_URL` branch survives in `src/net/connection.ts` for the
+one build still using it: the Pages client, built from the old `acquire-startups-m1` repo, which
+stays live until that repo is archived. Render still sets `SOCKET_PATH=/socket.io` for that
+client's benefit; the composed host does not read that variable and cannot serve the bare path,
+so pointing Render at this repo is what finally ends it. The server reads `PORT` (4002; Acquire's slot in
 the game-host repo's PORTS.md) and writes rooms to `server/games/`, gitignored.
 
 **Rooms are durable as of 2026-08-08, and the gone-room ending is no longer the normal case.** A

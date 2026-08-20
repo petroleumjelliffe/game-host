@@ -19,7 +19,6 @@
     "start:server": "tsx server/index.ts",
     "serve": "npm run build && tsx server/index.ts",
     "preview": "vite preview",
-    "deploy": "gh-pages -d dist",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
@@ -47,7 +46,6 @@
     "@types/react-dom": "^19.2.4",
     "autoprefixer": "^10.4.14",
     "concurrently": "^9.2.1",
-    "gh-pages": "^6.3.0",
     "postcss": "^8.4.27",
     "tailwindcss": "^3.3.3"
   }

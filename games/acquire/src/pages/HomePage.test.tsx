@@ -58,7 +58,7 @@ describe('no URL renders a white screen', () => {
   it('redirects an unknown path to the mode chooser', async () => {
     const { default: App } = await import('../App');
     render(
-      <MemoryRouter initialEntries={['/acquire-startups-m1/']}>
+      <MemoryRouter initialEntries={['/acquire/']}>
         <App />
       </MemoryRouter>,
     );

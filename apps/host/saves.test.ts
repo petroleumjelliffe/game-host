@@ -19,7 +19,7 @@ import {
 } from './testHost.js';
 
 const RAILBARON = '/railbaron';
-const ACQUIRE = '/acquire-startups-m1';
+const ACQUIRE = '/acquire';
 const RED_HOME = { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: null };
 
 let hosts: TestHost[] = [];
@@ -51,10 +51,17 @@ describe('the directories the host allocates', () => {
     expect(entries).not.toContain('marcopolo');
   });
 
-  it('names Acquire\'s by the game, not by its URL', async () => {
-    // A directory name is not a URL path. `/acquire-startups-m1` is a GitHub
-    // Pages repository name that leaked into the URL and is being retired at
-    // cutover; the directory never had to carry it.
+  it('names Acquire\'s by the game, and never by the URL it happens to match', async () => {
+    // These agree now and did not before. `/acquire-startups-m1` was a GitHub
+    // Pages repository name that leaked into the URL; the directory was
+    // always plain `acquire`, which is what let the Render cutover be a
+    // single `mv` rather than a permanent special case.
+    //
+    // The agreement is a coincidence, not the rule — `dataDir` is a separate
+    // field in the GAMES table precisely so a game's URL and its directory
+    // can differ. The negative assertion stays as the guard: if the two ever
+    // become the same string by derivation rather than by accident, the old
+    // name reappearing here is how we would find out.
     const host = await boot();
 
     const entries = await readdir(host.dataDir);

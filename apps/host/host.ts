@@ -84,6 +84,37 @@ export async function createHost(opts: HostOptions): Promise<RunningHost> {
     res.json({ ok: true, games: byPath });
   });
 
+  // Before the mounts, for the same reason `/health` is: registration order
+  // decides who answers, and this must not be shadowed by a game's SPA
+  // fallback. It cannot collide with the game it points at — Acquire is
+  // mounted at `/acquire`, and no prefix of this string matches that.
+  //
+  // `/acquire-startups-m1` was a GitHub Pages repository name that leaked
+  // into Acquire's URL (spec §7). Renaming it to `/acquire` invalidated every
+  // link anyone ever shared, and the thing people share is a room code — so
+  // the suffix has to survive the redirect or the redirect loses the room.
+  // The query string too: that is how a room link arrives from some chat
+  // clients.
+  //
+  // A prefix test rather than a route pattern, deliberately. Express 5 moved
+  // to a path-to-regexp whose wildcard syntax changed under it, and a
+  // mis-specified pattern here fails by silently not matching — which looks
+  // exactly like "the redirect works" until someone opens an old link. This
+  // form has no syntax to get wrong, and `routes.test.ts` pins the behaviour.
+  //
+  // 301, not 302, and kept indefinitely rather than for a deprecation window:
+  // the cost is this block, and the failure is somebody's evening.
+  const OLD_ACQUIRE = '/acquire-startups-m1';
+  app.use((req, res, next) => {
+    if (req.path !== OLD_ACQUIRE && !req.path.startsWith(`${OLD_ACQUIRE}/`)) {
+      next();
+      return;
+    }
+    // From `originalUrl`, not `path`, because only the former carries the
+    // query string.
+    res.redirect(301, `/acquire${req.originalUrl.slice(OLD_ACQUIRE.length)}`);
+  });
+
   for (const { mount, dataDir } of GAMES) {
     const ctx: HostContext = { app, httpServer };
     if (dataDir !== undefined) {

@@ -106,7 +106,7 @@ game still answers for itself:
 curl http://localhost/health          # all three games' versions
 curl http://localhost/               # the generated menu
 curl http://localhost/railbaron/health
-curl http://localhost/acquire-startups-m1/health
+curl http://localhost/acquire/health
 curl http://localhost/marcopolo/health
 ```
 

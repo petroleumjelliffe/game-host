@@ -23,7 +23,7 @@ ephemeral range (49152+, which the OS hands out randomly):
 | --- | --- | --- | --- |
 | **the composed host** | **4000** | — | `/` — the menu, and every game below it |
 | Rail Baron, alone | 4001 | 7931 | `/railbaron` |
-| Acquire, alone | 4002 | 7932 | `/acquire-startups-m1` |
+| Acquire, alone | 4002 | 7932 | `/acquire` |
 | Marco Polo, alone | 4003 | 7933 | `/marcopolo` |
 | (next title), alone | 4004 | 7934 | — |
 
