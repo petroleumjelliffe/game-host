@@ -12,9 +12,11 @@ games makes the diff unreviewable during a migration. The migration is over.
 The backlog also says they should be designed together rather than three
 reactive times, and this is that.
 
-It picks up a fourth thing the backlog does not name, because it only became
-visible while verifying item 1: **the three games' test infrastructure has
-diverged in a way that is now hiding bugs.**
+It picks up two things the backlog does not name, both of which only became
+visible while verifying item 1, and both about tests rather than code:
+**the three games' test infrastructure has diverged in a way that is now
+hiding bugs**, and **the shared package is the least-tested code in the
+repo.**
 
 ## Prerequisite: the LAN is serving a stale bundle
 
@@ -112,8 +114,16 @@ exercises `packages/lobby/client/identity.ts` through a five-line re-export.
 The lobby's own `identity.test.ts` is 25 lines and covers only namespacing.
 
 So the substantive coverage of a shared module lives in one of its three
-consumers, and the other two inherit none of it. This is the pattern in
-miniature, and it is why the ordering question below has a clear answer.
+consumers, and the other two inherit none of it.
+
+**And the same inversion shows up in the test scaffolding.** Five files across
+two games hand-roll a `LobbyConnection` fake — the shared interface — and two
+of them independently wrote down the same rule about why its handler
+registries must be `Set`s. That rule belongs to the hook. It is recorded
+twice, in consumers, and nowhere in the package that imposes it.
+
+This is the pattern in miniature, and it is why the ordering question below
+has a clear answer.
 
 ## The finding: one problem, four incompatible answers
 
@@ -233,12 +243,47 @@ no tests. The assertions that matter are the ones no game asserts today:
 Every one of those is a rule already written down in a comment in that file and
 enforced nowhere.
 
-This needs `@testing-library/react` in `packages/lobby`, which it does not yet
-have. That is fine and it is the right place for it — the package already
-declares `react` as a peer dependency and ships a hook.
+**This is cheaper than it looks, which is probably why nobody did it.**
+`useLobbyRoom(roomId, connection, identity)` takes all three of its
+dependencies as arguments. Testing it needs no socket, no server, and no
+`localStorage` — just two fakes and `renderHook`.
 
-**Done when:** the lobby's test count roughly triples, and each new test has
-been shown to fail against a deliberate break of the rule it names.
+**And the third deliverable falls out of the second: a shared
+`LobbyConnection` fake.** There are five hand-rolled ones already, each
+re-implementing the same capture-and-fire handler registry:
+
+| File | lines |
+| --- | --- |
+| `games/acquire/src/pages/RoomPage.test.tsx` | 876 |
+| `games/acquire/src/pages/OnlineLobbyPage.test.tsx` | 143 |
+| `games/acquire/src/net/useRoom.test.ts` | 96 |
+| `games/railbaron/src/net/useRoom.lifecycle.test.tsx` | 61 |
+| `games/railbaron/src/net/connection.test.ts` | 47 |
+
+Acquire's two are near-identical and carry the *same comment*, twice, about
+why the handlers are a `Set` and not a single slot — "`useLobbyRoom` and the
+game's `useRoom` both call `onJoined`". A rule about the shared hook,
+rediscovered and written down in two consumers, and absent from the package
+that imposes it. Export the fake from `packages/lobby`, encode that rule in it
+once, and let the five collapse onto it.
+
+**Two constraints on how, so this does not become a sixth divergence.**
+`packages/lobby` has no jsdom *project*: it runs Node by default and
+`identity.test.ts` opts in with a `// @vitest-environment jsdom` pragma on
+line 1. Follow that. Do not add a projects array — this plan exists partly to
+argue that three spellings of one split is already two too many.
+
+And it needs `@testing-library/react` here, which the package does not yet
+have. Since task 0 runs first, **this is where the version is chosen** — Rail
+Baron's `^16.3.2` / `^7.0.1` — and task 2 follows it rather than the other way
+round. The package already declares `react` as a peer dependency and ships a
+hook, so this is the right home for it.
+
+**Done when:** the lobby's test count roughly triples from 31, each new test
+has been shown to fail against a deliberate break of the rule it names, and
+at least one game's hand-rolled fake has been deleted in favour of the shared
+one — proving the fake is actually general before four more files depend on
+it.
 
 ### 1. One localStorage answer, not four
 
@@ -288,10 +333,11 @@ of them.
 
 ### 2. `@testing-library/react` into Marco Polo
 
-At Rail Baron's versions (`^16.3.2` / `^7.0.1`), not Acquire's — Acquire lags on
-jest-dom by a major, and the dependency-alignment pass that follows this one
-will be moving it up anyway. Do not add a third version line to a list this
-plan is meant to shorten.
+At whatever versions task 0 put into `packages/lobby` — Rail Baron's
+`^16.3.2` / `^7.0.1`, not Acquire's. Acquire lags on jest-dom by a major, and
+the dependency-alignment pass that follows this plan will be moving it up
+anyway. Do not add a third version line to a list this plan is meant to
+shorten.
 
 Purely additive, so test-first is trivially right, and the first test is the one
 that should already exist: **`HomeScreen` disables HOST A GAME and says
@@ -447,7 +493,7 @@ The asymmetry is the whole argument for sharing — each game is missing
 something the other has, and both gaps are real. It is also the argument for
 doing it on its own: it touches persistence for both games, it is the only item
 here that can lose somebody's saved room, and Marco Polo persists nothing and
-gains nothing from it. Four tasks that cannot corrupt a save should not be
+gains nothing from it. Six tasks that cannot corrupt a save should not be
 bundled with the one that can. It gets its own plan, after the dependency
 alignment.
 
