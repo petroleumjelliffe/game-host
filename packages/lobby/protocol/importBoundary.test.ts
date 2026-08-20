@@ -28,9 +28,10 @@ function sourceFiles(dir: string): string[] {
 
 test('every relative import under the lobby resolves back inside the lobby', () => {
   const files = LOBBY_ROOTS.flatMap((root) => sourceFiles(root));
-  // Twelve files: lobby/{protocol,importBoundary.test},
-  // server/lobby/{handlers,rooms,rooms.test,genericConsumer.test},
-  // src/lobby/{connection,identity,identity.test,useLobbyRoom,view,view.test}.
+  // Fourteen files: protocol/{protocol,importBoundary.test},
+  // server/{handlers,rooms,rooms.test,genericConsumer.test},
+  // client/{connection,fakeConnection,identity,identity.test,useLobbyRoom,
+  // useLobbyRoom.test,view,view.test}.
   //
   // Exact rather than a floor. The floor was here so an empty walk could not
   // pass vacuously; an exact count also catches a file quietly *leaving* the
@@ -39,7 +40,14 @@ test('every relative import under the lobby resolves back inside the lobby', () 
   //
   // The UI left for src/game/lobby/ on 2026-08-12: it was Acquire's screens,
   // not a themeable kit, and Rail Baron has neither Tailwind nor className.
-  expect(files.length).toBe(12);
+  //
+  // 12 -> 14 on 2026-08-20: client/fakeConnection.ts and
+  // client/useLobbyRoom.test.ts, the lobby pass's task 0. Note that
+  // `fakeConnection.ts` is shipped source and not a `.test.ts`, deliberately
+  // — the games import it from their own suites, so it has to resolve
+  // through this package's exports map like anything else, and it is subject
+  // to the same import boundary as the code it doubles.
+  expect(files.length).toBe(14);
 
   const offences: string[] = [];
   for (const file of files) {

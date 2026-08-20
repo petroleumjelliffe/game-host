@@ -1,6 +1,6 @@
 # The lobby pass
 
-**Status:** proposed, 2026-08-20. Revised the same day after a review pass
+**Status:** task 0 implemented 2026-08-20; tasks 1–5 proposed. Revised after a review pass
 that measured a baseline and found a larger hole than any task here named —
 see "The hole the first draft missed".
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md)'s "Deliberately not
@@ -284,6 +284,44 @@ has been shown to fail against a deliberate break of the rule it names, and
 at least one game's hand-rolled fake has been deleted in favour of the shared
 one — proving the fake is actually general before four more files depend on
 it.
+
+#### As built, 2026-08-20
+
+Done. `packages/lobby` went **31 → 63 tests**; the repo went 1607 → 1623 over
+the same 153 files, so nothing was traded away to get there. Sixteen of the
+new tests are `useLobbyRoom`'s, sixteen moved out of Acquire, and one is new
+coverage found while moving them.
+
+**The flagship test was mutation-checked against the bug it was written for.**
+Commenting out `sent.current = false` in the drop handler — which is exactly
+the world before 2026-08-20, where a reconnected client never retook its seat
+— turns two tests red and nothing else. Clearing the identity on
+`versionMismatch` turns exactly one red. Both restored clean.
+
+Five deltas worth carrying:
+
+- **`@testing-library/jest-dom` was not needed and was not added.** These are
+  hook tests; every assertion is on a plain object. So task 2, not task 0, is
+  where jest-dom's version gets chosen — `^7.0.1`, still Rail Baron's.
+  `react-dom` *was* needed, which the plan did not say.
+- **The fake takes no React dependency at all.** It fires handlers
+  synchronously and wraps nothing in `act()`, so callers wrap at the call site
+  (`act(() => fake.roster(msg))`). One wrapper per call, in exchange for a
+  double that works from a plain Node test and does not weld this package to a
+  renderer.
+- **`protocol/importBoundary.test.ts` pins an exact file count**, so adding two
+  files to the package failed a test in a third — 12 → 14, correctly, and the
+  count is exact on purpose so a file quietly *leaving* the lobby is caught.
+  Its comment also still described the pre-monorepo layout (`src/lobby/…`) and
+  now describes the real one.
+- **Both** of Rail Baron's fakes were converted, not the one the plan asked
+  for. They were identical to each other, so converting one and leaving its
+  twin would have left the duplication this task is about sitting in the diff.
+  Acquire's three are larger and stay for now; `RoomPage.test.tsx` alone is
+  876 lines.
+- **`games/acquire/src/net/identity.ts` is now an untested five-line
+  re-export**, deliberately. What its tests actually exercised was
+  `createIdentityStore`, and that is now tested where it lives.
 
 ### 1. One localStorage answer, not four
 
