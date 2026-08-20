@@ -16,6 +16,24 @@ for plist in "$(dirname "$0")"/launchd/com.game-host*.plist; do
   target="$AGENTS/$name.plist"
   # bootout is idempotent-ish but chatty; ignore "not loaded" failures.
   launchctl bootout "gui/$UID_N/$name" 2>/dev/null || true
+  # ...and it returns before launchd has finished tearing the job down. A
+  # bootstrap landing in that window fails with "Input/output error" (5) and
+  # installs nothing, which on a machine with one agent means every game is
+  # down until someone notices. Ran that way on the game machine 2026-08-20:
+  # the front door served 502 until the bootstrap was retried by hand.
+  #
+  # So wait for the label to actually disappear. `launchctl print` on an
+  # absent label exits non-zero, which is the only reliable signal launchctl
+  # offers — `list` greps are prefix-matchy and lie about near-neighbours.
+  waited=0
+  while launchctl print "gui/$UID_N/$name" >/dev/null 2>&1; do
+    waited=$((waited + 1))
+    if [ "$waited" -gt 100 ]; then
+      echo "warning: $name still loaded after 10s; bootstrap may fail" >&2
+      break
+    fi
+    sleep 0.1
+  done
   if [ "${1:-}" = "remove" ]; then
     rm -f "$target"
     echo "removed $name"
