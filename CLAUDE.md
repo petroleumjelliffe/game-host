@@ -7,9 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 An npm workspace monorepo, and the front door for the machine that hosts game
 night. Both are true at once, and neither replaces the other.
 
-It is the host-machine configuration: a Caddy reverse proxy on port 80, a
-static menu page, launchd agents, start scripts, and the canonical cross-game
-port registry — none of that moved.
+It is the host-machine configuration: a Caddy reverse proxy on port 80, one
+launchd agent, one start script, and the canonical cross-game port registry.
 
 It is also, as of this migration, where the game code itself lives:
 
@@ -24,40 +23,60 @@ It is also, as of this migration, where the game code itself lives:
 `npm run typecheck` at the root cover them all in one command (see Testing,
 below).
 
-**Composition has happened; the cutover has not.** Every game now exports
-`mount(ctx)` — it adds its prefixed routes and its own socket.io server to an
-app and an HTTP server it does not own — and `apps/host` composes all three
-into one process on port 4000, with a menu generated from what mounted, an
-aggregate `/health`, one `DATA_DIR`, and a per-game error boundary. Run it
-with `DATA_DIR=$(mktemp -d) npm run start:host`.
+**Composition and the cutover have both happened** (2026-08-19/20). Every
+game exports `mount(ctx)` — it adds its prefixed routes and its own socket.io
+server to an app and an HTTP server it does not own — and `apps/host` composes
+all three into one process on port 4000, with a menu generated from what
+mounted, an aggregate `/health`, one `DATA_DIR`, and a per-game error
+boundary. Run it with `DATA_DIR=$(mktemp -d) npm run start:host`.
 
-**Nothing is deployed that way yet, and both arrangements have to keep
-working.** Each game's original boot function is still there with its original
-signature — `createAppServer()`, `startServer()`, `createServer()` — and is
-now a thin wrapper over its own `mount`, adding back the bare `/health` (and,
-for Marco Polo, the root static mount) that only make sense alone in a
-process. So the Caddyfile still routes three prefixes to three ports, three
-launchd agents still run three `start-*.sh` scripts, each game's `dev:server`
-still boots on its own `400N`, and all 1548 pre-migration tests still pass
-unmodified. All seven of PORTS.md's numbers are real. The cutover plan
-(spec steps 9–11) is what retires 4001–4003.
+**That process is what both deployments run**, from the same `main`: this
+machine on the LAN behind Caddy, and Render for online play. See
+[Deploying](README.md#deploying) — read it before changing anything under
+`launchd/`, `start-host.sh`, or the build, because those are live
+configuration now rather than authoring.
+
+**The standalone path still works and must keep working.** Each game's
+original boot function is still there with its original signature —
+`createAppServer()`, `startServer()`, `createServer()` — now a thin wrapper
+over its own `mount`, adding back the bare `/health` (and, for Marco Polo, the
+root static mount) that only make sense alone in a process. `dev:server` still
+boots each game on its own `400N`, which is why 4001–4003 keep their rows in
+PORTS.md even though nothing hosts them. All 1600 tests pass against both
+arrangements.
 
 | Path | What it is |
 | --- | --- |
 | `packages/host` | `@game-host/host` — the contract (`HostContext`, `MountedGame`), the error boundary (`guardSocket`, `guardTick`), and `closeSockets`. No game logic. |
 | `apps/host` | `@game-host/apps-host` — the composed process, and the only package allowed to depend on all three games. |
 
-## This clone is not the host machine
+## Check whether this clone *is* the host machine
 
-Every script, plist, and the README assume the repo is cloned at
-`~/Developer/game-host`. This checkout is at `~/Developer/personal/game-host`,
-and neither Caddy nor the `/opt/homebrew/etc/game-host` symlink exists here.
-Treat edits to `Caddyfile`, `menu/`, `launchd/`, `saves/` and the `start-*.sh`
-scripts as configuration authoring; do not expect to run or smoke-test them
-locally, and do not "fix" the hardcoded `~/Developer/game-host` paths unless
-asked — they describe the host, not this working copy. The games themselves
-(under `games/` and `packages/`), by contrast, build and test fine right here
-— see Testing, below.
+It may well be, and the answer changes what is safe to do. `~/Developer/game-host`
+on the game machine is **production**: the `com.game-host` launchd agent builds
+and serves from that exact tree, and Caddy fronts it on port 80 for everyone on
+the wifi.
+
+```bash
+ls -l /opt/homebrew/etc/game-host    # exists and points here? this is the host
+launchctl list | grep com.game-host  # an agent? it is serving from this tree
+```
+
+**If it is the host machine**, do not write scratch files or check out
+branches here, and do not run `npm run build` or `npm run start:host` by hand:
+the agent serves `games/*/dist` from disk per request, so a build republishes
+production instantly and swaps content-hashed assets out from under loaded
+pages, and a by-hand start fights the agent for port 4000. Use a worktree
+(`git worktree add ~/Developer/game-host-dev -b <branch>`) — git refuses to
+check out `main` twice, which also makes it impossible for a stray branch to
+be what an unattended restart deploys. Restarting the agent is fine and needs
+no permission: `launchctl kickstart -k gui/$(id -u)/com.game-host`.
+
+**If it is not**, treat edits to `Caddyfile`, `launchd/`, `saves/` and
+`start-host.sh` as configuration authoring: do not expect to smoke-test them,
+and do not "fix" the hardcoded `~/Developer/game-host` paths — they describe
+the host, not this working copy. The games themselves build and test fine
+anywhere.
 
 ## Testing
 
@@ -140,14 +159,19 @@ empty.
 
 ## Architecture
 
-**As deployed today:** one process per game serves its own built client, its
-API, and its socket.io mount — all under a single port (`400N`) and a single
-path prefix (`/<game>`). Caddy maps prefix → port with `handle` +
-`reverse_proxy` and **never strips the prefix**: each game's client is *built*
-under its base path, so the path Caddy forwards is the path the game expects.
-Anything unmatched falls through to the static menu.
+**Standalone (development, and the shape each game keeps):** one process per
+game serves its own built client, its API, and its socket.io mount — all under
+a single port (`400N`) and a single path prefix (`/<game>`). Nothing hosts
+this arrangement any more; `npm run dev:server` is what still uses it.
 
-**As composed (built, not yet deployed):** `apps/host` creates one Express app
+**Caddy never strips the prefix**, and that is still the load-bearing rule:
+each game's client is *built* under its base path, so the path forwarded is
+the path the game expects. The front door is now a single
+`reverse_proxy localhost:4000` with no game names in it, so there is nothing
+to keep in sync — but a `handle_path` or a rewrite appearing there would break
+every asset URL at once.
+
+**As composed, and as deployed to both origins:** `apps/host` creates one Express app
 and one HTTP server, calls each game's `mount(ctx)`, and listens on one port.
 Each game keeps its **own socket.io `Server`** at its own path, all attached to
 that one HTTP server. The alternative — one `Server` with a namespace per game
@@ -217,22 +241,31 @@ artifact serves both, and a third costs nothing.
 ## Commands (run on the host machine)
 
 ```bash
+git pull && launchctl kickstart -k gui/$(id -u)/com.game-host   # deploy to the LAN
+launchctl list | grep com.game-host                             # is it up
+tail -f /opt/homebrew/var/log/game-host.log                     # what it is doing
+
+curl -s localhost/health             # all three games, one request
+curl -s localhost/                   # the generated menu
+
 caddy validate --config Caddyfile    # after any Caddyfile edit
 brew services restart caddy          # reload the front door
-caddy run --config Caddyfile         # foreground, for trying it
 
-./install-services.sh                # (re)install + start the launchd agents
+./install-services.sh                # (re)install + start the launchd agent
 ./install-services.sh remove         # stop and uninstall
-
-curl http://localhost/railbaron/health            # smoke check through Caddy
-curl http://localhost/acquire/health
-curl http://localhost/marcopolo/health
 ```
 
-Logs: `/opt/homebrew/var/log/game-host.<game>.log`. Stop one game:
-`launchctl bootout gui/$(id -u)/com.game-host.<game>`; start it again by
-rerunning the installer. Menu edits are live — Caddy serves the file per
-request, no reload needed.
+One agent, `com.game-host`, one log at `/opt/homebrew/var/log/game-host.log`.
+Stop it with `launchctl bootout gui/$(id -u)/com.game-host`; start it again by
+rerunning the installer. There is no per-game agent, log, or menu file any
+more — the menu is generated from what mounted, so adding a game edits no
+front-door configuration at all.
+
+Deploying to Render is a `git push`: the service auto-deploys on every commit
+to `main`. Both deployments and their gotchas are in
+[README.md](README.md#deploying) — in particular that a Render **pre-deploy
+command cannot see the persistent disk**, which is how a room migration
+reported success and moved nothing.
 
 ## The port registry is canonical here
 
@@ -251,18 +284,17 @@ suffix intact, because a room code is the thing people paste to each other.
 
 ## Adding a game
 
-Follow the six-step checklist at the end of [README.md](README.md): claim the
-slot pair in PORTS.md, point the game's own config at its numbers, build its
-client under the path prefix, add the Caddyfile `handle` blocks (+ validate and
-reload), add it to [menu/index.html](menu/index.html), and copy a start script
-with `saves/<name>`. Plists are copy-and-rename — the three differ only in
-label, script name, and log path.
+Follow the five-step checklist at the end of [README.md](README.md): claim the
+dev slot pair in PORTS.md, point the game's own config at its numbers, build
+its client under its path prefix, export `mount(ctx)` returning a
+`MountedGame`, and add one row to `GAMES` in
+[apps/host/host.ts](apps/host/host.ts).
 
-For the **composed** host the same game needs two more things and one fewer:
-export a `mount(ctx)` returning a `MountedGame`, and add one row to `GAMES` in
-[apps/host/host.ts](apps/host/host.ts) — the menu and the aggregate `/health`
-read that list, so neither needs editing. Until the cutover, both checklists
-apply, because both arrangements have to work.
+**No Caddyfile edit, no menu edit, no start script, no plist.** The front door
+forwards one port and knows no game names, the menu and the aggregate
+`/health` are generated from what mounted, and one agent runs the lot. Those
+deletions were the point of the composition work — if a change asks you to
+edit the Caddyfile to add a game, something has gone backwards.
 
 ## Docs conventions
 

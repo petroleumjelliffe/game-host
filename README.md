@@ -3,8 +3,8 @@
 An npm workspace monorepo: three games (`games/marcopolo`, `games/railbaron`,
 `games/acquire`) and their shared lobby package (`packages/lobby`), plus the
 front-door configuration for the machine that hosts game night — a Caddy
-reverse proxy that gives every game a portless path on the LAN, a flat menu
-page at the root, and the canonical [port registry](PORTS.md).
+reverse proxy that forwards one port, a menu generated from whatever games
+mounted, and the canonical [port registry](PORTS.md).
 
 Friends on the wifi see one address:
 
@@ -17,19 +17,21 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 
 ```bash
 npm install       # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
-npm test          # every package's suite in one command: 1548 tests / 145 files
+npm test          # every package's suite in one command: 1600 tests / 152 files
 npm run typecheck
 ```
 
 This is a plain library-and-server checkout for developing the games — it
 works on any machine. The rest of this README (Caddy, launchd, the port
-registry, `saves/`) is about the *hosting* side: turning built games into
-one address on the LAN, which is the host machine's job, still done with the
-start script and Caddyfile below. **Composition has happened**: one process
-(`apps/host`, port 4000) serves all three games, their sockets and a menu
-generated from whatever mounted, so Caddy proxies one port and knows no game
-names. Each game also still boots alone on its own `400N` for development —
-see PORTS.md.
+registry, `saves/`) is about the *hosting* side, which is the host machine's
+job.
+
+One process (`apps/host`, port 4000) serves all three games, their sockets
+and a menu generated from whatever mounted, so Caddy proxies one port and
+knows no game names. **The same process is what Render runs**, from the same
+`main`, so there is one artifact and two deployments — see
+[Deploying](#deploying). Each game also still boots alone on its own `400N`
+for development; see PORTS.md.
 
 ## Setup (once per machine)
 
@@ -110,6 +112,98 @@ curl http://localhost/acquire/health
 curl http://localhost/marcopolo/health
 ```
 
+## Deploying
+
+One artifact, two deployments, both built from `main`: this machine for
+in-house play over the wifi, and Render for online play. Neither is staging —
+they differ in audience, not in tier. The client is origin-relative, so the
+same build serves both: it talks to whoever served it, and **no build in this
+repo names an origin**. Do not reintroduce one.
+
+### To the LAN (this machine)
+
+```bash
+cd ~/Developer/game-host
+git pull                                          # on main
+launchctl kickstart -k gui/$(id -u)/com.game-host
+```
+
+That is the whole deploy. `start-host.sh` rebuilds all three clients and
+restarts the process, because a service restarted after a `git pull` should
+serve the code that was pulled. Verify:
+
+```bash
+curl -s localhost/health          # three games and their versions
+curl -s localhost/ | head         # the generated menu
+```
+
+**A restart is a ~2.3s outage**, not a blip: the build runs *after* the old
+process is gone. Clients reconnect on their own — socket.io buffers and
+retries — but a game in progress will pause. Do not deploy mid-evening.
+
+**Do not run `npm run start:host` by hand here.** It fights the agent for port
+4000, and `DATA_DIR` is deliberately unset outside the start script. Do not
+run `npm run build` here either while people are playing: the agent serves
+`games/*/dist` from disk per request, and a rebuild swaps content-hashed
+assets out from under loaded pages. Develop in a worktree instead
+(`git worktree add ~/Developer/game-host-dev -b <branch>`), which also makes
+it impossible for a stray branch to be what an unattended restart deploys.
+
+### To Render (online)
+
+Service `srv-d3klnhnfte5s73diht90`, plan `starter`, **auto-deploys on every
+commit to `main`** — so pushing is deploying. Its hostname still reads
+`acquire-multiplayer.onrender.com` because Render fixes the `.onrender.com`
+subdomain at service creation and a rename does not move it; the origin now
+serves all three games regardless.
+
+| Setting | Value |
+| --- | --- |
+| Repo / branch | `github.com/petroleumjelliffe/game-host`, `main` |
+| Build command | `npm install --include=dev && npm run build` |
+| Start command | `npm run start:host` |
+| Health check path | `/health` |
+| Environment | `DATA_DIR=/var/data`, `NODE_ENV=production` |
+| Disk | `dsk-d9rafvlbedkc73coe2k0` at `/var/data`; the host creates `acquire/` and `railbaron/` beneath it |
+
+Four things there are load-bearing in ways that are not obvious:
+
+- **`--include=dev` is not decoration.** `NODE_ENV=production` makes npm set
+  `omit=dev` (verify with `NODE_ENV=production npm config get omit`), and
+  `vite`, `typescript`, `@vitejs/plugin-react` and Acquire's
+  `tailwindcss`/`postcss` all live in `devDependencies`. Without it the build
+  dies on the first Vite invocation.
+- **`NODE_ENV=production` stays.** It is what keeps Acquire's `/dev/rooms`
+  seeding route out of production, and that route installs arbitrary game
+  state.
+- **A pre-deploy command cannot see the persistent disk.** It runs on separate
+  compute and the disk mounts only when the deploy goes live
+  ([Render docs](https://render.com/docs/disks)). Anything touching
+  `/var/data` must run in the start command or over `render ssh` against a
+  live instance — a pre-deploy that tests for a path there silently finds
+  nothing and exits 0. That is how the Acquire room migration reported success
+  and moved nothing, 2026-08-20.
+- **Every deploy drops every socket.** Clients reconnect, but see the backlog:
+  Marco Polo still gives no feedback while disconnected.
+
+Verify a deploy:
+
+```bash
+B=https://acquire-multiplayer.onrender.com
+curl -s $B/health                                  # three games
+curl -sI $B/acquire-startups-m1/room/ABCD          # 301 → /acquire/room/ABCD
+```
+
+Shell into the running instance — the only way to see the disk:
+
+```bash
+render ssh srv-d3klnhnfte5s73diht90
+ls /var/data/acquire        # rooms are <ROOMID>.json
+```
+
+Rooms are restored at boot, so files placed there under a running host are not
+seen until it restarts.
+
 ## Save data
 
 Online games persist on the host machine, one directory per title under
@@ -125,9 +219,12 @@ game beneath it:
 
 Those subdirectory names — `saves/railbaron`, `saves/acquire` — are the ones
 the three retired `start-*.sh` scripts already created, so the cutover moved
-no data on this machine. (Render was not so lucky: its disk said `games/`,
-and the cutover renamed it once.) Marco Polo gets no directory, because it
-persists nothing.
+no data on this machine. Marco Polo gets no directory, because it persists
+nothing.
+
+Render allocates the same names under its own `DATA_DIR=/var/data`. Its old
+Acquire rooms lived at `/var/data/games` and were **not** migrated — see
+[Deploying](#deploying) for why that attempt could not have worked.
 
 Each game keeps a repo-local relative default so it boots standalone; the
 absolute path matters here because a service's working directory is wherever
