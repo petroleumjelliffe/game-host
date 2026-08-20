@@ -174,10 +174,22 @@ all three are commented where they live:
 Clients are origin-relative: they address pages, assets, and sockets as paths
 off `window.location.origin`, so no client names a host or port
 ([specs/2026-08-17-origin-relative-clients.md](specs/2026-08-17-origin-relative-clients.md),
-implemented 2026-08-18). Ports are machine-only knowledge. The single exception
-is a deployed build's `VITE_SERVER_URL`, which names a whole origin — when it
-is set, the client uses socket.io's default socket path, and the corresponding
-server sets `SOCKET_PATH=/socket.io` (Acquire on Render).
+implemented 2026-08-18). Ports are machine-only knowledge, and as of
+2026-08-20 **no build in this repo names an origin either**: Acquire's
+`.env.production` was the last holdout and is gone.
+
+The `VITE_SERVER_URL` code path stays, because one build still uses it — the
+Pages client, built from the old `acquire-startups-m1` repo, which is live
+until the cutover's Task 3. When it is set the client uses socket.io's default
+socket path, and the corresponding server sets `SOCKET_PATH=/socket.io`
+(Acquire on Render, until Task 2 repoints it here).
+
+Why the file had to go: a baked-in origin makes one artifact serve exactly one
+deployment, and there are two production deployments now — this machine for
+in-house play, Render for online. The LAN build was serving its pages locally
+and its sockets from Render. Origin-relative means the answer to "which
+server" is decided at request time by whoever served the page, so the same
+artifact serves both, and a third costs nothing.
 
 ### Load-bearing details, each learned the hard way
 
