@@ -72,6 +72,12 @@ check out `main` twice, which also makes it impossible for a stray branch to
 be what an unattended restart deploys. Restarting the agent is fine and needs
 no permission: `launchctl kickstart -k gui/$(id -u)/com.game-host`.
 
+**Never `pkill -f` here.** It has taken production down twice (2026-08-20),
+both times aimed at a worktree's test server and matching the agent instead.
+Kill background servers by the PID the shell gave you. Deploying is
+`./deploy.sh`; a bare `kickstart` restarts the agent on the artifact that was
+last built and does not rebuild anything.
+
 **If it is not**, treat edits to `Caddyfile`, `launchd/`, `saves/` and
 `start-host.sh` as configuration authoring: do not expect to smoke-test them,
 and do not "fix" the hardcoded `~/Developer/game-host` paths — they describe
@@ -241,7 +247,8 @@ artifact serves both, and a third costs nothing.
 ## Commands (run on the host machine)
 
 ```bash
-git pull && launchctl kickstart -k gui/$(id -u)/com.game-host   # deploy to the LAN
+./deploy.sh                                                     # deploy to the LAN
+launchctl kickstart -k gui/$(id -u)/com.game-host               # restart only, no rebuild
 launchctl list | grep com.game-host                             # is it up
 tail -f /opt/homebrew/var/log/game-host.log                     # what it is doing
 

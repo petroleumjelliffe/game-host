@@ -21,8 +21,12 @@
 	     node-bin symlink (created in README setup, pointing at fnm's default
 	     alias) — NOT /usr/local/bin, where a leftover x86_64 node once broke
 	     every native binding (esbuild, rollup) under Rosetta, 2026-08-17.
-	     This agent builds three Vite clients at boot, so it needs esbuild and
-	     rollup working more than the old per-game agents did. -->
+
+	     This is now what runs the server itself: start-host.sh execs `node`
+	     on a prebuilt bundle rather than going through npm, so the PATH here
+	     decides which node serves three games. It still needs esbuild and
+	     rollup working for the one case where the script builds — a clone
+	     with no artifact yet. -->
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>PATH</key>
@@ -37,7 +41,18 @@
 	     every game down at once, so the restart is the only thing standing
 	     between one bad payload and an evening ending. The per-game error
 	     boundary (packages/host/guard.ts) is what makes that rare; this is
-	     what covers the rest. -->
+	     what covers the rest.
+
+	     Verified 2026-08-20 under a scratch agent rather than assumed: a
+	     SIGKILL or a non-zero exit brings it back, and `bootout` does not.
+	     A SIGTERM also does not, and that is not a hole to plug —
+	     `bootout` stops a service by sending SIGTERM, main.ts handles it by
+	     draining and exiting 0, and nothing can distinguish that from a
+	     stray `kill` without breaking the deliberate stop. What did change
+	     is that there is no longer an npm and a tsx between launchd and the
+	     server: under the old chain a `pkill -f "tsx apps/host/main.ts"`
+	     aimed at a worktree matched the agent's wrapper, which exited 0, and
+	     the front door served 502 until somebody noticed. -->
 	<key>KeepAlive</key>
 	<dict>
 		<key>SuccessfulExit</key>

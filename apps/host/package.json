@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsx build.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -12,12 +13,13 @@
     "@game-host/host": "*",
     "@game-host/marcopolo": "*",
     "@game-host/railbaron": "*",
-    "express": "^5.2.1",
-    "tsx": "^4.23.12"
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
-    "socket.io-client": "^4.8.3"
+    "esbuild": "^0.28.2",
+    "socket.io-client": "^4.8.3",
+    "tsx": "^4.23.12"
   }
 }

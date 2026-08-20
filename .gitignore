@@ -1,3 +1,7 @@
 node-bin
 node_modules
 dist
+
+# Where compiled.test.ts emits the bundle it boots. Never committed: it is
+# build output whose whole purpose is to be regenerated from current sources.
+.compiled-test
