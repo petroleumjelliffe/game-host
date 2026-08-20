@@ -1,5 +1,6 @@
-# The game machine's front door: path routing on port 80.
+# The game machine's front door: port 80 to the composed host on 4000.
 #
+#   caddy validate --config Caddyfile     # after any edit
 #   caddy run --config Caddyfile          # foreground, for trying it
 #   brew services start caddy             # as a service; caddy reads
 #                                         # /opt/homebrew/etc/Caddyfile, so
@@ -7,62 +8,38 @@
 #                                         #   ln -sf ~/Developer/game-host/Caddyfile \
 #                                         #          /opt/homebrew/etc/Caddyfile
 #
-# Port numbers come from PORTS.md, next to this file — the registry lives in
-# this repo because this file is its enforcing consumer. Each game's client
-# is built (and dev-served) under its path prefix — Rail Baron's basePath.ts
-# says '/railbaron' — so nothing strips the prefix: `handle` + `reverse_proxy`
-# pass the path through untouched, and Vite/the router expect exactly that.
+# This file used to route a path prefix per game to a port per game, plus a
+# menu root and three bare-prefix redirects — nine blocks whose only job was
+# knowing the names of three games. One process serves all of them now
+# (apps/host, port 4000 per PORTS.md), including the menu at `/` and each
+# game's prefix below it, so none of that knowledge belongs out here any more.
 #
-# Sockets ride each game's own `handle /<game>/*` route: every game mounts
-# socket.io under its base path (specs/2026-08-17-origin-relative-clients.md,
-# implemented 2026-08-18), so port 80 is the only exposure the games need.
-# The direct 400N ports remain reachable as a LAN convenience, not a
-# requirement.
+# What that buys, and the reason the collapse is the point rather than a
+# tidy-up: **adding a game is no longer a Caddyfile edit.** It is a row in
+# apps/host/host.ts. This file cannot go stale against the game list because it
+# no longer has one.
+#
+# Still true, and still load-bearing: the path is never stripped. Each game's
+# client is *built* under its own base path — Rail Baron's basePath.ts says
+# '/railbaron' — so assets are requested at `<base>/assets/…` and nothing
+# rewrites them. A plain `reverse_proxy` passes the path through untouched,
+# which is exactly what the games expect. If a rewrite or a `handle_path` ever
+# appears here, that is the bug.
+#
+# Sockets need nothing special: every game mounts socket.io under its own base
+# path (specs/2026-08-17-origin-relative-clients.md, implemented 2026-08-18),
+# so they ride this one proxy like any other request. Caddy proxies WebSocket
+# upgrades natively.
+#
+# Retired with the menu block: the `{env.HOME}` warning that used to live here.
+# Homebrew's caddy service overrides HOME to its own storage dir, so that
+# placeholder worked under `caddy run` and silently 404'd as a service (found
+# the hard way 2026-08-17). No path in this file needs HOME any more — but the
+# /opt/homebrew/etc/game-host symlink that lesson produced is still doing the
+# same job for launchd/com.game-host.plist, so do not remove it.
 
 # Any name this machine answers to on the LAN. `.local` covers the mDNS name
 # through renames; add a real domain here if subdomain routing ever lands.
 http:// {
-	# --- Rail Baron: one process on 4001 serves pages, assets and sockets --
-	# (start-railbaron.sh builds the client and starts the server.)
-	# For hot reload behind the proxy instead, point this at 7931 and run
-	# `npm run dev:all` in the game repo.
-	handle /railbaron/* {
-		reverse_proxy localhost:4001
-	}
-	handle /railbaron {
-		# The bare `*` matcher is required: redir's first argument is a
-		# path matcher when it starts with `/`, so `redir /railbaron/`
-		# alone parses as a matcher with no destination.
-		redir * /railbaron/
-	}
-
-	# --- Acquire: one process on 4002 (start-acquire.sh). The path is the ---
-	# client's built base — its GitHub Pages repo path — because assets are
-	# requested under it and nothing rewrites them; the menu link hides it.
-	# (No hot-reload-behind-proxy option here: Acquire's dev base is '/'.)
-	handle /acquire-startups-m1/* {
-		reverse_proxy localhost:4002
-	}
-	handle /acquire-startups-m1 {
-		redir * /acquire-startups-m1/
-	}
-
-	# --- Marco Polo: one process on 4003 (start-marcopolo.sh) --------------
-	handle /marcopolo/* {
-		reverse_proxy localhost:4003
-	}
-	handle /marcopolo {
-		redir * /marcopolo/
-	}
-
-	# --- The menu: everything else is the flat game list -------------------
-	# A fixed path, reached through the setup symlink (see README.md) so no
-	# username or clone location is baked in. Not {env.HOME}: Homebrew's
-	# caddy service sets HOME to its own storage dir (/opt/homebrew/var/lib),
-	# so that placeholder works under `caddy run` and silently 404s as a
-	# service — found the hard way 2026-08-17.
-	handle {
-		root * /opt/homebrew/etc/game-host/menu
-		file_server
-	}
+	reverse_proxy localhost:4000
 }

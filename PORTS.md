@@ -1,28 +1,31 @@
 # The cross-game port registry
 
 **This copy is canonical.** It lives next to the Caddyfile because that file
-is the registry's enforcing consumer — a collision fails here first. Each
-game hardcodes its own two numbers as defaults (a game must boot correctly
-with this repo nowhere in sight) and points its docs at this table; when a
-number changes, this table changes first and the game follows.
+was the registry's enforcing consumer — a collision failed here first. That is
+less true than it was: the Caddyfile now knows one number and no game names.
+The registry's job is unchanged, though, and is really collision avoidance —
+every number below is one some command will actually bind, so every number
+below needs a claim.
 
 One machine hosts every game on the wifi; ports are how they share its one
 address. Two contiguous blocks, both outside the crowded 3000s and below the
 ephemeral range (49152+, which the OS hands out randomly):
 
-- **4001 and up — game servers** (sockets + API, and each serves its own
-  built client, so one process per game is the hosted mode).
+- **4000 — the composed host.** One process, every game, and the only port
+  Caddy proxies. This is the hosted mode.
+- **4001 and up — each game's standalone dev server** (`npm run dev:server`).
+  Not hosted any more; still real, still bindable, still needs a slot.
 - **7931 and up — dev clients** (each game's Vite dev server, pinned with
   `strictPort` so a taken port fails loudly instead of sliding into a
   neighbour's slot).
 
-| Game | Server | Dev client | Proxy path |
+| What | Port | Dev client | Path |
 | --- | --- | --- | --- |
-| **the composed host** | **4000** | — | `/` (every game, one process) |
-| Rail Baron | 4001 | 7931 | `/railbaron` |
-| Acquire | 4002 | 7932 | `/acquire-startups-m1` |
-| Marco Polo | 4003 | 7933 | `/marcopolo` |
-| (next title) | 4004 | 7934 | — |
+| **the composed host** | **4000** | — | `/` — the menu, and every game below it |
+| Rail Baron, alone | 4001 | 7931 | `/railbaron` |
+| Acquire, alone | 4002 | 7932 | `/acquire-startups-m1` |
+| Marco Polo, alone | 4003 | 7933 | `/marcopolo` |
+| (next title), alone | 4004 | 7934 | — |
 
 4000 sits outside the 4001+ block on purpose: that block is game servers, and
 `apps/host` is not a game — it is the process that contains them. It has no
@@ -32,43 +35,45 @@ one.
 A game's two numbers share an offset on purpose: server 400N pairs with
 client 793N (7930 + N).
 
-All seven numbers are real today, and that is deliberate rather than
-transitional sloppiness. `apps/host` exists and runs all three games in one
-process on 4000 (`npm run start:host`), but nothing is *deployed* that way
-yet: the Caddyfile still routes three prefixes to three ports, three launchd
-agents still run three `start-*.sh` scripts, and each game's `dev:server`
-still boots on its own 400N. The cutover plan is what retires 4001–4003 and
-collapses the Caddyfile to a single `reverse_proxy` — until then both
-arrangements have to work, so both are listed.
+**4001–4003 were not retired, and the reason is worth stating** — an earlier
+draft of the cutover plan said to delete them. They are no longer *hosted*:
+Caddy does not know them, no launchd agent starts them, and nothing on the
+LAN reaches them. But every game kept its standalone boot function through
+the composition work (`createAppServer`, `startServer`, `createServer`), and
+`npm run dev:server` still binds these numbers every day. A number a command
+binds is a number that can collide, so it keeps its claim. Deleting the rows
+would have freed 4002 for the next thing to take — and then Acquire's
+`dev:server` would fail on a machine where something else got there first,
+with nothing in this file to explain why.
 
-The dev-client slots are unaffected either way: three Vite dev servers still
-coexist during development. Note that a Vite dev client proxies its socket
-path to *its own game's* 400N, not to 4000 — so `npm run dev:host` and
-`npm run dev` in a game are two different servers and do not talk to each
-other. Repointing those proxies belongs with the port collapse.
+For the same reason each game's Vite dev proxy still points at its **own**
+`400N`, not at 4000. Developing one game means running that game's server, not
+all three; the standalone path exists precisely so a game can be worked on
+alone, and pointing dev at the composed host would trade that away for a
+resemblance to production that dev does not need. `npm run dev:host` and a
+game's `npm run dev` are deliberately two different servers.
 
-The proxy path must equal the client's built base path, because assets are
-requested at `<base>/assets/…` and nothing rewrites them. Acquire's is its
-GitHub Pages path (`basePath.ts`: the repo name), hence the long one — the
-menu link hides it. Every game's sockets ride `/<game>/socket.io` through
-the front door (`specs/2026-08-17-origin-relative-clients.md`, implemented
-2026-08-18), so ports are machine-only knowledge now — no client names one.
-The one exception: a deployed build's `VITE_SERVER_URL` override, which
-names a whole origin, not a port.
+The path must equal the client's built base path, because assets are requested
+at `<base>/assets/…` and nothing rewrites them — true through the composed
+host exactly as it was through Caddy, since neither strips a prefix. Acquire's
+is its GitHub Pages path (`basePath.ts`: the repo name), hence the long one.
+Every game's sockets ride `/<game>/socket.io`
+(`specs/2026-08-17-origin-relative-clients.md`, implemented 2026-08-18), so
+ports are machine-only knowledge — no client names one.
 
 Known consumers, kept in agreement by hand:
 
-- `apps/host/main.ts` — the composed host's boot default (4000). `DATA_DIR`
-  is required there and replaces the three per-game `GAMES_DIR` values.
-- `Caddyfile`, this repo — every server number (dev-client slots appear
-  only where a block's comment points hot reload at one)
+- `apps/host/main.ts` — the composed host's boot default (4000), and the only
+  number the hosted machine uses. `DATA_DIR` is required there and replaced
+  the three per-game `GAMES_DIR` values.
+- `Caddyfile`, this repo — 4000, and nothing else. It no longer names a game,
+  so adding one is not an edit here.
+- `start-host.sh`, `launchd/com.game-host.plist` — one script, one agent.
 - Rail Baron: `server/index.ts` boot default (4001), `vite.config.ts`
-  `server.port` (7931) and socket-proxy target (4001 — build tooling, the
-  port's only client-adjacent appearance)
+  `server.port` (7931) and socket-proxy target (4001). Dev-only now.
 - Acquire: `server/index.ts` boot default (4002), `vite.config.ts`
-  `server.port` (7932) and socket-proxy targets (4002). Render is untouched:
-  it injects `PORT`, the Pages client sets `VITE_SERVER_URL` (which wins),
-  and the service sets `SOCKET_PATH=/socket.io`.
+  `server.port` (7932) and socket-proxy targets (4002). Dev-only now. Render
+  is untouched by these numbers: it injects `PORT`.
 - Marco Polo: `server/main.ts` default (4003), `vite.config.ts` `serverPort`
   fallback and socket-proxy target (4003), `vite.config.ts` `server.port`
   (7933). No saves — nothing is persisted server-side.

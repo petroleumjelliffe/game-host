@@ -25,18 +25,23 @@ This is a plain library-and-server checkout for developing the games — it
 works on any machine. The rest of this README (Caddy, launchd, the port
 registry, `saves/`) is about the *hosting* side: turning built games into
 one address on the LAN, which is the host machine's job, still done with the
-start scripts and Caddyfile below. **Composition into a single process has
-not happened** — the three games still run as three separate processes, each
-on its own port, until a later plan changes that.
+start script and Caddyfile below. **Composition has happened**: one process
+(`apps/host`, port 4000) serves all three games, their sockets and a menu
+generated from whatever mounted, so Caddy proxies one port and knows no game
+names. Each game also still boots alone on its own `400N` for development —
+see PORTS.md.
 
 ## Setup (once per machine)
 
 ```bash
 brew install caddy
 ln -sf ~/Developer/game-host/Caddyfile /opt/homebrew/etc/Caddyfile
-ln -sfn ~/Developer/game-host /opt/homebrew/etc/game-host   # menu root; the
-                               # Caddyfile can't use {env.HOME} — the brew
-                               # service overrides HOME to its storage dir
+ln -sfn ~/Developer/game-host /opt/homebrew/etc/game-host   # how the plist
+                               # reaches start-host.sh without baking in a
+                               # username. (It was the Caddyfile's menu root
+                               # too, until the host started serving its own
+                               # menu — the {env.HOME} lesson that produced
+                               # this symlink is in the Caddyfile's header.)
 ln -sfn ~/.local/share/fnm/aliases/default/bin ~/Developer/game-host/node-bin
                                # (gitignored) the node the services run —
                                # fnm's default alias here; point it at any
@@ -48,12 +53,13 @@ ln -sfn ~/.local/share/fnm/aliases/default/bin ~/Developer/game-host/node-bin
 brew services start caddy      # or `caddy run --config Caddyfile` to try it
 ```
 
-The Caddyfile's menu `root` is an absolute path — Caddy as a service has no
-working directory to resolve a relative one from — so it assumes this repo
-is cloned at `~/Developer/game-host`. Cloned elsewhere, fix that one line.
+`start-host.sh` and the plist both assume this repo is cloned at
+`~/Developer/game-host`. Cloned elsewhere, fix the path in the script and
+re-run the symlinks above.
 
-Everything rides port 80: each game mounts socket.io under its base path,
-so pages, assets and sockets share the one `handle /<game>/*` route
+Everything rides port 80, and Caddy forwards all of it to 4000 without
+touching the path: each game mounts its pages, assets and sockets under its
+own base path
 ([specs/2026-08-17-origin-relative-clients.md](specs/2026-08-17-origin-relative-clients.md)).
 Design history — the tiers, the DNS story, and the direct-port-sockets
 deviation that spec retired — is written up in the Rail Baron repo,
@@ -70,19 +76,26 @@ every game as permanent as Caddy:
 ./install-services.sh remove    # stops and uninstalls
 ```
 
-Each game becomes a launchd user agent: starts at login, restarts on crash
-(but stays stopped after a clean `launchctl bootout`), logs to
-`/opt/homebrew/var/log/game-host.<game>.log`. The plists reach the start
-scripts through the `/opt/homebrew/etc/game-host` symlink, so they carry no
-username. Stop one game: `launchctl bootout gui/$(id -u)/com.game-host.railbaron`;
-start it again: rerun the installer. Note a service and a by-hand start
-script fight over the same port — stop the service first if you want a
-foreground run.
+One agent, `com.game-host`, for all three games: starts at login, restarts on
+crash (but stays stopped after a clean `launchctl bootout`), logs to
+`/opt/homebrew/var/log/game-host.log`. It reaches `start-host.sh` through the
+`/opt/homebrew/etc/game-host` symlink, so it carries no username. Stop
+everything: `launchctl bootout gui/$(id -u)/com.game-host`; start it again by
+rerunning the installer. Note a service and a by-hand start script fight over
+the same port — stop the service first if you want a foreground run.
 
-Smoke check — each game answers health under its prefix, through the front
-door:
+`install-services.sh` installs whatever plists are in `launchd/`, and can only
+*remove* agents whose plists are still there. So when replacing agents, run
+`./install-services.sh remove` **before** pulling the change that deletes the
+old plists — otherwise the old agents stay bootstrapped and nothing in this
+repo knows how to stop them.
+
+Smoke check — the aggregate says what is deployed in one request, and each
+game still answers for itself:
 
 ```bash
+curl http://localhost/health          # all three games' versions
+curl http://localhost/               # the generated menu
 curl http://localhost/railbaron/health
 curl http://localhost/acquire-startups-m1/health
 curl http://localhost/marcopolo/health
@@ -91,25 +104,28 @@ curl http://localhost/marcopolo/health
 ## Save data
 
 Online games persist on the host machine, one directory per title under
-[saves/](saves/) (gitignored — real games, not config), handed to each
-game's server as an absolute path by its start script:
+[saves/](saves/) (gitignored — real games, not config). The start script
+exports one absolute `DATA_DIR`, and the host creates a subdirectory per
+game beneath it:
 
 ```bash
-./start-railbaron.sh    # builds Rail Baron's client, then starts its server —
-                        # one process serving pages, assets and sockets on
-                        # 4001, saves in saves/railbaron
+./start-host.sh         # builds all three clients, then runs one process
+                        # serving every game's pages, assets and sockets on
+                        # 4000, saves under saves/<game>
 ```
 
-The `start-*.sh` scripts still `cd` into the sibling checkouts
-(`~/Developer/railbaron` and friends) rather than this repo's `games/`
-directories — deliberately frozen until the LAN cutover retires those
-checkouts, so this does not contradict the games having moved into
-`game-host` above.
+Those subdirectory names — `saves/railbaron`, `saves/acquire` — are the ones
+the three retired `start-*.sh` scripts already created, so the cutover moved
+no data on this machine. (Render was not so lucky: its disk said `games/`,
+and the cutover renamed it once.) Marco Polo gets no directory, because it
+persists nothing.
 
 Each game keeps a repo-local relative default so it boots standalone; the
-absolute path matters here because a service's working directory is not the
-game repo, and a relative default would silently resolve to a different,
-empty directory — every saved room seemingly vanished.
+absolute path matters here because a service's working directory is wherever
+its plist says, and a relative default would silently resolve to a different,
+empty directory — every saved room seemingly vanished. `DATA_DIR` has no
+default at all for the same reason: the host refuses to boot without it
+rather than guessing.
 
 Saves stay on local disk deliberately: the stores write via atomic
 temp-file-and-rename on every event, which synced folders (iCloud/Dropbox)
@@ -118,15 +134,24 @@ directory is small JSON files, and Time Machine already covers it.
 
 ## Adding a game
 
-1. Claim the next slot pair in [PORTS.md](PORTS.md) (server 400N, dev client
-   7930+N, path `/<name>`).
-2. Point the game at its numbers: server default and dev-client port in the
-   game's own config, hardcoded — plus a docs pointer back at PORTS.md.
-3. Build/serve the game's client under its path prefix (Vite `base`).
-4. Uncomment or add its `handle` blocks in the [Caddyfile](Caddyfile), then
-   `caddy validate --config Caddyfile` and reload
-   (`brew services restart caddy`).
-5. Add it to the menu ([menu/index.html](menu/index.html)) — edits are live,
-   Caddy serves the file per request.
-6. Give it a start script (copy [start-railbaron.sh](start-railbaron.sh))
-   pointing its save directory at `saves/<name>`.
+1. Add the package under `games/<name>/`, and claim its dev slot pair in
+   [PORTS.md](PORTS.md) (standalone server 400N, dev client 7930+N).
+2. Point the game at its numbers: standalone server default and dev-client
+   port in the game's own config, hardcoded — plus a docs pointer back at
+   PORTS.md. These are dev-only; the hosted process uses neither.
+3. Build/serve the game's client under its path prefix (Vite `base`). The
+   prefix must equal the built base path, because assets are requested at
+   `<base>/assets/…` and nothing rewrites them.
+4. Export `mount(ctx)` returning a `MountedGame` (see
+   [packages/host/contract.ts](packages/host/contract.ts)), and make the
+   game's existing boot function a thin wrapper over it so it still runs
+   alone.
+5. Add one row to `GAMES` in [apps/host/host.ts](apps/host/host.ts) — path,
+   title and save-directory name all come off the mount, so the menu and the
+   aggregate `/health` pick it up with nothing else to edit.
+
+That is the whole list. **No Caddyfile edit, no menu edit, no start script,
+no plist** — the front door forwards one port and knows no game names, the
+menu is generated from what mounted, and one agent runs the lot. Those four
+steps used to be steps 4 through 6 of this checklist and a plist copy;
+deleting them was the point of the composition work.
