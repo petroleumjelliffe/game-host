@@ -262,6 +262,15 @@ brew services restart caddy          # reload the front door
 ./install-services.sh remove         # stop and uninstall
 ```
 
+**`kickstart` is a restart, not a deploy — this is the one habit to unlearn.**
+Until 2026-08-20 the agent built at boot, so `git pull` plus a kickstart was
+the whole deploy. The build moved to `deploy.sh` (that is what took the
+restart outage from 2.3s to ~0.2s), and the agent now execs a prebuilt
+`apps/host/dist/main.mjs`. A kickstart therefore restarts on **whatever was
+last built**, which is correct behaviour for a restart and is exactly why
+forgetting `./deploy.sh` looks like a deploy that shipped nothing. There is no
+error and no warning; `/health` reports the old build's versions, truthfully.
+
 One agent, `com.game-host`, one log at `/opt/homebrew/var/log/game-host.log`.
 Stop it with `launchctl bootout gui/$(id -u)/com.game-host`; start it again by
 rerunning the installer. There is no per-game agent, log, or menu file any
@@ -269,10 +278,39 @@ more — the menu is generated from what mounted, so adding a game edits no
 front-door configuration at all.
 
 Deploying to Render is a `git push`: the service auto-deploys on every commit
-to `main`. Both deployments and their gotchas are in
+to `main`, and that did not change when the server started being compiled —
+only its start command did (`npm run start:host:compiled`, plain `node` on the
+bundle). Both deployments and their gotchas are in
 [README.md](README.md#deploying) — in particular that a Render **pre-deploy
 command cannot see the persistent disk**, which is how a room migration
 reported success and moved nothing.
+
+### What "compiled" covers, and what it does not
+
+**The server, and only the server.** The three clients were always compiled;
+Vite has built them to `games/*/dist` from the start. What ran uncompiled was
+the server — `tsx` transpiling 57 files of three game servers and two shared
+packages at every boot, 478ms of it. `apps/host/build.ts` bundles that with
+esbuild to one `apps/host/dist/main.mjs` (179ms to a served `/health`), and
+`npm run build` emits it alongside the clients.
+
+Three consequences worth carrying into any change here:
+
+- **`npm run build` typechecks first.** That is new, and it is what makes a
+  type error fail a deploy rather than boot and serve — verified both ways, a
+  planted `const x: number = "…"` used to build clean under Vite and run
+  happily under `tsx`. It costs ~9s, which was unaffordable while the build sat
+  in the service start path and is free now that it does not.
+- **`tsx` is a `devDependency` everywhere.** The bundle's whole external
+  surface is `cors`, `express`, `socket.io` and node builtins. Do not add a
+  runtime import that is not a production dependency of the package importing
+  it.
+- **A bundle erases module locations**, which is why every game resolves its
+  client through `import.meta.resolve('@game-host/<name>/package.json')` rather
+  than `import.meta.url`. `apps/host/compiled.test.ts` boots the compiled host
+  and reads those paths back; it is the gate on this whole arrangement, and it
+  builds through the exported `hostBuildOptions` rather than a copy so it
+  cannot pass while the shipped build resolves something else.
 
 ## The port registry is canonical here
 

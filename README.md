@@ -120,6 +120,36 @@ they differ in audience, not in tier. The client is origin-relative, so the
 same build serves both: it talks to whoever served it, and **no build in this
 repo names an origin**. Do not reintroduce one.
 
+### What a deploy builds, and what a player sees
+
+"Compiled", since 2026-08-20, means **the server** — and only the server. The
+three clients were always compiled: Vite has built them to `games/*/dist` from
+the beginning and nothing about that changed. What was never compiled was the
+server, which ran under `tsx`: 57 files of three game servers plus two shared
+packages, transpiled from scratch on every start. `npm run build` now also
+emits one `apps/host/dist/main.mjs`, and plain `node` runs it.
+
+So one build does four things — typecheck every workspace, three Vite clients,
+one server bundle — and the artifact is gitignored, so every machine builds
+its own and none of it is ever committed.
+
+**For a player, nothing changes.** Same URLs, same room codes, same assets,
+same sockets. No client code was touched. Two second-order effects are worth
+knowing before a game night:
+
+- **A restart is shorter but not invisible.** The server gap is ~0.2s, but
+  socket.io retries on its own backoff — 500ms and doubling — so a client that
+  fails the instant the server goes away still waits out its own timer. Expect
+  about a second, against the 3.6–5.9s measured before this change.
+- **One thing is slightly worse, and it is a real trade.** `deploy.sh` rebuilds
+  the clients *while the old server is still serving*, so content-hashed assets
+  are replaced a few seconds before the restart. A page that has been open a
+  while and then lazy-loads a chunk in that window gets a 404 and needs a
+  reload. The hazard is not new — Vite deletes the old hashed files either way
+  — but it used to land while the server was already down. Buying a shorter
+  outage with a slightly earlier asset swap is the right trade for a room full
+  of phones, and it is still a reason not to deploy mid-hand.
+
 ### To the LAN (this machine)
 
 ```bash
