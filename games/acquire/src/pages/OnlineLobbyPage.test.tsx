@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
@@ -59,6 +59,7 @@ function renderLobby(connection: Connection) {
 }
 
 beforeEach(() => { localStorage.clear(); });
+afterEach(() => { vi.useRealTimers(); });
 
 describe('creating a room, with no name form in the way', () => {
   it('sends no name at all, and lets the server seat and name you', () => {
@@ -109,6 +110,33 @@ describe('creating a room, with no name form in the way', () => {
     expect(button).not.toBeDisabled();
     expect(screen.getByText(/createRoom requires a name/i)).toBeInTheDocument();
 
+    fireEvent.click(button);
+    expect(f.created).toHaveLength(2);
+  });
+
+  // The sibling of the test above, and the one that was missing. A rejection
+  // is the server *answering*; this is the server not being there at all —
+  // mid-deploy, mid-restart, or off. `createRoom` is fire-and-forget, so
+  // nothing ever arrives to clear `waiting`, and the button stays disabled
+  // reading "Creating…" until the page is reloaded. Reported from the LAN
+  // 2026-08-20, the day the composed host took over; Rail Baron already had
+  // this timeout and was the only game that did.
+  it('recovers from silence instead of hanging on "Creating…" forever', () => {
+    vi.useFakeTimers();
+    const f = fakeConnection();
+    renderLobby(f.connection);
+
+    fireEvent.click(screen.getByRole('button', { name: /create room/i }));
+    expect(screen.getByRole('button', { name: /creating/i })).toBeDisabled();
+
+    // No `joined`, no `rejected` — the server simply never answers.
+    act(() => { vi.advanceTimersByTime(8000); });
+
+    const button = screen.getByRole('button', { name: /create room/i });
+    expect(button).not.toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/no answer/i);
+
+    // And it is a recovery, not a dead end: clicking again asks again.
     fireEvent.click(button);
     expect(f.created).toHaveLength(2);
   });

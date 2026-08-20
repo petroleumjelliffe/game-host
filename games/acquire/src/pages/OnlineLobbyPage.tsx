@@ -9,6 +9,24 @@ import { useNavigate } from 'react-router-dom';
 import { getConnection, type Connection } from '../net/connection';
 import { rememberedName, saveIdentity } from '../net/identity';
 
+/**
+ * How long to wait for `createRoom` to be answered before saying so.
+ *
+ * `createRoom` is fire-and-forget — no ack, no timeout (see
+ * `packages/lobby/client/connection.ts`) — so a server that is *absent*
+ * rather than refusing sends neither `joined` nor `rejected`, and nothing
+ * below would ever clear `waiting`. That is not hypothetical: socket.io
+ * buffers the emit while disconnected and delivers it on reconnect, so the
+ * click is not lost — but until the server comes back there is nothing to
+ * show for it, and a disabled button reading "Creating…" is indistinguishable
+ * from a hang. Reported from the LAN 2026-08-20.
+ *
+ * 8s matches Rail Baron's `OnlineApp.tsx`, which had this from the start and
+ * was the only game that did. Long enough to cover a deploy's socket drop and
+ * the reconnect backoff behind it; short enough that nobody reloads first.
+ */
+const NO_ANSWER_MS = 8000;
+
 export interface OnlineLobbyPageProps {
   /** Injectable for tests. The app never passes it. */
   connect?: () => Connection;
@@ -26,6 +44,14 @@ export function OnlineLobbyPage({ connect = getConnection }: OnlineLobbyPageProp
   // The name the room is created under, captured at the moment of the click.
   const sentName = useRef('');
 
+  // Cleared by an answer of either kind, and on unmount. A ref rather than
+  // state because nothing renders from it — it exists only to be cancelled.
+  const noAnswer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopWaiting = () => {
+    if (noAnswer.current !== null) { clearTimeout(noAnswer.current); noAnswer.current = null; }
+    setWaiting(false);
+  };
+
   const create = () => {
     const c = connection ?? connect();
     setConnection(c);
@@ -42,12 +68,18 @@ export function OnlineLobbyPage({ connect = getConnection }: OnlineLobbyPageProp
     setError(null);
     setWaiting(true);
     c.createRoom(name);
+    noAnswer.current = setTimeout(() => {
+      noAnswer.current = null;
+      setWaiting(false);
+      setError('No answer from the server — it may be restarting. Try again.');
+    }, NO_ANSWER_MS);
   };
 
   useEffect(() => {
     if (!connection) return;
 
     const offJoined = connection.onJoined((msg) => {
+      stopWaiting();
       saveIdentity(msg.roomId, { playerId: msg.playerId, token: msg.token, name: sentName.current });
       navigate(`/room/${msg.roomId}`);
     });
@@ -55,9 +87,9 @@ export function OnlineLobbyPage({ connect = getConnection }: OnlineLobbyPageProp
     // leave `waiting` latched forever on a disabled button with no way out.
     const offRejected = connection.transport.onRejected((msg) => {
       setError(msg.message);
-      setWaiting(false);
+      stopWaiting();
     });
-    return () => { offJoined(); offRejected(); };
+    return () => { offJoined(); offRejected(); stopWaiting(); };
   }, [connection, navigate]);
 
   return (
