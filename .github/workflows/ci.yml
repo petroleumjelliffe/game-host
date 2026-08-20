@@ -18,5 +18,20 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
+
+      # Builds before it tests, and that is not an optimisation.
+      #
+      # This workflow ran `npm run typecheck` then `npm test` and was red on
+      # `main` for a full day in August 2026, every commit, on one test:
+      # apps/host's SPA-fallback check. Rail Baron and Acquire arm their
+      # fallback only when a built client sits beside them, so on a runner
+      # that had never built, the route 404s. It reported `expected 404 to be
+      # 200`, which names neither the cause nor the fix, and it passed for
+      # everyone locally because a working tree has been built at least once.
+      #
+      # No separate typecheck step: `npm run build` runs `npm run typecheck`
+      # first and stops on it, so a type error still fails here — it just
+      # fails without paying 9s of tsc twice. That gate is why a type error
+      # cannot reach either deployment; see README's Deploying.
+      - run: npm run build
       - run: npm test

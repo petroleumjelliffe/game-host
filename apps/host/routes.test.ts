@@ -13,7 +13,10 @@
 // was broken. Each fake client carries a marker string, and the assertions
 // name it.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { cleanup, startTestHost, type TestHost } from './testHost.js';
 
 let host: TestHost | undefined;
@@ -24,6 +27,8 @@ afterEach(async () => {
   host = undefined;
   if (dataDir) await cleanup(dataDir);
 });
+
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const PATHS = {
   railbaron: '/railbaron',
@@ -127,10 +132,35 @@ describe('health', () => {
 });
 
 describe('one game\'s SPA fallback', () => {
-  // Rail Baron and Acquire only arm their fallback when a built client exists
-  // beside them, and both are built in this working tree. The assertions
-  // below hold either way: with a build present the fallback must not reach
-  // past its own prefix, and with none present nothing may answer at all.
+  // Rail Baron and Acquire arm their fallback only when a built client exists
+  // beside them, so this block tests built output and not routing alone. An
+  // earlier version of this comment claimed the assertions "hold either way,
+  // with a build present or not". They do not, and that cost a day of red CI
+  // in August 2026: the workflow ran `npm test` without ever building, this
+  // was the only test that noticed, and it reported `expected 404 to be 200`
+  // — which says nothing at all about the actual cause.
+  //
+  // So the requirement is stated once, out loud, and the failure explains
+  // itself. CI builds before it tests.
+  const BUILT_CLIENTS: Readonly<Record<string, string>> = {
+    'Rail Baron': join(REPO, 'games', 'railbaron', 'dist', 'index.html'),
+    Acquire: join(REPO, 'games', 'acquire', 'dist', 'index.html'),
+  };
+
+  beforeAll(() => {
+    const missing = Object.entries(BUILT_CLIENTS)
+      .filter(([, file]) => !existsSync(file))
+      .map(([game, file]) => `  ${game}: ${file}`);
+    if (missing.length > 0) {
+      throw new Error(
+        'These tests need built clients, and these are missing:\n'
+        + `${missing.join('\n')}\n\n`
+        + '  Run `npm run build` first. A game only arms its SPA fallback when\n'
+        + '  a built client sits beside it, so without one the assertions below\n'
+        + '  fail as a bare 404 that looks like a routing bug and is not.\n',
+      );
+    }
+  });
 
   it('answers under its own prefix with its own page', async () => {
     // Both games' clients are built in this working tree, so both titles are
