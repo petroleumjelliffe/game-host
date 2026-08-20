@@ -193,8 +193,11 @@ Four things there are load-bearing in ways that are not obvious:
   live instance — a pre-deploy that tests for a path there silently finds
   nothing and exits 0. That is how the Acquire room migration reported success
   and moved nothing, 2026-08-20.
-- **Every deploy drops every socket.** Clients reconnect, but see the backlog:
-  Marco Polo still gives no feedback while disconnected.
+- **Every deploy drops every socket.** Clients reconnect on their own — which
+  became true on 2026-08-20 and was not before it. `closeSockets` used to call
+  `disconnectSockets(true)`, and a socket.io client treats a server-initiated
+  disconnect as final, so every deploy left every open page dead until someone
+  reloaded it by hand. See the backlog.
 - **The start command must be `start:host:compiled`.** `npm run build` emits
   `apps/host/dist/main.mjs`, and the start command runs plain `node` on it —
   no `tsx`, no transpiling three game servers on every cold start. The
