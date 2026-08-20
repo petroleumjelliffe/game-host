@@ -7,7 +7,11 @@ set -eu
 AGENTS="$HOME/Library/LaunchAgents"
 UID_N="$(id -u)"
 
-for plist in "$(dirname "$0")"/launchd/com.game-host.*.plist; do
+# No dot before the wildcard: the pattern used to be com.game-host.*.plist,
+# back when every agent was com.game-host.<game>. The composed host's plist is
+# com.game-host.plist with no middle segment, and that pattern does not match
+# it — a `remove` would have retired three agents and installed nothing.
+for plist in "$(dirname "$0")"/launchd/com.game-host*.plist; do
   name="$(basename "$plist" .plist)"
   target="$AGENTS/$name.plist"
   # bootout is idempotent-ish but chatty; ignore "not loaded" failures.
