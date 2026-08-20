@@ -15,12 +15,29 @@ import type { Server as SocketServer } from 'socket.io';
  *
  * This does the part that is genuinely this game's:
  *
- * - `disconnectSockets(true)` closes the underlying connections, not just the
- *   socket.io sessions — clients go away rather than reconnecting into a
- *   server that is shutting down.
  * - `engine.close()` closes that engine's own clients and its own `ws`
  *   server. Each attached engine has its own, so this is per-game by
  *   construction.
+ *
+ * **`disconnectSockets(true)` used to be the first line here and had to go**
+ * (2026-08-20). Its comment read "clients go away rather than reconnecting
+ * into a server that is shutting down", which is true and is not what it
+ * costs. A socket.io client that is disconnected *by the server* treats that
+ * as final: the reason is `io server disconnect`, `socket.active` goes false,
+ * and the manager never retries. Not with a longer backoff — never. So every
+ * deploy and every restart left every open page permanently dead, showing a
+ * connecting state forever, recoverable only by a manual reload.
+ *
+ * Observed in a browser against the real build: kill the server, bring it
+ * back, and the page sat at `io server disconnect` with `active: false` while
+ * a raw websocket to the very same socket.io path opened fine.
+ *
+ * Closing the engine instead drops the transport without attributing it to
+ * the server, so the client sees a transport close, retries on its own
+ * backoff, and is back a moment after the new process listens. Clients do
+ * briefly retry into a server that is shutting down — which was the original
+ * worry — and that is the cheaper failure by a wide margin: a few refused
+ * attempts against a page that never comes back at all.
  *
  * What it deliberately leaves behind: the `request` and `upgrade` listeners
  * engine.io added to the shared HTTP server. Nothing removes those, and
@@ -31,6 +48,5 @@ import type { Server as SocketServer } from 'socket.io';
  * game has been through here.
  */
 export function closeSockets(io: SocketServer): void {
-  io.disconnectSockets(true);
   io.engine.close();
 }
