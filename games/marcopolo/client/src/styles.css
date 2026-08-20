@@ -86,6 +86,16 @@ body {
   font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; color: var(--slate);
 }
 
+/* Why a tap did nothing. Deck typography so it reads as part of the panel
+   rather than a browser error, --error so it is not mistaken for set
+   dressing. */
+.deck__note {
+  margin-top: 10px;
+  font-family: var(--mono); font-size: 9px; line-height: 1.5;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--error);
+}
+
 /* Buttons: square, spaced, two weights. */
 .btn {
   font-family: var(--display);
