@@ -55,7 +55,7 @@ async function start(nodeEnv?: string): Promise<Running> {
     devSeed,
     close: () =>
       new Promise<void>((resolve) => {
-        io.close();
+        void io.close();
         httpServer.close(() => resolve());
       }),
   };

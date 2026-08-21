@@ -139,6 +139,10 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
         return next.every((drum, i) => drum === current[i]) ? current : next;
       });
     }, DICE_MS);
+    // `key` changes exactly when a new roll arrives, which is the only time
+    // this should restart; `whiteKey` is derived from the same roll, so
+    // listing it would restart the drums mid-spin on an unrelated re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, roll]);
 
   /**

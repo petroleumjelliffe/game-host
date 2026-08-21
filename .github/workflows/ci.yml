@@ -35,3 +35,24 @@ jobs:
       # cannot reach either deployment; see README's Deploying.
       - run: npm run build
       - run: npm test
+
+  # A job of its own rather than a fourth step above, for the same reason
+  # scripts/test-all.mjs refuses to `&&` its packages together: steps stop at
+  # the first failure, so a lint error would hide whatever the build and the
+  # 1658 tests were about to say. Two independent answers beat one that
+  # short-circuits. It costs a second npm ci, which is cached.
+  #
+  # Not in `npm run build`, and so not in deploy.sh either: a type error must
+  # fail a deploy and does, but a lint error belongs to the pull request. The
+  # restart budget the compile plan bought is not spent on style.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # No build first: unlike the tests, lint needs types, not artifacts.
+      - run: npm run lint

@@ -384,7 +384,7 @@ describe('createLobbyConnection against a socket.io mount moved off /socket.io',
 
   afterAll(async () => {
     await new Promise<void>((resolve) => {
-      prefixed.io.close();
+      void prefixed.io.close();
       prefixed.httpServer.close(() => resolve());
     });
   });

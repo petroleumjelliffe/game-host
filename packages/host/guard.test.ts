@@ -46,7 +46,7 @@ afterEach(async () => {
   for (const socket of open) socket.disconnect();
   open.length = 0;
   await new Promise<void>((resolve) => {
-    io.close(() => resolve());
+    void io.close(() => resolve());
   });
   vi.restoreAllMocks();
 });
@@ -156,7 +156,7 @@ describe('guardSocket', () => {
     expect(typeof server.id).toBe('string');
     expect(server.id.length).toBeGreaterThan(0);
 
-    server.join('a-room');
+    void server.join('a-room');
     expect(server.rooms.has('a-room')).toBe(true);
     expect(io.sockets.sockets.get(server.id)).toBe(server);
 

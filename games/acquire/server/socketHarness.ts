@@ -49,7 +49,7 @@ export async function startTestServer(): Promise<TestServer> {
     rooms,
     close: () =>
       new Promise<void>((resolve) => {
-        io.close();
+        void io.close();
         httpServer.close(() => resolve());
       }),
   };

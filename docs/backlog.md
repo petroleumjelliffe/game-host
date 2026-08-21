@@ -4,13 +4,14 @@ Work that is known, understood, and not yet done. Each item says what the
 evidence was, so nobody has to rediscover it.
 
 For work deliberately excluded from the cutover, see the plan's
-[Deliberately not in this plan](plans/2026-08-19-cutover.md) section — a
-linter, ~~compiling `apps/host`~~, ~~a shared `packages/room-store`~~,
+[Deliberately not in this plan](plans/2026-08-19-cutover.md) section —
+~~a linter~~, ~~compiling `apps/host`~~, ~~a shared `packages/room-store`~~,
 tightening CORS, ~~a shared remembered name~~. Those were scoped decisions,
-not oversights, and three of the five are done (2026-08-20: the
+not oversights, and four of the five are done (2026-08-20: the
 [compile plan](plans/2026-08-20-compile-the-host.md), the
-[room store](plans/2026-08-20-room-store.md), and the
-[lobby pass](plans/2026-08-20-the-lobby-pass.md)'s task 4).
+[room store](plans/2026-08-20-room-store.md), the
+[lobby pass](plans/2026-08-20-the-lobby-pass.md)'s task 4, and
+[the linter](plans/2026-08-20-the-linter.md)). **CORS is the only one left.**
 
 ---
 
@@ -30,21 +31,55 @@ answer, Marco Polo component tests, and a wire-level conformance suite),
 and [`packages/room-store`](plans/2026-08-20-room-store.md) (Acquire's
 `close()` now drains in-flight saves; Rail Baron got per-write temp names
 and quarantine). Dependency versions are aligned — one line per shared
-dep, Acquire moved up to meet the rest.
+dep, Acquire moved up to meet the rest. And
+[the linter](plans/2026-08-20-the-linter.md) landed — five type-aware rules,
+one root invocation over all seven workspaces, its own CI job. **It found no
+defects**, which is the part to remember before anyone cites it as evidence
+that this kind of gate catches things here; the 35 promise findings a first
+pass reported were two library return-type changes (react-router 7's
+`navigate()`, socket.io 4.8.3's `close()`), not bugs. **No formatter**, and
+that was measured: Prettier would rewrite 256 of 386 files to enforce a
+style the tree already follows, and would fold Rail Baron's payout table
+into two shapes down its own length. `.editorconfig` covers the rest.
 
 **Open, roughly in the order the plans themselves point:**
 
 - **Tightening CORS** — both games still run `origin: '*'`. The cutover
   plan called it "the next plan's obvious first item" once a single public
   origin existed, and it has existed since 2026-08-20.
-- **A linter/formatter** — deferred four times now, always for the same
-  good reason (a whole-repo reformat mid-plan ruins the diff and the
-  bisect). Between plans is exactly when it fits.
 - **The per-game improvements** at the bottom of this file — spectator
   mode is the one lobby-shaped item among them, and task 5's conformance
   suite is groundwork it can build on.
 - Smaller recorded items: Rail Baron's NodeNext split; the orphaned-`.tmp`
-  boot sweep the room-store plan scoped out.
+  boot sweep the room-store plan scoped out; Marco Polo's untypechecked
+  build configs (below).
+
+---
+
+## Marco Polo's build configs are not typechecked
+
+**Found 2026-08-20**, by the linter, which could not resolve them to any
+project. `games/marcopolo/vite.config.ts` and `vitest.config.ts` belong to no
+`tsconfig.json`: Marco Polo's `include` is `["protocol", "server"]`, while
+Rail Baron and Acquire both list their `vite.config.ts` explicitly. Marco
+Polo is the only game whose build configuration `tsc` never reads.
+
+**It is hiding two real type errors.** Adding both files to the `include`
+produces:
+
+```
+vitest.config.ts(8,9):  error TS2769: 'name' does not exist in type 'TestProjectInlineConfiguration | ...'
+vitest.config.ts(19,9): error TS2769: 'name' does not exist in type 'TestProjectInlineConfiguration | ...'
+```
+
+Vitest 4 moved a project's `name` under `test`; Marco Polo's two projects
+still declare it at the top level, so the labels are almost certainly being
+dropped. The tests all pass either way, which is why nobody noticed.
+
+**Fix:** move both `name` keys under `test`, confirm the project labels
+appear in `vitest run` output, then add both files to the `include` and drop
+`games/marcopolo/*.config.ts` from `allowDefaultProject` in
+`eslint.config.mjs`. Small, and worth doing while the reason is written down.
 
 ---
 

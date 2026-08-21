@@ -45,12 +45,19 @@ export function usePlayback(
     return () => {
       if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
     };
+    // `key` changes whenever `path` does, so it stands in for it here.
+    // Depending on `path` directly would clear and restart the interval on
+    // every render that rebuilt the array, and playback would never advance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, stepMs]);
 
   const skip = useCallback(() => {
     if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
     setAt(path === null ? 0 : Math.max(0, path.length - 1));
+    // `key` changes whenever `path` does — it is the token this hook uses to
+    // mean "a new path" — so depending on both would hand every caller a new
+    // `skip` identity on each render for no gain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   const shown = path === null ? [] : path.slice(0, at + 1);
