@@ -30,6 +30,9 @@ export default defineConfig({
           // one. Proven with a planted throw before deletion. (2026-08-20)
           pool: 'forks',
           execArgv: ['--no-experimental-webstorage'],
+          // jest-dom matchers, testing-library cleanup, and a
+          // ResizeObserver stub — see the file. (2026-08-20)
+          setupFiles: ['./client/src/test/setup.ts'],
           include: ['client/**/*.test.{ts,tsx}'],
         },
       },

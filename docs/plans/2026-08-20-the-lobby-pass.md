@@ -1,6 +1,6 @@
 # The lobby pass
 
-**Status:** tasks 0–1 implemented 2026-08-20; tasks 2–5 proposed. Revised after a review pass
+**Status:** tasks 0–2 implemented 2026-08-20; tasks 3a–5 proposed. Revised after a review pass
 that measured a baseline and found a larger hole than any task here named —
 see "The hole the first draft missed".
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md)'s "Deliberately not
@@ -427,6 +427,31 @@ verified only by eye.
 
 **Done when:** Marco Polo has a component test that fails if the status gate is
 removed. Verified by removing it.
+
+#### As built, 2026-08-20
+
+Rail Baron's versions, as specified, and six tests rather than one — the
+status gate plus the rest of the same day's fix, which had shipped equally
+eyeball-verified: the rejection note (`versionMismatch` says reload, anything
+else relays its message), the remembered name offered to `createRoom`, and
+JOIN A GAME staying live while disconnected because navigating is not an
+emit. The gate test was verified the specified way: `disabled={false}`
+planted, exactly one test red, restored.
+
+The mock is the shared fake from task 0 — its first consumer outside the
+packages that already had hand-rolled ones — paired with a **real**
+`createIdentityStore` on jsdom's **real** `localStorage`: the first test in
+this client to cross the identity path at all, and with it the proof that
+task 1's flag arrangement carries Marco Polo too.
+
+The environment cost three setup lines, each earned: a `ResizeObserver` stub
+(Deck measures itself with one; jsdom has none), a `getContext` that answers
+`null` quietly (jsdom logs "Not implemented" twelve times per render
+otherwise; the renderers already treat null as the no-GPU fallback), and the
+jest-dom import this task existed to add. `HomeScreen` rendered otherwise
+untouched — the canvas scenery null-guards its way through jsdom on its own.
+
+Suite: **1629 tests / 154 files** — the six new ones and nothing vanished.
 
 ### 3a. The missing timeout tests, against today's code
 
