@@ -171,7 +171,12 @@ down and then discovering the problem.
 
 The hook only fires where it should: only on `main`, and only in the clone
 the `/opt/homebrew/etc/game-host` symlink names — a pull in a worktree, or
-in a clone on some other machine, deploys nothing. The installer also sets
+in a clone on some other machine, deploys nothing. Every run is appended to
+`/opt/homebrew/var/log/game-host-deploy.log` as well as printed, ending in
+`deploy ok` or `DEPLOY FAILED`, because a pull does not always have a
+terminal: VS Code's sync runs git in the background and git ignores a
+post-merge hook's exit status, so from there a failed deploy would look
+exactly like a successful sync. The log is where that answer lives. The installer also sets
 `git config pull.ff only`, keeping what the old in-script pull enforced: a
 divergence stops and asks a human rather than deploying a merge commit
 nobody reviewed.

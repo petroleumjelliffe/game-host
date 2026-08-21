@@ -28,5 +28,18 @@ toplevel="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)"
 host="$(cd /opt/homebrew/etc/game-host 2>/dev/null && pwd -P)" || exit 0
 [ "$toplevel" = "$host" ] || exit 0
 
-echo "==> post-merge on main: deploying"
-exec "$toplevel/deploy.sh"
+# Everything below lands in the terminal *and* in the deploy log, because a
+# pull does not always have a terminal: VS Code's sync runs git in the
+# background, its output goes to an Output channel nobody has open, and git
+# ignores a post-merge hook's exit status — so a failed deploy from there
+# would look exactly like a successful sync. The log is where the answer
+# lives; the FAILED line is written by us because no exit code survives.
+LOG=/opt/homebrew/var/log/game-host-deploy.log
+{
+	echo "==> post-merge deploy: $(date '+%Y-%m-%d %H:%M:%S'), HEAD $(git rev-parse --short HEAD)"
+	if "$toplevel/deploy.sh"; then
+		echo "==> deploy ok"
+	else
+		echo "==> DEPLOY FAILED (exit $?) — the old build is still serving; see above"
+	fi
+} 2>&1 | tee -a "$LOG"

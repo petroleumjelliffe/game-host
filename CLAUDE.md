@@ -254,6 +254,7 @@ git pull                             # deploy to the LAN (post-merge hook runs d
 launchctl kickstart -k gui/$(id -u)/com.game-host               # restart only, no rebuild
 launchctl list | grep com.game-host                             # is it up
 tail -f /opt/homebrew/var/log/game-host.log                     # what it is doing
+tail /opt/homebrew/var/log/game-host-deploy.log                 # what the last pull-deploy said
 
 curl -s localhost/health             # all three games, one request
 curl -s localhost/                   # the generated menu
