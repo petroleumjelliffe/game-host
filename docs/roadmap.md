@@ -52,8 +52,9 @@ What is missing is money and everything money touches.
 ## Phase 0 — the small items, one of which is not small
 
 The backlog groups three things in a single line as "smaller recorded items".
-Checked 2026-08-21, that grouping is wrong in both directions: one is small,
-one is a prerequisite for phase 1, and one is not work at all.
+Checked 2026-08-21, that grouping was wrong in both directions: one was small,
+one was a phase 1 prerequisite (now done), and one is not work at all. A
+fourth turned up while doing the second.
 
 1. **Marco Polo's build configs are not typechecked.** *Genuinely small.*
    `vite.config.ts` and `vitest.config.ts` are in no `tsconfig.json` — the only
@@ -62,29 +63,37 @@ one is a prerequisite for phase 1, and one is not work at all.
    Fix, then drop `games/marcopolo/*.config.ts` from `allowDefaultProject` in
    `eslint.config.mjs`. Found by the linter; full write-up in the backlog.
 
-2. **Rail Baron's NodeNext split.** *Not small — and it has a real sequencing
-   claim on phase 1.* It is Task 8 of
-   [phase 0](plans/2026-08-19-phase-0-pre-migration-hardening.md#L672), deferred
-   there with a measured scope warning: **≈74 extensionless relative imports**
-   need `.js` — 42 in `server/`, 1 in `session/`, and **31 in `src/state/`**,
-   because the server imports its game rules from client-land. All mechanical,
-   all bundler-compatible.
+2. ~~**Rail Baron's NodeNext split.**~~ **Done 2026-08-21** — 93 lines across
+   29 files, landed before phase 1 exactly so a 137-import rename would not
+   collide with money-spec work in `src/state/`.
 
-   Those 31 are the problem. `src/state/game.ts` is exactly where phase 1 folds
-   money into the state, so this either lands **before** the money spec as
-   mechanical churn on stable code, or **after** it as a 74-import rename
-   colliding with new work — or worse, in the middle. Before is much cheaper.
-   Treat it as a phase 1 prerequisite rather than housekeeping.
+   Two of phase 0's Task 8 claims were wrong and are corrected in the commit:
+   the count was **137 candidates, not ~74** (it never counted `engine/`, which
+   the server reaches through `src/state/`), and it does **not** let the server
+   run under plain `node` — which was its stated motivation. That motivation
+   was already obsolete: `apps/host` has compiled since 2026-08-20 because
+   esbuild resolves extensionless imports happily. What it buys is `tsc`
+   verifying the server's module graph under Node's resolution instead of the
+   bundler's laxer one.
 
-3. **The orphaned-`.tmp` boot sweep — do not plan this.** It was not deferred;
+3. **Acquire's `tsconfig.server.json` is unenforced.** *Found 2026-08-21,
+   while doing item 2.* Nothing runs it, so Acquire's server is typechecked
+   under `bundler` like Rail Baron's was — Acquire's own carry-forward spec
+   called this out in August and it was never actioned. Its `server/` is
+   already `.js`-clean by hand (0 extensionless imports), but enforcing the
+   config pulls in `engine/` (121) and `session/` (16). Cheaper than Rail
+   Baron's in the directory that matters, more expensive overall. Recorded in
+   the backlog; not scheduled.
+
+4. **The orphaned-`.tmp` boot sweep — do not plan this.** It was not deferred;
    it was **declined**, in the room store plan's *Deliberately not in this
    plan*: *"Orphaned temp files are leftover bytes, not a restore bug; Acquire's
    restore comment scopes this out and that stands."* The backlog's summary line
    lists it beside two real items, which reads as a to-do it never was. Strike
    it there, or restate it as a closed decision.
 
-So phase 0 is really: one small fix, one prerequisite that should be done
-before phase 1 touches `src/state/`, and one item to un-list.
+So what remains of phase 0 is item 1, plus deciding whether item 3 is worth
+enforcing. Item 2 is done; item 4 should be un-listed.
 
 ---
 
