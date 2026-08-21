@@ -1,0 +1,20 @@
+{
+  "name": "@game-host/room-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./*.js": "./*.ts",
+    "./*": "./*.ts"
+  },
+  "dependencies": {
+    "@game-host/lobby": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0"
+  }
+}

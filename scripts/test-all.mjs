@@ -23,6 +23,7 @@ import { spawn } from 'node:child_process';
 const packages = [
   ['lobby', 'packages/lobby'],
   ['host', 'packages/host'],
+  ['room-store', 'packages/room-store'],
   ['marcopolo', 'games/marcopolo'],
   ['railbaron', 'games/railbaron'],
   ['acquire', 'games/acquire'],
@@ -33,7 +34,7 @@ const packages = [
 // a socket.io server per test but holds no DOM and no game state, so it sits
 // with the light pair. `apps-host` will not: it boots three whole games per
 // file, and belongs with the heavy ones when it arrives.
-const LIGHT = new Set(['lobby', 'host', 'marcopolo']);
+const LIGHT = new Set(['lobby', 'host', 'room-store', 'marcopolo']);
 const light = packages.filter(([name]) => LIGHT.has(name));
 const heavy = packages.filter(([name]) => !LIGHT.has(name));
 
