@@ -29,6 +29,7 @@
   "dependencies": {
     "@game-host/host": "*",
     "@game-host/lobby": "*",
+    "@game-host/room-store": "*",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "react": "^19.2.8",

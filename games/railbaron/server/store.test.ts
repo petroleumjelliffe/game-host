@@ -1,3 +1,9 @@
+// The payload half of the record contract. The mechanics tests — staging,
+// chains, settled, quarantine — moved to packages/room-store/store.test.ts
+// on 2026-08-20, with the store they test. What stays is what stayed in
+// store.ts: Rail Baron's record shape and the guard that checks it, log
+// event by log event, exercised through the configured store because that
+// is how every record actually reaches disk.
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,7 +23,7 @@ const record = (roomId: string, log: GameEvent[]): SavedRoom => ({
 
 const freshDir = () => mkdtemp(join(tmpdir(), 'rb-store-'));
 
-describe('the file store', () => {
+describe('the record and its guard', () => {
   it('saves a room and loads it back, log intact', async () => {
     const dir = await freshDir();
     const store = createFileStore(dir);
@@ -27,14 +33,14 @@ describe('the file store', () => {
     ];
     await store.save(record('ABC234', log));
 
-    const { records, skipped } = await store.loadAll();
-    expect(skipped).toEqual([]);
+    const { records, unreadable } = await store.loadAll();
+    expect(unreadable).toEqual([]);
     expect(records).toHaveLength(1);
     expect(records[0]!.log).toEqual(log);
     expect(records[0]!.players[0]!.token).toBe('t1');
   });
 
-  it('skips a record whose log fails isGameEvent, and names the file', async () => {
+  it('refuses a record whose log fails isGameEvent, and names the file', async () => {
     const dir = await freshDir();
     const store = createFileStore(dir);
     await store.save(record('ABC234', [{ type: 'started' }]));
@@ -46,32 +52,18 @@ describe('the file store', () => {
     raw.log = [{ type: 'joined', seat: 'octarine', name: 'X' }];
     await writeFile(path, JSON.stringify(raw));
 
-    const { records, skipped } = await store.loadAll();
+    const { records, unreadable } = await store.loadAll();
     expect(records).toEqual([]);
-    expect(skipped).toEqual(['ABC234.json']);
+    expect(unreadable).toEqual(['ABC234.json']);
   });
 
-  it('skips unparseable files and wrong versions without throwing', async () => {
+  it('refuses a record from another save version outright', async () => {
     const dir = await freshDir();
     const store = createFileStore(dir);
-    await writeFile(join(dir, 'BAD.json'), 'not json');
     await store.save({ ...record('OLD234', [{ type: 'started' }]), version: 0 });
 
-    const { records, skipped } = await store.loadAll();
+    const { records, unreadable } = await store.loadAll();
     expect(records).toEqual([]);
-    expect(skipped.sort()).toEqual(['BAD.json', 'OLD234.json']);
-  });
-
-  it('reports no rooms and no trouble when nothing has ever been saved', async () => {
-    const store = createFileStore(join(await freshDir(), 'never-written'));
-    expect(await store.loadAll()).toEqual({ records: [], skipped: [] });
-  });
-
-  it('remove() makes a room unloadable', async () => {
-    const dir = await freshDir();
-    const store = createFileStore(dir);
-    await store.save(record('ABC234', [{ type: 'started' }]));
-    await store.remove('ABC234');
-    expect((await store.loadAll()).records).toEqual([]);
+    expect(unreadable).toEqual(['OLD234.json']);
   });
 });

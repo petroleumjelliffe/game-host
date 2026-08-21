@@ -70,9 +70,6 @@ export function createRooms(store: RoomStore): Rooms {
     SEAT_SPACE,
   );
 
-  /** Saves started but not yet finished. See `settled`. */
-  const inFlight = new Set<Promise<void>>();
-
   function persist(room: GameRoom): Promise<void> {
     const record: SavedRoom = {
       roomId: room.id,
@@ -82,9 +79,9 @@ export function createRooms(store: RoomStore): Rooms {
       players: room.players,
       log: room.log,
     };
-    const saving = store.save(record).finally(() => { inFlight.delete(saving); });
-    inFlight.add(saving);
-    return saving;
+    // The store queues and tracks its own writes now; `settled` below is
+    // what drains them.
+    return store.save(record);
   }
 
   return {
@@ -108,17 +105,23 @@ export function createRooms(store: RoomStore): Rooms {
 
     persist,
 
-    async settled() {
-      // Looped, not a single Promise.all: awaiting one batch yields to the
-      // event loop, and a handler that ran in the meantime may have started
-      // another save.
-      while (inFlight.size > 0) await Promise.all([...inFlight]);
-    },
+    // The knowledge of what is in flight lives with the write chains, which
+    // are the store's since 2026-08-20 — this stays on the interface because
+    // shutdown's contract ("saves before sockets", index.ts) is a rooms
+    // concern, wherever the bookkeeping lives.
+    settled: () => store.settled(),
 
     async restore() {
-      const { records, skipped } = await store.loadAll();
-      for (const name of skipped) {
-        console.warn(`✗ Skipped unreadable or stale save: ${name}`);
+      const { records, unreadable } = await store.loadAll();
+      // Quarantined — renamed aside, kept for a human — rather than deleted,
+      // and rather than warning at every boot forever, which is what this
+      // loop did until 2026-08-20 (and what once buried Acquire's boot log
+      // under 23 stale files). `!`, not `✗`: vitest prints `✗` for a failed
+      // test, and a boot log carrying the same glyph reads as a test
+      // failure to anyone skimming it.
+      for (const name of unreadable) {
+        console.warn(`! Quarantining unreadable save ${name} as ${name}.bad`);
+        await store.quarantine(name);
       }
       for (const r of records) {
         // Every restored seat starts disconnected: the sockets that held them

@@ -109,11 +109,13 @@ It also should not be designed alone. There are now three deferred shared
 items in the same neighbourhood, and a pass that sees all of them will design
 better than three reactive ones:
 
-- this answer timeout,
-- the shared remembered name (`lobby.name` instead of one per game — plan,
-  "Deliberately not in this plan"),
-- `packages/room-store`, which would give Acquire the `settled()` it lacks and
-  Rail Baron the `quarantine()` it lacks.
+- ~~this answer timeout~~ (done 2026-08-20, the lobby pass, task 3b),
+- ~~the shared remembered name~~ (done 2026-08-20, the lobby pass, task 4),
+- ~~`packages/room-store`~~ (done 2026-08-20,
+  [the room store](plans/2026-08-20-room-store.md) — Acquire got its
+  `settled()`, Rail Baron its `quarantine()`, and the survey found both were
+  live bugs, not niceties). All three of this neighbourhood are done, and
+  they were designed together as this note asked.
 
 **Design note for whoever takes it**, so the requirement is not rediscovered:
 it does not belong inside `createLobbyConnection`. That interface documents
