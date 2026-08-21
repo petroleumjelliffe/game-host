@@ -3,6 +3,11 @@
 Work that is known, understood, and not yet done. Each item says what the
 evidence was, so nobody has to rediscover it.
 
+**This file owns the evidence. [`roadmap.md`](roadmap.md) owns the order.**
+Nothing here is sequenced or sized on purpose — go there for what to do next
+and what it costs. If the two disagree about a fact, this file is right and
+the roadmap is stale.
+
 For work deliberately excluded from the cutover, see the plan's
 [Deliberately not in this plan](plans/2026-08-19-cutover.md) section —
 ~~a linter~~, ~~compiling `apps/host`~~, ~~a shared `packages/room-store`~~,
