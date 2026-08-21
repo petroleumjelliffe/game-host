@@ -71,7 +71,7 @@ async function boot() {
     port: address.port,
     rooms: handle.rooms,
     close: () => new Promise<void>((r) => {
-      handle.io.close();
+      void handle.io.close();
       handle.httpServer.close(() => r());
     }),
   };

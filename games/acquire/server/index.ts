@@ -496,7 +496,10 @@ if (process.argv[1]?.endsWith('index.ts')) {
   const stop = (): void => {
     if (closing) process.exit(1);
     closing = true;
-    io.close(() => { process.exit(0); });
+    // Deliberately not awaited: the callback is what exits, and socket.io's
+    // close() returning a promise is a 4.x signature detail, not a wait we
+    // owe anyone. Persists are already awaited inside the handlers above.
+    void io.close(() => { process.exit(0); });
   };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);

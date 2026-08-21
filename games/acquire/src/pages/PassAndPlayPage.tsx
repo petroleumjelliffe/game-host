@@ -32,7 +32,12 @@ export function PassAndPlayPage() {
   // Re-read after a discard, not once per mount: the page's whole job is to
   // reflect what is saved, and the discard below changes that mid-mount.
   const [generation, setGeneration] = useState(0);
+  // `generation` is a counter rather than an input: the discard below bumps
+  // it so both of these re-read what is saved instead of answering from the
+  // mount. The rule is right that neither reads it — that is what it is for.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const saved = useMemo(() => load(), [generation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const failure = useMemo(() => loadFailure(), [generation]);
   const [confirming, setConfirming] = useState(false);
 

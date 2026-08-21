@@ -12,7 +12,7 @@ import { createServer, type ServerHandle } from './index.js';
 let handle: ServerHandle | undefined;
 
 afterEach(async () => {
-  handle?.io.close();
+  void handle?.io.close();
   await new Promise<void>((resolve) => {
     if (handle === undefined) { resolve(); return; }
     handle.httpServer.close(() => { resolve(); });
