@@ -98,6 +98,15 @@ export default defineConfig({
         test: {
           name: 'app',
           environment: 'jsdom',
+          // Node's experimental `localStorage` global (on by default in
+          // newer Node lines, absent under 24 without a flag) shadows
+          // jsdom's Storage on globalThis when present. Start this
+          // project's workers without it so jsdom's real localStorage is
+          // bridged through — the same answer packages/lobby uses, verified
+          // per-project and per-project only: the `node` workers do not get
+          // the flag. execArgv needs the forks pool. (2026-08-20)
+          pool: 'forks',
+          execArgv: ['--no-experimental-webstorage'],
           include: ['src/**/*.test.{ts,tsx}'],
           // Spread the defaults back: supplying `exclude` replaces them, and
           // dropping them would set vitest scanning node_modules.

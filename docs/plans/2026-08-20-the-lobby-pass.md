@@ -1,6 +1,6 @@
 # The lobby pass
 
-**Status:** task 0 implemented 2026-08-20; tasks 1–5 proposed. Revised after a review pass
+**Status:** tasks 0–1 implemented 2026-08-20; tasks 2–5 proposed. Revised after a review pass
 that measured a baseline and found a larger hole than any task here named —
 see "The hole the first draft missed".
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md)'s "Deliberately not
@@ -368,6 +368,49 @@ green tick: the failure mode this repo has already been bitten by is
 `setupFiles` silently not running, which shows up as tests that *vanish*, and a
 suite that passes 400 fewer tests passes just as green as one that passes all
 of them.
+
+#### As built, 2026-08-20
+
+Both probes ran, and both answered more than they were asked.
+
+**The premise holds, and the fallback was not needed.** Per-project
+`execArgv` works under Vitest 4.1.11 and is properly scoped — established
+directly rather than inferred: a probe test in each project asserted on
+`process.execArgv`, and the `app` workers carried the flag while the `node`
+workers did not. The storage tests could not have established this on this
+machine, which is the finding the plan did not predict:
+
+**Under Node 24.18 the problem does not exist.** `Object.getOwnPropertyDescriptor(globalThis,
+'localStorage')` is `undefined` — no experimental global, no accessor, nothing
+shadowing jsdom. The control run (bridge deleted, no flag) passed all 23
+storage tests, which is how this surfaced. Every shim in this repo, and the
+lobby's flag, was written against a Node line that ships webstorage on by
+default; the repo's `engines: >=24` permits both worlds. The flag stays — on
+24 it is a no-op, on the lines where the global returns it disarms it — but
+the honest description changed from "fixes the suite" to "version-proofs it",
+and the new comments say so.
+
+**Marco Polo's shim never ran, proven twice.** A `throw` in its guard branch:
+all 95 tests green — the branch is dead, jsdom always provides
+`window.localStorage`. An unconditional `throw`: 8 files red — so the file
+itself *did* load; it was the guard that was never true, not a setup that
+never fired. And the plan's hypothesis about why it was harmless was itself
+confirmed on the shipped side and wrong on the tested side: the client does
+reach `localStorage`, exactly and only through the lobby's identity store
+(`client/src/net/singletons.ts` — no literal reference anywhere in
+`client/`), but none of the 8 jsdom test files exercised that path, which is
+the real reason a dead shim went unnoticed. Its jsdom project gets the flag
+because task 2's component tests start exercising it, and task 4 adds more.
+
+**What survived the deletions, deliberately:** Rail Baron's setup kept its
+jest-dom import; Acquire's kept jest-dom and `afterEach(cleanup)`. Only Marco
+Polo's file was pure shim, and only it was deleted outright — its
+`setupFiles` line went with it.
+
+Gate met: **1623 tests / 153 files**, all green, typecheck clean — the
+task-0 baseline, above the 1607 this section names because task 0 landed
+between the writing and the doing. Zero tests vanished: lobby 63, marcopolo
+95, railbaron 593, acquire 820, host 8, apps-host 44.
 
 ### 2. `@testing-library/react` into Marco Polo
 

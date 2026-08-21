@@ -156,6 +156,13 @@ export default defineConfig(() => ({
           environment: 'jsdom',
           globals: true,
           setupFiles: './src/test/setup.ts',
+          // Keeps Node's experimental localStorage global out of these
+          // workers so jsdom's real Storage reaches globalThis — the story
+          // is in src/test/setup.ts, where the shim this replaces lived.
+          // Scoped: the `node` project's workers do not get the flag.
+          // execArgv needs the forks pool. (2026-08-20)
+          pool: 'forks',
+          execArgv: ['--no-experimental-webstorage'],
         },
       },
     ],
