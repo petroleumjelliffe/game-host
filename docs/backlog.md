@@ -6,16 +6,18 @@ evidence was, so nobody has to rediscover it.
 For work deliberately excluded from the cutover, see the plan's
 [Deliberately not in this plan](plans/2026-08-19-cutover.md) section —
 ~~a linter~~, ~~compiling `apps/host`~~, ~~a shared `packages/room-store`~~,
-tightening CORS, ~~a shared remembered name~~. Those were scoped decisions,
-not oversights, and four of the five are done (2026-08-20: the
+~~tightening CORS~~, ~~a shared remembered name~~. Those were scoped
+decisions, not oversights, and **all five are now done**: the
 [compile plan](plans/2026-08-20-compile-the-host.md), the
 [room store](plans/2026-08-20-room-store.md), the
-[lobby pass](plans/2026-08-20-the-lobby-pass.md)'s task 4, and
-[the linter](plans/2026-08-20-the-linter.md)). **CORS is the only one left.**
+[lobby pass](plans/2026-08-20-the-lobby-pass.md)'s task 4 and
+[the linter](plans/2026-08-20-the-linter.md) on 2026-08-20, and
+[CORS](plans/2026-08-21-cors.md) on 2026-08-21 — that last one by deletion
+rather than the narrowing the cutover expected.
 
 ---
 
-## State of play, end of 2026-08-20
+## State of play, 2026-08-21
 
 Where a fresh session picks up. Everything below this section is the
 detailed record; this is the map.
@@ -40,13 +42,16 @@ pass reported were two library return-type changes (react-router 7's
 `navigate()`, socket.io 4.8.3's `close()`), not bugs. **No formatter**, and
 that was measured: Prettier would rewrite 256 of 386 files to enforce a
 style the tree already follows, and would fold Rail Baron's payout table
-into two shapes down its own length. `.editorconfig` covers the rest.
+into two shapes down its own length. `.editorconfig` covers the rest. And
+[CORS](plans/2026-08-21-cors.md) is gone — **deleted, not narrowed**, which
+was the finding rather than the plan: nothing has been cross-origin since the
+origin-relative work, there is not one `fetch()` in any client, and Marco Polo
+had never carried CORS at all. Note what it does *not* do, because the name
+invites over-reading: sockets are not origin-locked, since browsers never
+applied CORS to the WebSocket handshake.
 
 **Open, roughly in the order the plans themselves point:**
 
-- **Tightening CORS** — both games still run `origin: '*'`. The cutover
-  plan called it "the next plan's obvious first item" once a single public
-  origin existed, and it has existed since 2026-08-20.
 - **The per-game improvements** at the bottom of this file — spectator
   mode is the one lobby-shaped item among them, and task 5's conformance
   suite is groundwork it can build on.

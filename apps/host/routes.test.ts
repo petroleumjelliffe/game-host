@@ -260,3 +260,22 @@ describe('the old Acquire path, kept working indefinitely', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('cross-origin access', () => {
+  // Asserted on headers, not on whether a connection succeeds. Every wire
+  // test in this repo drives socket.io from Node, and a Node client does not
+  // implement the same-origin policy — it would connect happily against any
+  // policy at all, so a behavioural test here would be a test that cannot
+  // fail. See docs/plans/2026-08-21-cors.md.
+  it('sends no CORS headers for any game, even when asked as another origin', async () => {
+    host = await startTestHost();
+
+    for (const [game, base] of Object.entries(PATHS)) {
+      const res = await fetch(`${host.url}${base}/health`, {
+        headers: { Origin: 'https://evil.example' },
+      });
+      expect(res.status, game).toBe(200);
+      expect(res.headers.get('access-control-allow-origin'), game).toBeNull();
+    }
+  });
+});

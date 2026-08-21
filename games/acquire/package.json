@@ -30,7 +30,6 @@
     "@game-host/host": "*",
     "@game-host/lobby": "*",
     "@game-host/room-store": "*",
-    "cors": "^2.8.6",
     "express": "^5.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -41,7 +40,6 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
-    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

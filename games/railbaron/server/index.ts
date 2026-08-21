@@ -11,7 +11,6 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import cors from 'cors';
 import express, { type Request, type Response } from 'express';
 import { BASE_PATH } from '../basePath';
 import { Server as SocketServer } from 'socket.io';
@@ -86,11 +85,10 @@ interface MountOptions {
 /**
  * Adds Rail Baron to somebody else's app and HTTP server.
  *
- * Registers only under BASE_PATH — including `cors()`, which used to be
- * global. That was harmless with one game in the process and wrong with
- * three: Rail Baron's `origin: '*'` would otherwise apply to Marco Polo's
- * routes and to the menu, neither of which ever had it. (Narrowing the policy
- * itself waits for the one public origin the cutover creates.)
+ * Registers only under BASE_PATH. There is no CORS here any more: the client
+ * is origin-relative and makes no cross-origin request, so the `origin: '*'`
+ * this once carried granted a permission nobody used — see
+ * docs/plans/2026-08-21-cors.md, which also says what this does not protect.
  */
 export function mount(ctx: HostContext): Promise<MountedGame> {
   return mountInto(ctx, {});
@@ -107,7 +105,6 @@ async function mountInto(
     // appearing to vanish at once.
     throw new Error('Rail Baron needs a dataDir to save rooms into');
   }
-  app.use(BASE_PATH, cors());
   // Twinned under the base path because that is the only route the game-host
   // front door forwards — a bare /health is unreachable through the proxy.
   // Registered before the static mounts below so the SPA fallback never
@@ -138,7 +135,6 @@ async function mountInto(
   }
 
   const io = new SocketServer(httpServer, {
-    cors: { origin: '*' },
     path: opts.socketPath ?? SOCKET_PATH,
     // destroyUpgrade: engine.io chains `request` listeners across attached
     // engines but installs `upgrade` listeners additively, so every engine

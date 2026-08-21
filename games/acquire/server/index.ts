@@ -10,7 +10,6 @@
 // never noticed.
 
 import express, { type Request, type Response } from 'express';
-import cors from 'cors';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,11 +149,6 @@ function build(
   store: RoomStore,
   options: Pick<ServerOptions, 'distDir' | 'socketPath'>,
 ): Built {
-  // Scoped to the base path, not global. Acquire's `origin: '*'` applying to
-  // its own routes is the existing policy; applying it to another game's
-  // routes and to the menu would be a new one nobody chose. (Narrowing the
-  // policy itself waits for the single public origin the cutover creates.)
-  app.use(BASE_PATH, cors());
   // Twinned under the base path because that is the only route the game-host
   // front door forwards — a bare `/health` is unreachable through the proxy.
   app.get(`${BASE_PATH}/health`, health);
@@ -189,7 +183,6 @@ function build(
   // expects too, now that base is uniform and it requests the same
   // BASE_URL-prefixed path in dev as in a build.
   const io = new SocketServer(httpServer, {
-    cors: { origin: '*' },
     path: options.socketPath ?? `${BASE_PATH}/socket.io`,
     // destroyUpgrade: engine.io chains `request` listeners across attached
     // engines but installs `upgrade` listeners additively, so every engine
@@ -418,12 +411,6 @@ function build(
  */
 export function createServer(options: ServerOptions = {}): ServerHandle {
   const app = express();
-  // Global, unlike the mounted path's: alone in a process this app is
-  // Acquire's alone, so there is nothing else for the policy to leak onto.
-  // The scoped `cors()` inside `build` also applies under the base path; two
-  // header-setting middlewares in a row cost a function call and set the same
-  // headers.
-  app.use(cors());
   // Unreachable through the front door, which forwards only the prefix — but
   // it is how `curl localhost:4002/health` answers, and that is the situation
   // you are in when you are asking. Composed, the host owns this route and
