@@ -1,6 +1,6 @@
 # The room store
 
-**Status:** proposed 2026-08-20. The last of the three deferred-together
+**Status:** implemented 2026-08-20, same day — as-built notes under each task. The last of the three deferred-together
 items from [the cutover](2026-08-19-cutover.md)'s "Deliberately not in this
 plan" — the answer timeout and the shared name went in
 [the lobby pass](2026-08-20-the-lobby-pass.md); this is the one it left out,
@@ -134,6 +134,50 @@ dependency — it needs none.
 definitions rather than implementations, the suite is at or above **1654
 tests / 157 files**, and a kill-mid-save rehearsal against the composed
 host (task 2's test, run over the wire) shows the last write surviving.
+
+### As built, 2026-08-20
+
+**Task 1** as designed: 13 tests, the mechanics of both suites ported onto
+a stub payload that is deliberately neither game's (the lobby's
+genericConsumer reasoning), three of them new for `settled()`. One design
+sharpening while porting: the in-process store cannot honestly test "the
+file eventually exists" — an abandoned write completes anyway, because the
+event loop is still alive — so the settled tests hold a `rename` open and
+assert on the moment of resolution.
+
+**Task 2** as designed, red first. The failing test needed one piece of
+plumbing to exist at all: `ServerHandle` now exposes `game`, the standalone
+server's mounted face, because `close()` is the host's call and nothing
+standalone could reach it. `closeDrains.test.ts` pins the honest contract —
+close() must not *resolve* while a save is in flight — for the same
+in-process reason as above. Acquire's `store.ts`: 262 lines to 80, none of
+them mechanics; its `sentName`-era `waitForPersist` polling in
+recovery.test.ts still works and stays.
+
+**Task 3** as designed, red first — and the first run's red included a
+lesson about the harness rather than the code: `vi.spyOn` on an
+already-spied method hands back the same mock, first boot's calls included,
+so the two-boot test uses one spy and clears it between boots. Rail Baron's
+`persist` no longer tracks `inFlight` (the store's chains carry that);
+`settled` stays on the `Rooms` interface as a one-line delegation, because
+shutdown's contract is a rooms concern wherever the bookkeeping lives. Its
+restore now quarantines with Acquire's one-line-then-silence behaviour and
+its glyph reasoning (`!`, not `✗`).
+
+The local full-suite gate tripped twice on the way — a rotating handful of
+Rail Baron animation tests and Acquire golden-screen tests past their
+timeouts at 6–30s — and both times it was machine contention, not the
+change: the host machine was being production, a busy VS Code desktop
+(load average 10), and a test rig at once. Every failing test passes in
+isolation, none touches storage, and the failing set is exactly the
+contention-sensitive set `scripts/test-all.mjs`'s own comments describe.
+Recorded because the next person will meet the same flake on a busy
+machine and should not bisect the store for it; CI's clean room is the
+arbiter for this branch.
+
+Suite: **1658 tests / 160 files** (room-store 13/1; the games' store suites
+traded mechanics tests to the package for payload tests kept), typecheck
+clean.
 
 ## Deliberately not in this plan
 

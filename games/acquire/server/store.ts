@@ -57,9 +57,9 @@ export type RoomStore = Store<SavedRoom>;
  * Phase 4's boot-fragility bug came through exactly this gap.
  */
 export function isSavedRoom(value: unknown): value is SavedRoom {
-  if (!hasEnvelope(value, SAVE_VERSION)) return false;
   const r = value as Record<string, unknown>;
   return (
+    hasEnvelope(value, SAVE_VERSION) &&
     typeof r.state === 'object' &&
     r.state !== null &&
     // Optional, but not any shape: absent is a record from before the first

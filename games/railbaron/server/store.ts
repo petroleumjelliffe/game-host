@@ -1,111 +1,45 @@
 // server/store.ts
-// Where a room lives between processes. Storage mechanics only — nothing here
-// knows what a legal game is, just what a well-formed record looks like.
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+// Where a room lives between processes — Rail Baron's half of the contract.
+//
+// The mechanics (atomic temp-and-rename staging, per-room write chains,
+// settled(), quarantine) moved to @game-host/room-store on 2026-08-20,
+// merged with Acquire's copy — see docs/plans/2026-08-20-room-store.md. The
+// merge is also a fix: this file used to stage every same-room write
+// through one shared `.tmp` name, the exact collision Acquire's store had
+// already dissected and solved with per-write names. What stays here is
+// exactly what is Rail Baron's: the record's payload, the version that
+// names its format, and the guard that checks both.
+
+import {
+  createFileStore as createStore,
+  hasEnvelope,
+  type RoomStore as Store,
+  type SavedRoomEnvelope,
+} from '@game-host/room-store/store.js';
 import { RB_SAVE_VERSION } from '../session/protocol';
 import { isGameEvent, type GameEvent } from '../src/state/events';
-import type { SeatHolder } from '@game-host/lobby/server/rooms';
 
-export interface SavedRoom {
-  roomId: string;
-  /** RB_SAVE_VERSION — the record format. */
-  version: number;
-  /** The wire that wrote it. Kept for diagnosis; policy is the registry's. */
-  protocolVersion: number;
-  /** Epoch ms. */
-  savedAt: number;
-  /** The token is included, and that is precisely what makes rejoin work. */
-  players: SeatHolder[];
+export interface SavedRoom extends SavedRoomEnvelope {
   log: GameEvent[];
 }
 
-export interface LoadResult { records: SavedRoom[]; skipped: string[] }
-
-export interface RoomStore {
-  save(record: SavedRoom): Promise<void>;
-  loadAll(): Promise<LoadResult>;
-  remove(roomId: string): Promise<void>;
-}
-
-function isSeatHolder(value: unknown): value is SeatHolder {
-  if (typeof value !== 'object' || value === null) return false;
-  const p = value as Record<string, unknown>;
-  return typeof p.id === 'string' && typeof p.name === 'string'
-    && typeof p.token === 'string' && typeof p.isHost === 'boolean'
-    && typeof p.connected === 'boolean';
-}
+export type RoomStore = Store<SavedRoom>;
 
 /**
- * Field-level, *and* event-level for the log. Deeper than it looks necessary,
- * on purpose: `isGameEvent` already exists and is cheap, and a log is data
- * that outlives whatever wrote it — a deploy that changes an event shape will
- * meet records written by the old one.
- *
- * A record whose log fails is a skip, named in `skipped`. Never a boot crash,
- * and never a room that quietly replays to an empty board because `replay`
+ * The envelope, plus the log — event by event. Deeper than Acquire goes
+ * with its `state`, on purpose: `isGameEvent` already exists and is cheap,
+ * and a log is data that outlives whatever wrote it — a deploy that changes
+ * an event shape will meet records written by the old one. A record whose
+ * log fails is handed back in `unreadable`, named. Never a boot crash, and
+ * never a room that quietly replays to an empty board because `replay`
  * ignored events it did not recognise.
  */
-function isSavedRoom(value: unknown): value is SavedRoom {
-  if (typeof value !== 'object' || value === null) return false;
+export function isSavedRoom(value: unknown): value is SavedRoom {
   const r = value as Record<string, unknown>;
-  return typeof r.roomId === 'string'
-    && r.version === RB_SAVE_VERSION
-    && typeof r.protocolVersion === 'number'
-    && typeof r.savedAt === 'number'
-    && Array.isArray(r.players) && r.players.every(isSeatHolder)
+  return hasEnvelope(value, RB_SAVE_VERSION)
     && Array.isArray(r.log) && r.log.every(isGameEvent);
 }
 
 export function createFileStore(dir: string): RoomStore {
-  const file = (roomId: string) => join(dir, `${roomId}.json`);
-
-  return {
-    /**
-     * Atomic and best-effort: write a temp file and rename it, so a crash
-     * mid-write cannot leave half a record where a whole one was. Never
-     * rejects — a failed save loses the record, not the live room, and the
-     * game in memory carries on.
-     */
-    async save(record) {
-      try {
-        await mkdir(dir, { recursive: true });
-        const tmp = `${file(record.roomId)}.tmp`;
-        await writeFile(tmp, JSON.stringify(record));
-        await rename(tmp, file(record.roomId));
-      } catch {
-        // Deliberately swallowed; see above.
-      }
-    },
-
-    async loadAll() {
-      const records: SavedRoom[] = [];
-      const skipped: string[] = [];
-      let names: string[] = [];
-      try {
-        names = (await readdir(dir)).filter((n) => n.endsWith('.json'));
-      } catch {
-        // No directory yet: nothing has been saved, and nothing is wrong.
-        return { records, skipped };
-      }
-      for (const name of names) {
-        try {
-          const parsed: unknown = JSON.parse(await readFile(join(dir, name), 'utf8'));
-          if (isSavedRoom(parsed)) records.push(parsed);
-          else skipped.push(name);
-        } catch {
-          skipped.push(name);
-        }
-      }
-      return { records, skipped };
-    },
-
-    async remove(roomId) {
-      try {
-        await unlink(file(roomId));
-      } catch {
-        // Already gone is gone.
-      }
-    },
-  };
+  return createStore(dir, isSavedRoom);
 }
