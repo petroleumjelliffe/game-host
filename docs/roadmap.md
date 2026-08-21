@@ -56,12 +56,13 @@ Checked 2026-08-21, that grouping was wrong in both directions: one was small,
 one was a phase 1 prerequisite (now done), and one is not work at all. A
 fourth turned up while doing the second.
 
-1. **Marco Polo's build configs are not typechecked.** *Genuinely small.*
-   `vite.config.ts` and `vitest.config.ts` are in no `tsconfig.json` — the only
-   build configs in the repo `tsc` never reads, and they hide two real Vitest 4
-   type errors where a project's `name` sits above `test` instead of inside it.
-   Fix, then drop `games/marcopolo/*.config.ts` from `allowDefaultProject` in
-   `eslint.config.mjs`. Found by the linter; full write-up in the backlog.
+1. ~~**Marco Polo's build configs are not typechecked.**~~ **Done
+   2026-08-21.** Both files are in the `include` now and the ESLint workaround
+   is gone. The two type errors were not cosmetic as this entry predicted:
+   with `name` outside `test`, neither project was registered, so
+   `vitest --project=node` failed with "No projects matched the filter" while
+   Rail Baron's identical filter worked. Small, as billed — but a real defect,
+   not tidiness.
 
 2. ~~**Rail Baron's NodeNext split.**~~ **Done 2026-08-21** — 93 lines across
    29 files, landed before phase 1 exactly so a 137-import rename would not
@@ -79,11 +80,33 @@ fourth turned up while doing the second.
 3. **Acquire's `tsconfig.server.json` is unenforced.** *Found 2026-08-21,
    while doing item 2.* Nothing runs it, so Acquire's server is typechecked
    under `bundler` like Rail Baron's was — Acquire's own carry-forward spec
-   called this out in August and it was never actioned. Its `server/` is
-   already `.js`-clean by hand (0 extensionless imports), but enforcing the
-   config pulls in `engine/` (121) and `session/` (16). Cheaper than Rail
-   Baron's in the directory that matters, more expensive overall. Recorded in
-   the backlog; not scheduled.
+   called this out in August and it was never actioned.
+
+   **Decided 2026-08-21: enforce it, after the money spec.** Enforcing is the
+   more consistent answer on three counts. Rail Baron and Acquire have the
+   *same* problem — a server sharing `engine/` and `session/` with the client,
+   so neither can split by directory the way Marco Polo does (its client lives
+   in `client/` with its own config, which is why its root config can simply
+   *be* NodeNext) — and both answer it the same way, with a broad `bundler`
+   config plus a NodeNext overlay. Enforcing makes Acquire identical to Rail
+   Baron; deleting makes it the only game with no answer. It also makes "the
+   server is checked the way Node resolves" true of all three rather than two.
+   And leaving it would recreate the odd-one-out state that item 2 existed to
+   end, with a different game in the role.
+
+   **Not a prerequisite, unlike item 2.** Rail Baron's was urgent only because
+   `src/state/` was about to be rewritten by the money spec. Nothing is about
+   to rewrite Acquire's engine, so this waits.
+
+   **Cost, measured** with a throwaway config on 2026-08-21: 51 extension
+   errors at the first level — 36 in `engine/`, 9 in `session/`, 5 in `src/`,
+   1 reaching into `packages/` — growing as imports resolve, the way Rail
+   Baron's went 34 → 61 → 75. Expect a comparable afternoon. Two details:
+   Acquire's `server/` is already clean (it writes `from '../engine/actor.js'`
+   today), so the whole cost is in code shared with the client; and the config
+   needs *correcting* as well as running, since it sets `noEmit: false` with an
+   `outDir` it never writes and excludes `src/`, which the probe shows the
+   server actually reaches.
 
 4. **The orphaned-`.tmp` boot sweep — do not plan this.** It was not deferred;
    it was **declined**, in the room store plan's *Deliberately not in this
@@ -92,8 +115,9 @@ fourth turned up while doing the second.
    lists it beside two real items, which reads as a to-do it never was. Strike
    it there, or restate it as a closed decision.
 
-So what remains of phase 0 is item 1, plus deciding whether item 3 is worth
-enforcing. Item 2 is done; item 4 should be un-listed.
+Phase 0 is done apart from item 3, which is a decision — enforce Acquire's
+config or delete it — rather than scheduled work. Item 4 should be un-listed.
+**Phase 1, the money spec, is next, and nothing now blocks it.**
 
 ---
 
