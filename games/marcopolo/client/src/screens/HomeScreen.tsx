@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { askWithTimeout } from '@game-host/lobby/client/answerTimeout';
 import { connection, identity } from '../net/singletons';
 import { navigateToJoin, navigateToRoom } from '../router';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../../protocol/game';
@@ -31,29 +32,17 @@ export function HomeScreen() {
 
   // Rail Baron says this and Acquire says this; Marco Polo said nothing at
   // all, on any screen — `onRejected` had no subscriber anywhere in this
-  // client. A protocol mismatch is the commonest cause and the least
-  // guessable: a tab left open across a deploy speaks last week's protocol,
-  // is refused, and shows the same nothing as a healthy server would.
+  // client, and a server that never answered showed the same nothing as a
+  // healthy one. Both kinds of failure now arrive through one episode: the
+  // ask, its two answer channels, and the shared timeout that names the
+  // third outcome (see the click handler below).
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => connection().onRejected((msg) => {
-    setNote(msg.code === 'versionMismatch'
-      ? 'This page is out of date — reload to get the newer client'
-      : msg.message);
-  }), []);
 
-  // createRoom's `joined` arrives while still on this screen; store the seat
-  // so RoomScreen's useLobbyRoom rejoins with the token instead of taking a
-  // second seat.
-  useEffect(() => {
-    return connection().onJoined((msg) => {
-      identity.saveIdentity(msg.roomId, {
-        playerId: msg.playerId,
-        token: msg.token,
-        name: identity.rememberedName() ?? '',
-      });
-      navigateToRoom(msg.roomId);
-    });
-  }, []);
+  // One episode per tap of HOST A GAME. A second tap replaces the first
+  // (stopping it first, so nothing is subscribed twice), and leaving the
+  // screen stops whichever one is live.
+  const stopAsking = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopAsking.current?.(), []);
 
   return (
     <main>
@@ -87,7 +76,37 @@ export function HomeScreen() {
               disabled={status !== 'open'}
               onClick={() => {
                 setNote(null);
-                connection().createRoom(identity.rememberedName() ?? undefined);
+                stopAsking.current?.();
+                stopAsking.current = askWithTimeout({
+                  ask: () =>
+                    connection().createRoom(identity.rememberedName() ?? undefined),
+                  // Plain references — no implementation in this repo
+                  // binds `this`, and the reference is what lets the message
+                  // types infer through Subscribe<J>/Subscribe<R>.
+                  onJoined: connection().onJoined,
+                  onRejected: connection().onRejected,
+                  // `joined` arrives while still on this screen; store the
+                  // seat so RoomScreen's useLobbyRoom rejoins with the token
+                  // instead of taking a second seat.
+                  joined: (msg) => {
+                    identity.saveIdentity(msg.roomId, {
+                      playerId: msg.playerId,
+                      token: msg.token,
+                      name: identity.rememberedName() ?? '',
+                    });
+                    navigateToRoom(msg.roomId);
+                  },
+                  // A protocol mismatch is the commonest refusal and the
+                  // least guessable: a tab left open across a deploy speaks
+                  // last week's protocol, and the advice is to reload.
+                  rejected: (msg) => {
+                    setNote(msg.code === 'versionMismatch'
+                      ? 'This page is out of date — reload to get the newer client'
+                      : msg.message);
+                  },
+                  silence: () =>
+                    setNote('No answer from the server — it may be restarting. Try again.'),
+                });
               }}
             >
               {status === 'open' ? 'HOST A GAME' : 'CONNECTING…'}

@@ -74,7 +74,7 @@ describe('creating a room, with no name form in the way', () => {
     expect(f.created).toEqual([undefined]);
     // And a name nobody chose is not remembered: carrying `Player 1` forward
     // would name you after a seat you no longer sit in.
-    expect(localStorage.getItem('acquire.name')).toBeNull();
+    expect(localStorage.getItem('lobby.name')).toBeNull();
 
     f.sendJoined({ roomId: 'ABC123', playerId: 'p1', token: 'tok' });
 
@@ -87,6 +87,9 @@ describe('creating a room, with no name form in the way', () => {
   });
 
   it('creates under the remembered name when there is one', () => {
+    // Deliberately the *old* per-game key: this doubles as the consumer-side
+    // check that a pre-2026-08-20 name still answers, through the fallback
+    // the lobby's identity store keeps permanently.
     localStorage.setItem('acquire.name', 'Alex');
     const f = fakeConnection();
     renderLobby(f.connection);

@@ -1,16 +1,9 @@
 import '@testing-library/jest-dom/vitest';
 
-/**
- * Bridge jsdom's real localStorage to globalThis.localStorage.
- *
- * Node 26 ships with an experimental globalThis.localStorage that returns
- * undefined unless the process starts with --localstorage-file. Vitest's
- * populateGlobal only bridges jsdom properties not already on global.
- * Since Node already defines localStorage (even if broken), jsdom's real
- * Storage never gets bridged through. We do it manually here so that code
- * using the global localStorage API gets the jsdom implementation.
- */
-const g = globalThis as any;
-if (typeof g.jsdom !== 'undefined' && g.jsdom.window?.localStorage) {
-  g.localStorage = g.jsdom.window.localStorage;
-}
+// No localStorage bridge here any more (2026-08-20). This file used to copy
+// jsdom's Storage onto globalThis because Node's experimental `localStorage`
+// global — undefined without --localstorage-file — shadowed it. The `app`
+// project now starts its workers with --no-experimental-webstorage instead
+// (see vite.config.ts), so there is nothing on globalThis for jsdom to lose
+// to, and vitest bridges the real Storage through by itself. Same mechanism
+// as packages/lobby, which is the point: one answer, not four.
