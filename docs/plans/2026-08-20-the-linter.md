@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** written 2026-08-20, not implemented.
+**Status:** implemented 2026-08-20, same day — three commits, both tasks. See
+**As built** at the end for the four places the design was wrong, three of
+them in the ledger it was proudest of.
 
 **Goal:** add one type-aware ESLint gate at the repo root, green from the day
 it lands, so that the next unawaited promise or misplaced hook cannot reach
@@ -212,7 +214,7 @@ suppressions are comments.
 - Produces: a root script `npm run lint` (`eslint .`) exiting 0. Task 2 calls
   that script from CI and documents it.
 
-- [ ] **Step 1: Install the three devDependencies at the root**
+- [x] **Step 1: Install the three devDependencies at the root**
 
 ```bash
 npm install -D eslint@^10.8.1 typescript-eslint@^8.67.0 eslint-plugin-react-hooks@^7.1.1
@@ -223,7 +225,7 @@ that no workspace `package.json` changed. `typescript-eslint@8` is compatible
 with `eslint@10` and with this repo's `typescript@^6.0.3`; that combination
 was run against all 386 files before this plan was written.
 
-- [ ] **Step 2: Write `eslint.config.mjs`**
+- [x] **Step 2: Write `eslint.config.mjs`**
 
 Create it at the repo root, exactly as below. The comments are part of the
 deliverable — every non-obvious line here was a measurement, and the next
@@ -319,7 +321,7 @@ export default tseslint.config(
 );
 ```
 
-- [ ] **Step 3: Add the root script**
+- [x] **Step 3: Add the root script**
 
 In the root `package.json`, alongside `typecheck`:
 
@@ -327,7 +329,7 @@ In the root `package.json`, alongside `typecheck`:
 "lint": "eslint ."
 ```
 
-- [ ] **Step 4: Run it and confirm it fails in exactly the expected way**
+- [x] **Step 4: Run it and confirm it fails in exactly the expected way**
 
 Run: `npm run lint`
 
@@ -346,7 +348,7 @@ if Marco Polo's two config files appear, `allowDefaultProject` is wrong. If
 the count or the shape differs, stop and reconcile before touching source:
 this plan's ledger is wrong, and that difference matters more than the fix.
 
-- [ ] **Step 5: Mark the eight socket.io calls as deliberate**
+- [x] **Step 5: Mark the eight socket.io calls as deliberate**
 
 All eight are the same library fact: `Server.close(fn?)` and `Socket.join()`
 return `Promise<void>` in socket.io 4.8.3, and every one of these call sites
@@ -396,7 +398,7 @@ the whole class, and repeating it seven times would be noise:
     void server.join('a-room');
 ```
 
-- [ ] **Step 6: Suppress the two hook findings, with reasons**
+- [x] **Step 6: Suppress the two hook findings, with reasons**
 
 **Do not edit the dependency arrays.** Both are the change-token pattern: a
 `key` that changes exactly when the derived data changes, deliberately used
@@ -429,7 +431,7 @@ above the `skip` callback's dependency array at line 54:
   }, [key]);
 ```
 
-- [ ] **Step 7: Give the inherited suppression that lacks a reason its own**
+- [x] **Step 7: Give the inherited suppression that lacks a reason its own**
 
 Of the two inherited suppressions, [`useRoute.ts:71`](../../games/railbaron/src/map/useRoute.ts#L71)
 already carries its reason — *"`key` is the whole dependency: seat and roll
@@ -450,12 +452,12 @@ does not. Its effect reads `path.length` but depends on `[key, stepMs]`:
   }, [key, stepMs]);
 ```
 
-- [ ] **Step 8: Confirm the gate is green**
+- [x] **Step 8: Confirm the gate is green**
 
 Run: `npm run lint`
 Expected: no output, exit 0.
 
-- [ ] **Step 9: Confirm nothing changed behaviour**
+- [x] **Step 9: Confirm nothing changed behaviour**
 
 Run: `npm test`
 
@@ -468,7 +470,7 @@ board tests fail, revert and re-read steps 6 and 7.
 Run: `npm run typecheck`
 Expected: clean.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add eslint.config.mjs package.json package-lock.json \
@@ -523,7 +525,7 @@ down its own length. See docs/plans/2026-08-20-the-linter.md."
 
 - Consumes: `npm run lint` from Task 1.
 
-- [ ] **Step 1: `.editorconfig`**
+- [x] **Step 1: `.editorconfig`**
 
 The formatter's replacement, and the whole of it:
 
@@ -548,7 +550,7 @@ indent_size = 2
 trim_trailing_whitespace = false
 ```
 
-- [ ] **Step 2: Add a `lint` job to CI — a separate job, not a fourth step**
+- [x] **Step 2: Add a `lint` job to CI — a separate job, not a fourth step**
 
 In [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), alongside the
 existing `check` job:
@@ -572,7 +574,7 @@ existing `check` job:
       - run: npm run lint
 ```
 
-- [ ] **Step 3: Verify the workflow parses**
+- [x] **Step 3: Verify the workflow parses**
 
 ```bash
 npx --yes js-yaml .github/workflows/ci.yml | node -e \
@@ -584,7 +586,7 @@ running, so parsing it here is the difference between a gate and the belief
 in one. (`python3 -c "import yaml"` is the obvious alternative and does not
 work — macOS ships python3 without PyYAML.)
 
-- [ ] **Step 4: `CLAUDE.md` — the Testing section**
+- [x] **Step 4: `CLAUDE.md` — the Testing section**
 
 Add `npm run lint` to the command block alongside `npm test` and
 `npm run typecheck`, and add a short paragraph after the `test-all.mjs`
@@ -593,12 +595,12 @@ because `projectService` resolves each package's own tsconfig; there is no
 formatter and that was measured, not overlooked; the five rules are
 deliberately few; and it gates CI rather than the deploy. Link the plan.
 
-- [ ] **Step 5: `README.md`**
+- [x] **Step 5: `README.md`**
 
 One line in the commands list: `npm run lint` — what it covers, and that it
 is a pull-request gate rather than part of `build` or `deploy.sh`.
 
-- [ ] **Step 6: `docs/backlog.md`**
+- [x] **Step 6: `docs/backlog.md`**
 
 Three edits:
 
@@ -615,7 +617,7 @@ Three edits:
    moved it). Rail Baron and Acquire both include their `vite.config.ts`
    already, so Marco Polo is the odd one out.
 
-- [ ] **Step 7: Full verification before the commit**
+- [x] **Step 7: Full verification before the commit**
 
 ```bash
 npm run lint        # exit 0, no output
@@ -627,7 +629,7 @@ npm run build       # typechecks, then all three clients and the bundle
 All four must pass. `build` is included because Task 2 is the last chance to
 notice that a devDependency changed something the bundle sees.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add .editorconfig .github/workflows/ci.yml CLAUDE.md README.md docs/backlog.md
@@ -679,18 +681,67 @@ not typechecked."
 
 ## Done when
 
-- [ ] `npm run lint` exits 0 with no output, from the repo root, covering all
+- [x] `npm run lint` exits 0 with no output, from the repo root, covering all
       386 TypeScript files in all seven workspaces in one invocation.
-- [ ] CI has a `lint` job that runs independently of `check`, so neither can
+- [x] CI has a `lint` job that runs independently of `check`, so neither can
       hide the other's answer.
-- [ ] `npm test` still reports 1658 tests / 160 files, and `npm run build`
+- [x] `npm test` still reports 1658 tests / 160 files, and `npm run build`
       still succeeds — this plan changed no behaviour anywhere.
-- [ ] Every `eslint-disable` comment in the repo names a rule that exists and
+- [x] Every `eslint-disable` comment in the repo names a rule that exists and
       carries its reason on the line above it. There are four, all in Rail
       Baron.
-- [ ] `deploy.sh` and `npm run build` are untouched: a lint error fails a pull
+- [x] `deploy.sh` and `npm run build` are untouched: a lint error fails a pull
       request and never a deploy.
-- [ ] `.editorconfig` exists and says why it is standing in for a formatter.
-- [ ] `docs/backlog.md` records the linter as done — with the finding that it
+- [x] `.editorconfig` exists and says why it is standing in for a formatter.
+- [x] `docs/backlog.md` records the linter as done — with the finding that it
       found nothing, which is the part that will otherwise be misremembered —
       and CORS is the only remaining cutover deferral.
+
+---
+
+## As built
+
+Both tasks ran the same day. The gate is green, `npm test` still reports 1658
+tests / 160 files, and `npm run build` still succeeds. Four deltas from the
+design, and it is worth noticing that three of them are in the **ledger** —
+the part of this plan that was supposed to be the reliable half.
+
+**1. Twelve findings, not ten — and the two extra were in the plan's own
+evidence.** Task 1 step 4 predicted 8 floating promises and 2
+`exhaustive-deps`. The real count was 8 and **4**: the pair at
+[`PassAndPlayPage.tsx:35–36`](../../games/acquire/src/pages/PassAndPlayPage.tsx#L35)
+had appeared in the probe output all along and were miscounted as the two
+already suppressed by the inherited comments. They never appear, because they
+are suppressed. Two different pairs, read as one.
+
+The finding itself is a pleasing symmetry the design did not anticipate:
+Acquire runs the change-token pattern **inverted**. Rail Baron puts a `key`
+in a dependency array to stand in for data the hook does read; Acquire puts a
+`generation` counter in to force a re-read of data the hook does *not* read.
+The rule objects to both, correctly, and both answers are a suppression with
+its reason. Six suppressions exist now, not four.
+
+**2. `games/acquire/scripts/generate-manifest.ts` resolved to no project.**
+A `prebuild` step run by `tsx`, in a `scripts/` directory no `include`
+covers — the same condition as Marco Polo's two config files, in a game the
+plan had already checked. It joined `allowDefaultProject` rather than being
+ignored: it is real TypeScript, and "not in a tsconfig" is a reason to lint
+it, not an excuse to skip it.
+
+**3. Plain JavaScript had to be ignored explicitly.** ESLint lints `.js` by
+default, and while this config defines no rules for it, `reportUnusedDisableDirectives`
+still fires — it flagged the `/* eslint-disable no-undef */` in
+[`sw.template.js`](../../games/acquire/scripts/sw.template.js), which is
+exactly right for a service worker's globals and reads as unused only
+because `no-undef` is off. The plan said `.mjs` tooling was "deliberately
+unlinted" but never made that true in the config. It does now, and the
+comment explains which correct code it was scolding.
+
+**4. `python3 -c "import yaml"` does not work on macOS**, which the plan
+caught in its own self-review and swapped for `npx js-yaml` piped into node.
+Recorded because the obvious command is obvious enough to be tried again.
+
+**What did not change:** no rule was added, removed or downgraded; nothing
+was fixed by editing a dependency array; `npm run build` and `deploy.sh` were
+not touched. The gate found no defects, exactly as predicted — that part of
+the ledger held.
