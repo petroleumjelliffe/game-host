@@ -239,6 +239,17 @@ someone standing at the host machine. The first is less code. Settle it in the
 money spec, since that is the first consumer, and generalise afterwards rather
 than building a settings system for one caller.
 
+**Read `feat/host-env-local` before designing this.** It is a parked branch —
+two commits, unmerged, 47 behind `main` as of 2026-08-21 — that already solved
+this exact shape for `DATA_DIR`: the host reads it from a gitignored
+`.env.local` so you stop retyping it, with a follow-up commit refusing a
+relative path *"because .env.local is not a shell"*. That second commit is the
+interesting one; it is the failure mode a rules file will hit too. Parked
+rather than revived on purpose — it predates the compile plan's rewrite of
+`apps/host/main.ts`, so it should be re-decided inside this design rather than
+rebased into it. Note also that `.env.local` is **not** gitignored on `main`
+today; that branch adds the entry.
+
 ---
 
 ## Struck from the backlog
