@@ -1,6 +1,6 @@
 # The lobby pass
 
-**Status:** tasks 0–3b implemented 2026-08-20; tasks 4–5 proposed. Revised after a review pass
+**Status:** tasks 0–4 implemented 2026-08-20; task 5 proposed. Revised after a review pass
 that measured a baseline and found a larger hole than any task here named —
 see "The hole the first draft missed".
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md)'s "Deliberately not
@@ -577,6 +577,33 @@ a real player's browser. The migration will be exercised against synthetic
 storage only. Keep the old-key fallback permanently rather than planning to
 remove it — the cost is four lines, and the failure it prevents is somebody
 losing their name with no way to know why.
+
+#### As built, 2026-08-20
+
+As designed: `SHARED_NAME_KEY = 'lobby.name'` (the cutover plan's own
+name for it), `roomKey` untouched, the migration in `rememberedName()`
+(read shared, fall back to `${appId}.name`, write forward), the fallback
+permanent, and `rememberName` writing only the shared key. The predicted
+red happened on schedule — the legacy-key pin, and nothing else — and was
+answered by splitting it: the room-key half survives as its own pin with
+the story of why its sibling left, the name half became five migration
+tests including the cross-game one the task exists for (typed in Rail
+Baron, answers in Acquire and Marco Polo).
+
+One semantic that had to be decided at the edge: a *present* shared key is
+authoritative even when the reuse rule maps it to null. An emoji-only name
+under `lobby.name` was typed this era, and falling back would resurrect
+the older text name its owner already replaced — every room, forever.
+The unchosen-emoji rule composes with the migration the other way too: a
+legacy emoji name migrates as null and writes nothing forward.
+
+Beyond the predicted red, four consumer tests named the old key directly.
+The write-assertions moved to `lobby.name`; the seeds moved with them,
+except one — Acquire's "creates under the remembered name" seeds
+`acquire.name` deliberately, as the consumer-side proof that a
+pre-migration name still answers through the fallback.
+
+Suite: **1644 tests / 156 files**, typecheck clean.
 
 ### 5. A wire-level conformance suite — scoped by its first result
 

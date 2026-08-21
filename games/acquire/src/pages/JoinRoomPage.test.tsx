@@ -198,7 +198,7 @@ describe('the Join Room card', () => {
     // No `name` key on the wire at all — absence is what asks to be named, and
     // a blank string would only mean the same by the server's leniency.
     expect(f.joins).toEqual([{ roomId: 'ABC123', protocolVersion: PROTOCOL_VERSION }]);
-    expect(localStorage.getItem('acquire.name')).toBeNull();
+    expect(localStorage.getItem('lobby.name')).toBeNull();
   });
 
   it('shows your own row before you are seated, with no seat emoji on it', () => {

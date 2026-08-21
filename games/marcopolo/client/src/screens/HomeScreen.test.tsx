@@ -19,7 +19,7 @@ vi.mock('../net/singletons', async () => {
     // The real store on jsdom's real localStorage: this is the first test in
     // this client to cross that path, and it doubles as the check that no
     // shim is needed for it (the flag in vitest.config.ts is).
-    identity: createIdentityStore('marcopolo'),
+    identity: createIdentityStore('marco-polo'),
     connection: () => {
       state.fake ??= createFakeLobbyConnection();
       return state.fake.connection;
@@ -69,7 +69,7 @@ describe('the host button and the connection', () => {
   });
 
   it('offers the remembered name when there is one', () => {
-    localStorage.setItem('marcopolo.name', 'Pete');
+    localStorage.setItem('lobby.name', 'Pete');
     render(<HomeScreen />);
     act(() => fake().setStatus('open'));
 

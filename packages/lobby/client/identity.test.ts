@@ -15,13 +15,63 @@ describe('identity namespace', () => {
     expect(other.loadIdentity('ABC123')?.token).toBe('t-other');
   });
 
-  it('keeps the exact legacy keys for appId acquire', () => {
+  it('keeps the exact room key for appId acquire', () => {
     const store = createIdentityStore('acquire');
     store.saveIdentity('ABC123', { playerId: 'p1', token: 't', name: 'Ada' });
-    store.rememberName('Ada');
-    // Pinned as raw strings: a changed key silently logs every player out.
+    // Pinned as a raw string: a changed key silently logs every player out.
+    // This pin went red on 2026-08-20 when the *name* key moved to the
+    // shared `lobby.name` — predicted by the plan, and answered by the
+    // migration below rather than by loosening anything. The room key did
+    // not move and must not.
     expect(localStorage.getItem('acquire.room.ABC123')).not.toBeNull();
-    expect(localStorage.getItem('acquire.name')).toBe('Ada');
+  });
+
+  it('writes the remembered name to the shared key, exactly', () => {
+    createIdentityStore('acquire').rememberName('Ada');
+    expect(localStorage.getItem('lobby.name')).toBe('Ada');
+    expect(localStorage.getItem('acquire.name')).toBeNull();
+  });
+});
+
+/**
+ * One person, one machine, three games: the name is shared across apps as of
+ * 2026-08-20, and everyone who played before then holds one under the old
+ * `<appId>.name`. The fallback is permanent — no test reaches a real
+ * player's browser, so nobody can ever prove every old key migrated.
+ */
+describe('one remembered name for the household', () => {
+  it('a name typed in one game answers in another', () => {
+    createIdentityStore('railbaron').rememberName('Pete');
+    expect(createIdentityStore('acquire').rememberedName()).toBe('Pete');
+    expect(createIdentityStore('marco-polo').rememberedName()).toBe('Pete');
+  });
+
+  it('finds a pre-migration name under the old key and writes it forward', () => {
+    localStorage.setItem('railbaron.name', 'Pete');
+    expect(createIdentityStore('railbaron').rememberedName()).toBe('Pete');
+    // Written forward: the other games see it without knowing the old key.
+    expect(localStorage.getItem('lobby.name')).toBe('Pete');
+    expect(createIdentityStore('acquire').rememberedName()).toBe('Pete');
+  });
+
+  it('does not carry forward an unchosen emoji name', () => {
+    localStorage.setItem('acquire.name', '🦦');
+    expect(createIdentityStore('acquire').rememberedName()).toBeNull();
+    expect(localStorage.getItem('lobby.name')).toBeNull();
+  });
+
+  it('a shared-key name outranks any legacy leftover', () => {
+    localStorage.setItem('acquire.name', 'Old Ada');
+    createIdentityStore('railbaron').rememberName('Pete');
+    expect(createIdentityStore('acquire').rememberedName()).toBe('Pete');
+  });
+
+  it('an emoji name chosen this era stays null without resurrecting the old one', () => {
+    // Present is authoritative: the emoji under the shared key was *typed*,
+    // and the legacy text name it replaced must not come back every room.
+    localStorage.setItem('acquire.name', 'Ada');
+    createIdentityStore('acquire').rememberName('🦦');
+    expect(createIdentityStore('acquire').rememberedName()).toBeNull();
   });
 });
 

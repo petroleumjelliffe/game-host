@@ -119,7 +119,7 @@ function LocationProbe() {
  * So the name has to be in storage *before* the render that sends the join.
  */
 function arriveAs(name: string) {
-  localStorage.setItem('acquire.name', name);
+  localStorage.setItem('lobby.name', name);
   const f = fakeConnection();
   renderRoom(f.connection);
   return f;
@@ -278,7 +278,9 @@ describe('the lobby', () => {
     fireEvent.blur(field);
 
     expect(f.renames).toEqual(['Samantha']);
-    expect(localStorage.getItem('acquire.name')).toBe('Samantha');
+    // `lobby.name`, not `acquire.name`: the remembered name is shared across
+    // the household of games as of 2026-08-20 (lobby pass, task 4).
+    expect(localStorage.getItem('lobby.name')).toBe('Samantha');
   });
 
   it('does not broadcast a rename to the name you already have', () => {
@@ -744,7 +746,7 @@ describe('a version the server does not speak', () => {
  */
 describe('a refresh mid-turn', () => {
   it('rejoins the same seat and comes back to the open segment, not the start of the turn', () => {
-    localStorage.setItem('acquire.name', 'Sam');
+    localStorage.setItem('lobby.name', 'Sam');
     const first = fakeConnection();
     const { unmount } = renderRoom(first.connection);
     first.sendJoined({ roomId: 'ABC123', playerId: 'p2', token: 'tok' });
