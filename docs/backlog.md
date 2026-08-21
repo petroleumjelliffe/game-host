@@ -5,8 +5,46 @@ evidence was, so nobody has to rediscover it.
 
 For work deliberately excluded from the cutover, see the plan's
 [Deliberately not in this plan](plans/2026-08-19-cutover.md) section — a
-linter, compiling `apps/host`, a shared `packages/room-store`, tightening
-CORS, a shared remembered name. Those are scoped decisions, not oversights.
+linter, ~~compiling `apps/host`~~, ~~a shared `packages/room-store`~~,
+tightening CORS, ~~a shared remembered name~~. Those were scoped decisions,
+not oversights, and three of the five are done (2026-08-20: the
+[compile plan](plans/2026-08-20-compile-the-host.md), the
+[room store](plans/2026-08-20-room-store.md), and the
+[lobby pass](plans/2026-08-20-the-lobby-pass.md)'s task 4).
+
+---
+
+## State of play, end of 2026-08-20
+
+Where a fresh session picks up. Everything below this section is the
+detailed record; this is the map.
+
+**Done, and live on both origins** (each linked plan carries as-built
+notes): the composed host is compiled and deployed by `git pull` (the
+post-merge hook runs `deploy.sh`; a bare pull *is* the LAN deploy now); CI
+builds before testing; items 1–3 below are all closed; the three
+deferred-together shared items are done — the answer timeout and the
+shared remembered name in [the lobby pass](plans/2026-08-20-the-lobby-pass.md)
+(tasks 0–5, which also gave the lobby its own tests, one localStorage
+answer, Marco Polo component tests, and a wire-level conformance suite),
+and [`packages/room-store`](plans/2026-08-20-room-store.md) (Acquire's
+`close()` now drains in-flight saves; Rail Baron got per-write temp names
+and quarantine). Dependency versions are aligned — one line per shared
+dep, Acquire moved up to meet the rest.
+
+**Open, roughly in the order the plans themselves point:**
+
+- **Tightening CORS** — both games still run `origin: '*'`. The cutover
+  plan called it "the next plan's obvious first item" once a single public
+  origin existed, and it has existed since 2026-08-20.
+- **A linter/formatter** — deferred four times now, always for the same
+  good reason (a whole-repo reformat mid-plan ruins the diff and the
+  bisect). Between plans is exactly when it fits.
+- **The per-game improvements** at the bottom of this file — spectator
+  mode is the one lobby-shaped item among them, and task 5's conformance
+  suite is groundwork it can build on.
+- Smaller recorded items: Rail Baron's NodeNext split; the orphaned-`.tmp`
+  boot sweep the room-store plan scoped out.
 
 ---
 

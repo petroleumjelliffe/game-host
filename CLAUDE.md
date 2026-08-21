@@ -19,7 +19,7 @@ It is also, as of this migration, where the game code itself lives:
 | `games/railbaron` | Rail Baron — engine, session, server and a React client. |
 | `games/acquire` | Acquire — engine, session, server and a React client. Served at `/acquire`; its GitHub Pages deploy is retired. |
 
-`npm install` at the root links all six workspaces; `npm test` and
+`npm install` at the root links all seven workspaces; `npm test` and
 `npm run typecheck` at the root cover them all in one command (see Testing,
 below).
 
@@ -48,6 +48,7 @@ arrangements.
 | Path | What it is |
 | --- | --- |
 | `packages/host` | `@game-host/host` — the contract (`HostContext`, `MountedGame`), the error boundary (`guardSocket`, `guardTick`), and `closeSockets`. No game logic. |
+| `packages/room-store` | `@game-host/room-store` — where a room lives between processes: atomic staging, per-room write chains, `settled()`, quarantine. Generic over the payload; Rail Baron and Acquire configure it with their record guards ([plan](docs/plans/2026-08-20-room-store.md)). |
 | `apps/host` | `@game-host/apps-host` — the composed process, and the only package allowed to depend on all three games. |
 
 ## Check whether this clone *is* the host machine
@@ -89,8 +90,8 @@ anywhere.
 ## Testing
 
 ```bash
-npm install     # links packages/{lobby,host}, games/{marcopolo,railbaron,acquire}, apps/host
-npm test        # every package's suite, one command: 1595 tests / 152 files
+npm install     # links packages/{lobby,host,room-store}, games/{marcopolo,railbaron,acquire}, apps/host
+npm test        # every package's suite, one command: 1658 tests / 160 files
 
 DATA_DIR=$(mktemp -d) npm run start:host   # all three games, one process, port 4000
 npm run typecheck
@@ -123,7 +124,7 @@ process sizes its own worker pool to the whole machine, so several
 full-machine-sized pools contending together oversubscribe badly — enough,
 at four, to push railbaron's slowest test past its timeout on contention
 alone, no code change behind it. The packages are split by weight rather
-than by count: lobby, host and marcopolo (light) run together, and
+than by count: lobby, host, room-store and marcopolo (light) run together, and
 railbaron, acquire and apps-host (heavy) run one after another. `apps/host`
 is in the heavy group despite having five files — it boots three whole
 games per test, so file count is the wrong measure of what a suite costs.
