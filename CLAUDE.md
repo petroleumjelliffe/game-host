@@ -246,11 +246,40 @@ implemented 2026-08-18). Ports are machine-only knowledge, and as of
 2026-08-20 **no build in this repo names an origin either**: Acquire's
 `.env.production` was the last holdout and is gone.
 
-The `VITE_SERVER_URL` code path stays, because one build still uses it — the
-Pages client, built from the old `acquire-startups-m1` repo, which is live
-until the cutover's Task 3. When it is set the client uses socket.io's default
-socket path, and the corresponding server sets `SOCKET_PATH=/socket.io`
-(Acquire on Render, until Task 2 repoints it here).
+**So all three games are same-origin only, and carry no CORS at all** (since
+2026-08-21 — [the CORS plan](docs/plans/2026-08-21-cors.md)). Rail Baron and
+Acquire ran `origin: '*'` left over from being separate repos on separate
+origins; Marco Polo never had any, which is what made the answer obvious.
+Nothing needs it: there is not one `fetch()` in any client, and the only HTTP
+routes a game registers are `/health` and its static assets.
+
+**Do not read that as origin-locked sockets.** Browsers do not apply CORS to
+the WebSocket handshake — socket.io's `cors` option only ever governed the
+long-polling transport — so a page on another origin can still open a socket,
+exactly as it could before. Restricting that needs `allowRequest` on each
+`Server`, which was considered and declined: LAN games, no cookie auth,
+nothing an ambient-authority request could steal, and a real risk of locking
+out a living room that reaches the host by IP or `.local` name.
+
+Two consequences for anyone changing this. A test that connects from a
+"disallowed" origin and expects failure **cannot fail** — `socket.io-client`
+under Node does not implement the same-origin policy, so every wire test here
+passes under any policy; assert response headers instead, as
+`apps/host/routes.test.ts` and both games' `staticClient.test.ts` now do. And
+adding `cors()` back to one game would put its headers on that game's routes
+only if it is scoped to `BASE_PATH` — global middleware in a composed process
+leaks onto the other two games and the menu, which is the bug that scoping
+originally fixed.
+
+The `VITE_SERVER_URL` code path stays, but **nothing feeds it any more** —
+that sentence used to name the Pages client as the one build that did, and
+the cutover's Tasks 2 and 3 ended it (verified 2026-08-21: no `.env*` in any
+game sets it, and Render builds from this repo). It survives in
+`games/*/src/config.ts` and `src/net/connection.ts` as the only seam that
+would let a client address a server on another origin again, which costs
+nothing to keep and would be a decision to remove. When it is set the client
+uses socket.io's default socket path, and a server would need
+`SOCKET_PATH=/socket.io` to match.
 
 Why the file had to go: a baked-in origin makes one artifact serve exactly one
 deployment, and there are two production deployments now — this machine for
@@ -344,7 +373,10 @@ Three consequences worth carrying into any change here:
   happily under `tsx`. It costs ~9s, which was unaffordable while the build sat
   in the service start path and is free now that it does not.
 - **`tsx` is a `devDependency` everywhere.** The bundle's whole external
-  surface is `cors`, `express`, `socket.io` and node builtins. Do not add a
+  surface is `express`, `socket.io` and node builtins. (`cors` was on that
+  list until 2026-08-21 and is not any more — see
+  [the CORS plan](docs/plans/2026-08-21-cors.md). It is still *installed*,
+  because socket.io depends on it; nothing of ours imports it.) Do not add a
   runtime import that is not a production dependency of the package importing
   it.
 - **A bundle erases module locations**, which is why every game resolves its
