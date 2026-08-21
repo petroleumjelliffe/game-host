@@ -56,12 +56,13 @@ Checked 2026-08-21, that grouping was wrong in both directions: one was small,
 one was a phase 1 prerequisite (now done), and one is not work at all. A
 fourth turned up while doing the second.
 
-1. **Marco Polo's build configs are not typechecked.** *Genuinely small.*
-   `vite.config.ts` and `vitest.config.ts` are in no `tsconfig.json` — the only
-   build configs in the repo `tsc` never reads, and they hide two real Vitest 4
-   type errors where a project's `name` sits above `test` instead of inside it.
-   Fix, then drop `games/marcopolo/*.config.ts` from `allowDefaultProject` in
-   `eslint.config.mjs`. Found by the linter; full write-up in the backlog.
+1. ~~**Marco Polo's build configs are not typechecked.**~~ **Done
+   2026-08-21.** Both files are in the `include` now and the ESLint workaround
+   is gone. The two type errors were not cosmetic as this entry predicted:
+   with `name` outside `test`, neither project was registered, so
+   `vitest --project=node` failed with "No projects matched the filter" while
+   Rail Baron's identical filter worked. Small, as billed — but a real defect,
+   not tidiness.
 
 2. ~~**Rail Baron's NodeNext split.**~~ **Done 2026-08-21** — 93 lines across
    29 files, landed before phase 1 exactly so a 137-import rename would not
@@ -92,8 +93,9 @@ fourth turned up while doing the second.
    lists it beside two real items, which reads as a to-do it never was. Strike
    it there, or restate it as a closed decision.
 
-So what remains of phase 0 is item 1, plus deciding whether item 3 is worth
-enforcing. Item 2 is done; item 4 should be un-listed.
+Phase 0 is done apart from item 3, which is a decision — enforce Acquire's
+config or delete it — rather than scheduled work. Item 4 should be un-listed.
+**Phase 1, the money spec, is next, and nothing now blocks it.**
 
 ---
 

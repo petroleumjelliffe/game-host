@@ -6,5 +6,10 @@
     "lib": ["es2022"],
     "types": ["node", "vitest/globals"]
   },
-  "include": ["protocol", "server"]
+  // The build configs are in here so `tsc` reads them. They were in no
+  // project until 2026-08-21 — the only build configs in the repo
+  // nothing typechecked — and they were hiding a real error: both test
+  // projects declared `name` beside `test` rather than inside it, so
+  // neither was named and `vitest --project=node` matched nothing.
+  "include": ["protocol", "server", "vite.config.ts", "vitest.config.ts"]
 }
