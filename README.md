@@ -154,14 +154,27 @@ knowing before a game night:
 
 ```bash
 cd ~/Developer/game-host
-./deploy.sh
+git pull
 ```
 
-That is the whole deploy: pull, install, typecheck, build all three clients
-and the server bundle, restart the agent, then poll `/health` and print it. It
-stops on the first failure, and every step that can fail happens **while the
-old version is still serving** — a broken build leaves the previous one up
-instead of taking everything down and then discovering the problem.
+That is the whole deploy (since 2026-08-20): the `post-merge` hook —
+versioned in `hooks/`, installed by `install-services.sh` — runs `deploy.sh`
+the moment the merge lands, and there is no second command to forget.
+`deploy.sh` does what it always did minus the pull it used to open with:
+install, typecheck, build all three clients and the server bundle, restart
+the agent, then poll `/health` and print it. Running `./deploy.sh` by hand
+still works and means what it says — deploy the tree as checked out, e.g. to
+rebuild without new commits. Either way it stops on the first failure, and
+every step that can fail happens **while the old version is still serving**
+— a broken build leaves the previous one up instead of taking everything
+down and then discovering the problem.
+
+The hook only fires where it should: only on `main`, and only in the clone
+the `/opt/homebrew/etc/game-host` symlink names — a pull in a worktree, or
+in a clone on some other machine, deploys nothing. The installer also sets
+`git config pull.ff only`, keeping what the old in-script pull enforced: a
+divergence stops and asks a human rather than deploying a merge commit
+nobody reviewed.
 
 **A restart is a ~0.2s outage.** The agent execs a prebuilt bundle rather than
 building at boot: measured 179ms from spawn to a served `/health`, against
@@ -171,10 +184,11 @@ the backlog. It is no longer a reason to avoid deploying mid-evening, though
 rebuilding the clients does swap content-hashed assets out from under pages
 that are already loaded.
 
-`git pull && launchctl kickstart -k gui/$(id -u)/com.game-host` still works
-and is *not* a deploy any more: it restarts the agent on whatever artifact was
-last built. That is the right behaviour for a restart — it is also why
-forgetting `./deploy.sh` looks like a deploy that silently did nothing.
+A bare `launchctl kickstart -k gui/$(id -u)/com.game-host` is still a
+restart, not a deploy: it restarts the agent on whatever artifact was last
+built, which is the right behaviour for a restart. The old failure mode —
+pulling and then forgetting `./deploy.sh`, which looked like a deploy that
+silently shipped nothing — is what the hook exists to close.
 
 **Do not run `npm run start:host` by hand here.** It fights the agent for port
 4000, and `DATA_DIR` is deliberately unset outside the start script. Do not

@@ -1,11 +1,19 @@
 #!/bin/sh
-# Deploy to the LAN: pull, check, build, then restart.
+# Deploy to the LAN: install, check, build, then restart — the tree as it
+# stands. Updating the tree is not this script's job any more.
 #
-# The order is the whole design. Everything that can fail happens while the old
-# version is still serving, and the only line that interrupts anyone is the
-# last one. Before this script existed the agent built at boot, so a broken
-# build was discovered by the front door returning 502 — the old process was
-# already gone by the time anything could go wrong.
+# It was, until 2026-08-20: this script opened with `git pull --ff-only`, and
+# was the whole deploy command. The pull moved to hooks/post-merge (installed
+# by install-services.sh), so on the game machine `git pull` *is* the deploy —
+# the hook runs this script the moment the merge lands, and there is no second
+# command to forget. Running this by hand still works and still means what it
+# says: deploy whatever is checked out, e.g. to rebuild without new commits.
+#
+# The order is the rest of the design. Everything that can fail happens while
+# the old version is still serving, and the only line that interrupts anyone
+# is the last one. Before this script existed the agent built at boot, so a
+# broken build was discovered by the front door returning 502 — the old
+# process was already gone by the time anything could go wrong.
 #
 # Run it on the game machine, from the game machine's clone. Deploying to
 # Render is a `git push`; the service rebuilds itself. See README's Deploying.
@@ -17,12 +25,6 @@ set -eu
 GAME_HOST="${GAME_HOST:-$HOME/Developer/game-host}"
 cd "$GAME_HOST"
 
-# --ff-only, because a merge commit created by a deploy script is a merge
-# commit nobody reviewed, and the tree it produces is one that has never been
-# tested anywhere. A divergence here should stop the deploy and ask for a
-# human, which is exactly what this does.
-echo "==> pulling"
-git pull --ff-only
 
 # Every deploy, not only when package.json changed: `npm install` is a no-op
 # in a few hundred ms when nothing moved, and the failure it prevents — a
