@@ -57,6 +57,12 @@ export interface ServerHandle {
    * for. The boot banner prints this, so every reload restates it.
    */
   devSeed: boolean;
+  /**
+   * The standalone server's mounted face — the same object `mount` hands
+   * the composed host. Exposed so tests can exercise the contract the host
+   * actually calls (`close`, above all) without booting three games.
+   */
+  game: MountedGame;
 }
 
 export interface ServerOptions {
@@ -386,10 +392,16 @@ function build(
       version: () => ({ protocolVersion: PROTOCOL_VERSION, saveVersion: SAVE_VERSION }),
       io,
       async close() {
+        // Saves before sockets. Handlers do not await persist, so a room
+        // whose last commit is still being written would otherwise be
+        // restored a move behind — or not at all. Rail Baron drained from
+        // its first day; Acquire gained this on 2026-08-20, when the store
+        // moved to @game-host/room-store and closeDrains.test.ts went red
+        // against the old close.
+        await store.settled();
         // Not io.close(): that would close the HTTP server, which composed
         // belongs to the host and to two other games. See close.ts.
         closeSockets(io);
-        return Promise.resolve();
       },
     },
   };
@@ -430,6 +442,7 @@ export function createServer(options: ServerOptions = {}): ServerHandle {
     io: built.game.io,
     rooms: built.rooms,
     devSeed: built.devSeed,
+    game: built.game,
   };
 }
 
