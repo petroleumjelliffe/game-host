@@ -1,12 +1,12 @@
 import { expect } from 'vitest';
-import { earnsBonus, movement, rollTurn } from '../dice';
-import { isRejection } from '../movement';
-import { sectionKey } from '../network';
+import { earnsBonus, movement, rollTurn } from '../dice.js';
+import { isRejection } from '../movement.js';
+import { sectionKey } from '../network.js';
 import {
   arrived, back, companies, complete, extend, here, path as pathOf,
   remaining, spent, startDraft, usedAfter
-} from '../route';
-import type { GoldenGame, GoldenState, GoldenRejection, StateAssertion } from './types';
+} from '../route.js';
+import type { GoldenGame, GoldenState, GoldenRejection, StateAssertion } from './types.js';
 
 const scripted = (faces: readonly number[]) => {
   const queue = [...faces];

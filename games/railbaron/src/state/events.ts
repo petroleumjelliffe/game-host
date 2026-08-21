@@ -1,4 +1,4 @@
-import { CITIES, NODES, REGIONS, cityById, type CityId, type RegionId } from '../../engine';
+import { CITIES, NODES, REGIONS, cityById, type CityId, type RegionId } from '../../engine/index.js';
 
 export type SeatId = 'red' | 'green' | 'blue' | 'yellow' | 'black' | 'white';
 export type NodeId = string;

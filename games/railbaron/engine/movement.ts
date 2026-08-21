@@ -1,8 +1,8 @@
 import {
   isTwinStep, neighbours, nodeById, sectionKey,
   type NetworkEdge, type NodeId
-} from './network';
-import type { RailroadId } from './network';
+} from './network.js';
+import type { RailroadId } from './network.js';
 
 /**
  * What one step costs, in dots.

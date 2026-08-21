@@ -1,4 +1,4 @@
-import type { Rng } from './types';
+import type { Rng } from './types.js';
 
 /**
  * Freight to start. EXPRESS costs $4,000 and SUPERCHIEF $40,000 — prices the

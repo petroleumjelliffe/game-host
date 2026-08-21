@@ -1,8 +1,8 @@
-import { sectionKey, type CityId, type NodeId } from '../../engine';
-import { SEATS, type SeatId } from './events';
+import { sectionKey, type CityId, type NodeId } from '../../engine/index.js';
+import { SEATS, type SeatId } from './events.js';
 // Types only. game.ts imports rotate and addSections from here at runtime, so
 // a value import in this direction would close a real cycle.
-import type { GameState, Seat } from './game';
+import type { GameState, Seat } from './game.js';
 
 /**
  * Seating order is fixed; the roll decides only who starts within it. "then

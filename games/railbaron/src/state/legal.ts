@@ -6,11 +6,11 @@
 // needsDestination, replay), which is the point: the client's "may I?" and the
 // server's "you may not" are made of one set of rules and cannot drift into
 // disagreeing about the same board.
-import { nodeForCity } from '../../engine';
-import type { GameRejection, GameRejectionCode } from '../../session/protocol';
-import type { GameEvent, SeatId } from './events';
-import { replay } from './game';
-import { homesDone, needsDestination, nextHomeSeat } from './turns';
+import { nodeForCity } from '../../engine/index.js';
+import type { GameRejection, GameRejectionCode } from '../../session/protocol.js';
+import type { GameEvent, SeatId } from './events.js';
+import { replay } from './game.js';
+import { homesDone, needsDestination, nextHomeSeat } from './turns.js';
 
 const not = (code: GameRejectionCode, message: string): GameRejection =>
   ({ code, message });

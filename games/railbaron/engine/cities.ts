@@ -1,4 +1,4 @@
-import type { City, CityId, RegionId } from './types';
+import type { City, CityId, RegionId } from './types.js';
 
 const GROUPS: ReadonlyArray<readonly [RegionId, readonly string[]]> = [
   ['NE', ['Albany', 'Baltimore', 'Boston', 'Buffalo', 'New York',

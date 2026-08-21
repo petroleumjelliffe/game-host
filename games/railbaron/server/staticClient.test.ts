@@ -5,8 +5,8 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BASE_PATH } from '../basePath';
-import { startServer, type RunningServer } from './index';
+import { BASE_PATH } from '../basePath.js';
+import { startServer, type RunningServer } from './index.js';
 
 let server: RunningServer | undefined;
 

@@ -2,7 +2,7 @@
 // The game half of the wire, beside the lobby's. Node-safe: imported by the
 // server and the client alike, so no React and no DOM. The only import is a
 // type, so nothing here pulls the engine into a bundle that did not want it.
-import type { GameEvent } from '../src/state/events';
+import type { GameEvent } from '../src/state/events.js';
 
 /** The wire. Bump on any change to message shapes or append semantics. */
 export const RB_PROTOCOL_VERSION = 1;

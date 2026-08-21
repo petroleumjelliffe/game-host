@@ -8,9 +8,9 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { RB_PROTOCOL_VERSION, RB_SAVE_VERSION } from '../session/protocol';
-import type { GameEvent } from '../src/state/events';
-import { createFileStore, type SavedRoom } from './store';
+import { RB_PROTOCOL_VERSION, RB_SAVE_VERSION } from '../session/protocol.js';
+import type { GameEvent } from '../src/state/events.js';
+import { createFileStore, type SavedRoom } from './store.js';
 
 const record = (roomId: string, log: GameEvent[]): SavedRoom => ({
   roomId,

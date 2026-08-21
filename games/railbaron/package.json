@@ -16,7 +16,7 @@
     "start:server": "tsx server/index.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "graph:validate": "node scripts/validate-graph.mjs",

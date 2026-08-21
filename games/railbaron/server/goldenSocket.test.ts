@@ -3,17 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { io as connect, type Socket as ClientSocket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { CITIES, cityAt, cityById, nodeForCity, payoutBetween, type NodeId } from '../engine';
-import { GAMES } from '../engine/golden/games';
-import { runGoldenGame } from '../engine/golden/runner';
+import { CITIES, cityAt, cityById, nodeForCity, payoutBetween, type NodeId } from '../engine/index.js';
+import { GAMES } from '../engine/golden/games.js';
+import { runGoldenGame } from '../engine/golden/runner.js';
 import {
   GAME_CLIENT_EVENTS, GAME_SERVER_EVENTS, RB_PROTOCOL_VERSION,
   type LogMessage,
-} from '../session/protocol';
-import type { GameEvent } from '../src/state/events';
-import { replay } from '../src/state/game';
+} from '../session/protocol.js';
+import type { GameEvent } from '../src/state/events.js';
+import { replay } from '../src/state/game.js';
 import type { JoinedMessage } from '@game-host/lobby/protocol/protocol';
-import { SOCKET_PATH, startServer, type RunningServer } from './index';
+import { SOCKET_PATH, startServer, type RunningServer } from './index.js';
 
 /**
  * The keystone. Task 4's tests prove the authority refuses illegal appends;

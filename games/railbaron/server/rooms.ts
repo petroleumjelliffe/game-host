@@ -3,13 +3,13 @@
 // log. Everything else about a room is derived from it, including the
 // lifecycle the lobby asks for, using the same fact the app's own phase reads:
 // a `started` event is what moves a room out of the lobby.
-import { RB_PROTOCOL_VERSION, RB_SAVE_VERSION } from '../session/protocol';
-import { SEATS, type GameEvent, type SeatId } from '../src/state/events';
+import { RB_PROTOCOL_VERSION, RB_SAVE_VERSION } from '../session/protocol.js';
+import { SEATS, type GameEvent, type SeatId } from '../src/state/events.js';
 import type { Lifecycle } from '@game-host/lobby/protocol/protocol';
 import {
   createLobbyRegistry, type LobbyRegistry, type SeatHolder, type SeatSpace,
 } from '@game-host/lobby/server/rooms';
-import type { RoomStore, SavedRoom } from './store';
+import type { RoomStore, SavedRoom } from './store.js';
 
 export interface GameRoom {
   id: string;

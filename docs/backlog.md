@@ -60,9 +60,41 @@ applied CORS to the WebSocket handshake.
 - **The per-game improvements** at the bottom of this file — spectator
   mode is the one lobby-shaped item among them, and task 5's conformance
   suite is groundwork it can build on.
-- Smaller recorded items: Rail Baron's NodeNext split; the orphaned-`.tmp`
-  boot sweep the room-store plan scoped out; Marco Polo's untypechecked
-  build configs (below).
+- Smaller recorded items: ~~Rail Baron's NodeNext split~~ (done 2026-08-21);
+  Marco Polo's untypechecked build configs, and Acquire's unenforced server
+  tsconfig (both below). The orphaned-`.tmp` boot sweep is **not** on this
+  list any more — the room-store plan *declined* it rather than deferring it
+  ("leftover bytes, not a restore bug"), and listing it beside real items read
+  as a to-do it never was.
+
+---
+
+## Acquire's server tsconfig is unenforced
+
+**Found 2026-08-21**, while giving Rail Baron the NodeNext split it had been
+waiting for since phase 0. Acquire's own carry-forward spec found it first, on
+2026-08-03, and nothing was done: *"`tsconfig.server.json` is unenforced. It
+extends the main config and sets `noEmit: false` with an `outDir`. Nothing
+runs it (`build:server` is an `echo`). Benign, but it is a second config over
+`server/` that no gate covers."*
+
+Still true. `games/acquire/package.json`'s `typecheck` is `tsc -p tsconfig.json`
+and names the server config nowhere, so Acquire's server is checked under
+`bundler` — the same laxer resolution Rail Baron just left. Of the three games,
+only Marco Polo genuinely typechecks a server under NodeNext.
+
+**The odd part: Acquire's `server/` is already clean.** Zero extensionless
+relative imports — somebody wrote it to the convention by hand and no gate ever
+confirmed it. What enforcement would cost is elsewhere: `engine/` has 121
+extensionless relative imports and `session/` 16, and the server reaches both.
+
+**Fix:** point the config at `--noEmit` rather than an `outDir` it never
+writes, add it to `typecheck` the way Rail Baron now does
+(`tsc --noEmit && tsc --noEmit -p tsconfig.server.json`), and work the same
+loop — apply tsc's own `Did you mean ...?` suggestions, then handle directory
+imports by hand. Or delete the file, which is the honest alternative if nobody
+wants the gate: an unenforced config that looks like a gate is worse than no
+config.
 
 ---
 
