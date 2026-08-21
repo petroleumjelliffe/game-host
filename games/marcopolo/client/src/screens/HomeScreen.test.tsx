@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { FakeLobbyConnection } from '@game-host/lobby/client/fakeConnection';
 import { HomeScreen } from './HomeScreen';
@@ -36,6 +36,10 @@ function fake(): FakeLobbyConnection {
 beforeEach(() => {
   state.fake = null;
   localStorage.clear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('the host button and the connection', () => {
@@ -81,12 +85,42 @@ describe('the host button and the connection', () => {
   });
 });
 
+describe('a server that never answers', () => {
+  // Written before the behaviour exists (task 3a of the lobby pass): the
+  // status gate covers a *disconnected* server, but a connected one that
+  // never replies — mid-deploy, wedged, or gone behind a live proxy — leaves
+  // the tap swallowed with nothing on screen. Rail Baron's screen is the
+  // reference; this asserts the same recovery at the same altitude and never
+  // names the implementation, so 3b's shared extraction must pass it
+  // unedited.
+  it('recovers with a note instead of swallowing the tap', () => {
+    vi.useFakeTimers();
+    render(<HomeScreen />);
+    act(() => fake().setStatus('open'));
+
+    fireEvent.click(screen.getByRole('button', { name: /HOST A GAME/ }));
+    expect(fake().calls.createRoom).toHaveLength(1);
+
+    // No `joined`, no `rejected` — silence.
+    act(() => { vi.advanceTimersByTime(8000); });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/no answer/i);
+
+    // A recovery, not a dead end.
+    fireEvent.click(screen.getByRole('button', { name: /HOST A GAME/ }));
+    expect(fake().calls.createRoom).toHaveLength(2);
+  });
+});
+
 describe('the rejection note', () => {
   // The other half of the same day's fix: onRejected had no subscriber
   // anywhere in this client, so a tab left open across a deploy was refused
-  // in silence.
+  // in silence. A rejection answers an ask, so these tap the button first —
+  // the refusal arrives the way a real one does.
   it('tells a stale tab to reload on versionMismatch', () => {
     render(<HomeScreen />);
+    act(() => fake().setStatus('open'));
+    fireEvent.click(screen.getByRole('button', { name: /HOST A GAME/ }));
 
     act(() =>
       fake().rejected({
@@ -100,6 +134,8 @@ describe('the rejection note', () => {
 
   it('relays any other refusal verbatim', () => {
     render(<HomeScreen />);
+    act(() => fake().setStatus('open'));
+    fireEvent.click(screen.getByRole('button', { name: /HOST A GAME/ }));
 
     act(() =>
       fake().rejected({

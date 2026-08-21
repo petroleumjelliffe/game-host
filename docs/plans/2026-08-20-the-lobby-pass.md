@@ -1,6 +1,6 @@
 # The lobby pass
 
-**Status:** tasks 0–2 implemented 2026-08-20; tasks 3a–5 proposed. Revised after a review pass
+**Status:** tasks 0–3b implemented 2026-08-20; tasks 4–5 proposed. Revised after a review pass
 that measured a baseline and found a larger hole than any task here named —
 see "The hole the first draft missed".
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md)'s "Deliberately not
@@ -473,6 +473,17 @@ For Marco Polo it is a failing test for behaviour that does not exist yet, and
 it stays red until 3b. Both are above the seam, so both survive 3b unchanged —
 which is the whole point, and is what makes 3b safe to do at all.
 
+#### As built, 2026-08-20
+
+As specified: Rail Baron's is a characterization test
+(`src/OnlineApp.test.tsx` — tap NEW ROOM, eight silent seconds, the note,
+tap again and the ask repeats), mutation-checked by stretching the timeout
+past the advance; Marco Polo's sibling went into `HomeScreen.test.tsx` and
+was observed red before 3b existed. One deviation, of bookkeeping rather
+than substance: the red test was committed *with* 3b, not before it, so
+every commit keeps a green suite for bisecting — the plan's "stays red until
+3b" happened in the working tree.
+
 ### 3b. Extract the shared answer timeout
 
 **The design constraint is already recorded and must be honoured:** it does not
@@ -494,6 +505,40 @@ the worst of both.
 **Done when:** all three screen-level tests from 3a pass, **unedited**. If one
 of them needs changing to accommodate the extraction, the extraction changed
 observable behaviour and that is the bug, not the test.
+
+#### As built, 2026-08-20
+
+`packages/lobby/client/answerTimeout.ts` — `askWithTimeout`, generic over
+the two message types, taking the ask and the two answer channels as
+arguments exactly as the backlog's design note demanded, and 7 tests with
+nothing faked but time. The semantics that had to be *chosen*, because the
+two working implementations disagreed and no screen test covered it: an
+answer that limps in after the silence **still relays** — the server came
+back and flushed the buffered ask, and the room it made should get its
+creator — until the returned `stop`. Rail Baron ends its episode at silence
+anyway (its `silence` clears `creating`, which cleans up the effect the stop
+is returned from), so both prior behaviours survived their extraction
+unchanged. Subscribe-before-ask is load-bearing: every test fake answers
+synchronously.
+
+All three 3a screen tests passed unedited, as demanded. Two *task-2* tests
+did change — Marco Polo's rejection-note tests now tap HOST A GAME before
+the refusal arrives, because the adoption scoped HomeScreen's subscriptions
+to the episode: a rejection with no ask pending no longer shows a note.
+That is a real behaviour change and a deliberate one — on that screen a
+rejection can only ever answer a create, and the old mount-lifetime
+subscription was how the hand-rolled versions accreted in the first place.
+
+Two things the compiler taught: the channels must be passed as plain
+references (`connection.onJoined`, not `(h) => connection.onJoined(h)`) or
+the generics collapse to `unknown` — safe here because nothing in the repo
+binds `this` in a connection, checked — and Acquire's `sentName` ref
+dissolved entirely, the closure over the ask's own `name` being what it was
+simulating. Acquire's local `NO_ANSWER_MS` and its long comment moved into
+the module's doc rather than surviving as a copy.
+
+Suite: **1638 tests / 156 files** (lobby 70/7 — the module's 7 and the
+boundary pin at 16 files), typecheck clean.
 
 ### 4. One remembered name
 

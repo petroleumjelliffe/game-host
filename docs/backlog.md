@@ -56,8 +56,10 @@ that client, on any screen — now puts a line under the buttons. Still no
 component test: its client has a jsdom project but no `@testing-library`, and
 that decision stands. Verified in a browser against the real build instead.
 
-It does not cover connected-but-silent. That is the shared timeout below, and
-it is the only piece of this item still open.
+~~It does not cover connected-but-silent. That is the shared timeout below, and
+it is the only piece of this item still open.~~ Closed 2026-08-20, the shared
+way: all three games now ride `packages/lobby/client/answerTimeout.ts` — see
+below.
 
 ### The correction, 2026-08-20 — "the transport recovers" was false
 
@@ -83,7 +85,17 @@ no reload. `twoGames.test.ts` asserted that a closing game disconnects its own
 sockets and only its own; it never asked whether they could come back, and now
 it does.
 
-### The shared extraction — deferred on purpose
+### The shared extraction — deferred on purpose, then done
+
+**Done 2026-08-20**, tasks 3a/3b of
+[the lobby pass](plans/2026-08-20-the-lobby-pass.md), which is the
+all-of-them-at-once design pass this section asked for. The design note below
+was honoured: `askWithTimeout` is a pure module beside the connection, takes
+the ask and the two answer channels as arguments, and is tested with nothing
+faked but time. All three games consume it; the screen tests that pin the
+behaviour were written first, at the screen's own altitude. This item is
+closed. The section stands as written because its reasoning is why the
+extraction waited — and why it was safe when it happened.
 
 The obvious fix is to put "ask, and be told when nothing answers" in
 `packages/lobby/client`, so all three games share one implementation instead

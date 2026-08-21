@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { askWithTimeout } from '@game-host/lobby/client/answerTimeout';
 import { lobbyView, type LobbyLimits } from '@game-host/lobby/client/view';
 import { Board } from './board/Board';
 import {
@@ -57,37 +58,40 @@ export function JoinRoomApp() {
     if (!creating) return;
     const connection = getConnection();
 
-    const offJoined = connection.onJoined((msg) => {
-      // The room exists and this socket holds seat one of it.
-      navigate(`/room/${msg.roomId}`);
+    // The hand-rolled original of the lobby's shared timeout lived here —
+    // this screen was the only one of the three games that had it, and the
+    // extraction kept its 8s and its wording. Every way this can fail
+    // arrives through the episode or not at all, and two of the three used
+    // to be silent: a refusal was ignored, and a server that never answered
+    // left the row tapped and the screen unchanged.
+    //
+    // The stop is returned as this effect's cleanup: an answer or the
+    // timeout sets `creating` false (or navigates), and the episode ends
+    // with the effect. Unsubscribe only — the connection is the app's, and
+    // the room screen this navigates to is about to need it. Closing it
+    // here is how the creator lost their seat.
+    return askWithTimeout({
+      ask: () => connection.createRoom(),
+      onJoined: connection.onJoined,
+      onRejected: connection.onRejected,
+      joined: (msg) => {
+        // The room exists and this socket holds seat one of it.
+        navigate(`/room/${msg.roomId}`);
+      },
+      // The commonest refusal is not exotic — a stale page speaking last
+      // week's protocol to a freshly deployed server, which is why the
+      // advice is to reload.
+      rejected: (msg) => {
+        setCreating(false);
+        setNote(msg.code === 'versionMismatch'
+          ? 'Server speaks a different protocol — reload to get the newer client'
+          : msg.message);
+      },
+      silence: () => {
+        setCreating(false);
+        setNote(`No answer through ${SERVER_URL} — is the game server behind it running?`);
+      },
     });
-
-    // Every way this can fail arrives here or not at all, and both used to be
-    // silent: a refusal was ignored, and a server that never answered left the
-    // row tapped and the screen unchanged. The commonest cause is not exotic —
-    // a stale page speaking last week's protocol to a freshly deployed
-    // server, which is why the advice is to reload.
-    const offRejected = connection.onRejected((msg) => {
-      setCreating(false);
-      setNote(msg.code === 'versionMismatch'
-        ? 'Server speaks a different protocol — reload to get the newer client'
-        : msg.message);
-    });
-
-    const timer = setTimeout(() => {
-      setCreating(false);
-      setNote(`No answer through ${SERVER_URL} — is the game server behind it running?`);
-    }, 8000);
-
-    connection.createRoom();
-    // Unsubscribe only — the connection is the app's, and the room screen
-    // this navigates to is about to need it. Closing it here is how the
-    // creator lost their seat.
-    return () => {
-      clearTimeout(timer);
-      offJoined();
-      offRejected();
-    };
   }, [creating, navigate]);
 
   const onRowAct = (row: Row) => {

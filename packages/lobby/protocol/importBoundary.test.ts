@@ -47,7 +47,12 @@ test('every relative import under the lobby resolves back inside the lobby', () 
   // — the games import it from their own suites, so it has to resolve
   // through this package's exports map like anything else, and it is subject
   // to the same import boundary as the code it doubles.
-  expect(files.length).toBe(14);
+  //
+  // 14 -> 16 on 2026-08-20 again: client/answerTimeout.ts and its test,
+  // task 3b — the shared no-answer timeout, extracted as a pure module
+  // beside the connection rather than into it, per the backlog's design
+  // note.
+  expect(files.length).toBe(16);
 
   const offences: string[] = [];
   for (const file of files) {
