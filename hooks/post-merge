@@ -1,0 +1,32 @@
+#!/bin/sh
+# On the game machine, `git pull` is the deploy (2026-08-20). This hook is
+# the connective tissue: the moment a merge lands on the production tree's
+# main, it runs deploy.sh — which installs, typechecks, builds, restarts and
+# polls /health, everything the pull used to be one forgettable command away
+# from. deploy.sh used to do the pull itself; a hook that ran it unchanged
+# would have recursed, which is why the pull moved out of it and here.
+#
+# Versioned in hooks/ and copied into the repo's hook path by
+# install-services.sh — git does not run hooks from a tracked directory, and
+# a hook nobody installed deploys nothing. `git config pull.ff only` rides
+# along in the installer for the property the old in-script pull enforced: a
+# divergence stops and asks a human, rather than deploying a merge commit
+# nobody reviewed.
+#
+# Two guards, both exiting quietly, both load-bearing:
+set -eu
+
+# Hooks are shared across every worktree of a clone, so a `git pull` in the
+# dev worktree fires this too. Only main deploys — and main cannot even be
+# checked out in a worktree while the production tree holds it.
+[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || exit 0
+
+# Only the tree the agent actually serves. The same symlink every plist and
+# the Caddyfile go through is the test for "is this clone production" —
+# absent (not the host machine) or pointing elsewhere, this is a no-op.
+toplevel="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)"
+host="$(cd /opt/homebrew/etc/game-host 2>/dev/null && pwd -P)" || exit 0
+[ "$toplevel" = "$host" ] || exit 0
+
+echo "==> post-merge on main: deploying"
+exec "$toplevel/deploy.sh"

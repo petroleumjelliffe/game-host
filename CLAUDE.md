@@ -74,9 +74,11 @@ no permission: `launchctl kickstart -k gui/$(id -u)/com.game-host`.
 
 **Never `pkill -f` here.** It has taken production down twice (2026-08-20),
 both times aimed at a worktree's test server and matching the agent instead.
-Kill background servers by the PID the shell gave you. Deploying is
-`./deploy.sh`; a bare `kickstart` restarts the agent on the artifact that was
-last built and does not rebuild anything.
+Kill background servers by the PID the shell gave you. Deploying is `git
+pull` on this tree — the installed `post-merge` hook runs `deploy.sh`, which
+no longer pulls — and `./deploy.sh` by hand deploys the tree as checked out.
+A bare `kickstart` restarts the agent on the artifact that was last built
+and does not rebuild anything.
 
 **If it is not**, treat edits to `Caddyfile`, `launchd/`, `saves/` and
 `start-host.sh` as configuration authoring: do not expect to smoke-test them,
@@ -247,7 +249,8 @@ artifact serves both, and a third costs nothing.
 ## Commands (run on the host machine)
 
 ```bash
-./deploy.sh                                                     # deploy to the LAN
+git pull                             # deploy to the LAN (post-merge hook runs deploy.sh)
+./deploy.sh                          # deploy the tree as checked out, no pull
 launchctl kickstart -k gui/$(id -u)/com.game-host               # restart only, no rebuild
 launchctl list | grep com.game-host                             # is it up
 tail -f /opt/homebrew/var/log/game-host.log                     # what it is doing
@@ -267,9 +270,12 @@ Until 2026-08-20 the agent built at boot, so `git pull` plus a kickstart was
 the whole deploy. The build moved to `deploy.sh` (that is what took the
 restart outage from 2.3s to ~0.2s), and the agent now execs a prebuilt
 `apps/host/dist/main.mjs`. A kickstart therefore restarts on **whatever was
-last built**, which is correct behaviour for a restart and is exactly why
-forgetting `./deploy.sh` looks like a deploy that shipped nothing. There is no
-error and no warning; `/health` reports the old build's versions, truthfully.
+last built**, which is correct behaviour for a restart. Forgetting
+`./deploy.sh` after a pull used to look like a deploy that shipped nothing —
+no error, no warning, `/health` reporting the old build's versions,
+truthfully — which is why the pull moved out of `deploy.sh` and into the
+`post-merge` hook the same day: on this tree, `git pull` *is* the deploy,
+and the forgettable second command is gone.
 
 One agent, `com.game-host`, one log at `/opt/homebrew/var/log/game-host.log`.
 Stop it with `launchctl bootout gui/$(id -u)/com.game-host`; start it again by

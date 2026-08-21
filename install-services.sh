@@ -6,6 +6,29 @@ set -eu
 
 AGENTS="$HOME/Library/LaunchAgents"
 UID_N="$(id -u)"
+REPO="$(cd "$(dirname "$0")" && pwd)"
+
+# The deploy hook: on this machine `git pull` is the deploy (2026-08-20), and
+# hooks/post-merge is what makes it one — see its own comments. Copied into
+# the clone's real hook path because git does not run hooks from a tracked
+# directory; `--git-common-dir` rather than `--git-dir` so the copy lands in
+# the shared hooks every worktree fires, not a worktree-private path (its
+# output is relative from inside the main checkout, hence the case).
+HOOKS_DIR="$(git -C "$REPO" rev-parse --git-common-dir)/hooks"
+case "$HOOKS_DIR" in /*) ;; *) HOOKS_DIR="$REPO/$HOOKS_DIR" ;; esac
+if [ "${1:-}" = "remove" ]; then
+  rm -f "$HOOKS_DIR/post-merge"
+  echo "removed post-merge deploy hook"
+else
+  cp "$REPO/hooks/post-merge" "$HOOKS_DIR/post-merge"
+  chmod +x "$HOOKS_DIR/post-merge"
+  # What `git pull --ff-only` enforced back when deploy.sh did the pulling: a
+  # divergence stops and asks a human instead of deploying a merge commit
+  # nobody reviewed. Config is shared across worktrees, which is fine — a
+  # feature branch whose upstream moved wants an explicit --rebase anyway.
+  git -C "$REPO" config pull.ff only
+  echo "installed post-merge deploy hook (git pull on main now deploys)"
+fi
 
 # No dot before the wildcard: the pattern used to be com.game-host.*.plist,
 # back when every agent was com.game-host.<game>. The composed host's plist is
