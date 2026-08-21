@@ -1,9 +1,9 @@
 import {
   bonusLegOwed, earnsBonus, nodeForCity, pathCost,
   type CityId, type NodeId, type RegionId, type TrainType, type TurnRoll
-} from '../../engine';
-import { SEATS, type GameEvent, type SeatId } from './events';
-import { addSections, rotate } from './turns';
+} from '../../engine/index.js';
+import { SEATS, type GameEvent, type SeatId } from './events.js';
+import { addSections, rotate } from './turns.js';
 
 export interface Stop {
   city: CityId;

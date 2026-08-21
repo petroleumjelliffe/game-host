@@ -1,4 +1,4 @@
-import type { Region, RegionId } from './types';
+import type { Region, RegionId } from './types.js';
 
 export const REGIONS: readonly Region[] = [
   { id: 'NE', name: 'Northeast', column: 1 },

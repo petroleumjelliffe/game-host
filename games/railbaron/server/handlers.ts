@@ -6,13 +6,13 @@ import type { Server as SocketServer, Socket } from 'socket.io';
 import {
   GAME_CLIENT_EVENTS, GAME_SERVER_EVENTS,
   type AppendMessage, type LogMessage,
-} from '../session/protocol';
-import { isGameEvent, SEATS, type SeatId } from '../src/state/events';
-import { undo } from '../src/state/game';
-import { appendLegality, undoLegality } from '../src/state/legal';
+} from '../session/protocol.js';
+import { isGameEvent, SEATS, type SeatId } from '../src/state/events.js';
+import { undo } from '../src/state/game.js';
+import { appendLegality, undoLegality } from '../src/state/legal.js';
 import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol';
 import type { LobbyWiring } from '@game-host/lobby/server/handlers';
-import type { GameRoom, Rooms } from './rooms';
+import type { GameRoom, Rooms } from './rooms.js';
 
 const asSeat = (id: string): SeatId | undefined => SEATS.find((s) => s === id);
 

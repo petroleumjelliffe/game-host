@@ -1,6 +1,6 @@
-import type { TrainType, TurnRoll } from '../dice';
-import type { Rejection } from '../movement';
-import type { NodeId, RailroadId } from '../network';
+import type { TrainType, TurnRoll } from '../dice.js';
+import type { Rejection } from '../movement.js';
+import type { NodeId, RailroadId } from '../network.js';
 
 export interface FixtureSpec {
   at: NodeId;
@@ -91,7 +91,7 @@ export interface GoldenState {
   used: ReadonlyMap<string, number>;
   roll: TurnRoll | null;
   leg: number;
-  draft: import('../route').Draft | null;
+  draft: import('../route.js').Draft | null;
   /**
    * Everything this game has written down, in order: the rolls it made and the
    * legs it committed. It is here so the same story can be replayed through

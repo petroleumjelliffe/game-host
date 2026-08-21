@@ -1,8 +1,8 @@
 import {
   isRejection, legalSteps, stepTo,
   type Rejection, type Step, type Trip
-} from './movement';
-import { nodeById, sectionKey, type NodeId, type RailroadId } from './network';
+} from './movement.js';
+import { nodeById, sectionKey, type NodeId, type RailroadId } from './network.js';
 
 /**
  * A route being tapped out, and never anything more than that. It lives in

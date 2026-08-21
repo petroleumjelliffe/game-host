@@ -1,4 +1,4 @@
-import type { GoldenGame } from './types';
+import type { GoldenGame } from './types.js';
 
 /**
  * The movement rules, stored as data. One game states one rule, and every one

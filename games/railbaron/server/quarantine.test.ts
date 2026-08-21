@@ -9,8 +9,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRooms } from './rooms';
-import { createFileStore } from './store';
+import { createRooms } from './rooms.js';
+import { createFileStore } from './store.js';
 
 let dir: string;
 

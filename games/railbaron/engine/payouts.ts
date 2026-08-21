@@ -1,4 +1,4 @@
-import type { CityId } from './types';
+import type { CityId } from './types.js';
 
 /**
  * Triangular, indexed [higher city id][lower city id], in thousands of

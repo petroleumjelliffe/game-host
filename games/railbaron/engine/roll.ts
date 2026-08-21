@@ -1,7 +1,7 @@
-import { cityById } from './cities';
-import { payoutBetween } from './payouts';
-import { rollCityIn, rollRegion } from './rollTable';
-import type { CityId, RegionId, Rng } from './types';
+import { cityById } from './cities.js';
+import { payoutBetween } from './payouts.js';
+import { rollCityIn, rollRegion } from './rollTable.js';
+import type { CityId, RegionId, Rng } from './types.js';
 
 export type RollOutcome =
   | { kind: 'home'; city: CityId; region: RegionId }

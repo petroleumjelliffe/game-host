@@ -1,6 +1,8 @@
-import { CITIES } from './cities';
-import raw from './network.json';
-import type { CityId } from './types';
+import { CITIES } from './cities.js';
+// The import attribute is required under NodeNext (server) and accepted
+// under bundler (client), which is why it can be stated once here.
+import raw from './network.json' with { type: 'json' };
+import type { CityId } from './types.js';
 
 export type NodeId = string;
 export type RailroadId = string;

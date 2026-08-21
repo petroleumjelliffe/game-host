@@ -6,10 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   GAME_CLIENT_EVENTS, GAME_SERVER_EVENTS, RB_PROTOCOL_VERSION,
   type LogMessage,
-} from '../session/protocol';
-import type { GameEvent } from '../src/state/events';
+} from '../session/protocol.js';
+import type { GameEvent } from '../src/state/events.js';
 import type { JoinedMessage } from '@game-host/lobby/protocol/protocol';
-import { SOCKET_PATH, startServer, type RunningServer } from './index';
+import { SOCKET_PATH, startServer, type RunningServer } from './index.js';
 
 /**
  * A Render deploy restarts the process while people are mid-turn, so "the

@@ -16,8 +16,8 @@ import {
   type RoomStore as Store,
   type SavedRoomEnvelope,
 } from '@game-host/room-store/store.js';
-import { RB_SAVE_VERSION } from '../session/protocol';
-import { isGameEvent, type GameEvent } from '../src/state/events';
+import { RB_SAVE_VERSION } from '../session/protocol.js';
+import { isGameEvent, type GameEvent } from '../src/state/events.js';
 
 export interface SavedRoom extends SavedRoomEnvelope {
   log: GameEvent[];

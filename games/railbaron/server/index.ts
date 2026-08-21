@@ -12,19 +12,19 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, { type Request, type Response } from 'express';
-import { BASE_PATH } from '../basePath';
+import { BASE_PATH } from '../basePath.js';
 import { Server as SocketServer } from 'socket.io';
 import {
   GAME_SERVER_EVENTS, RB_PROTOCOL_VERSION, RB_SAVE_VERSION,
   type LogMessage,
-} from '../session/protocol';
+} from '../session/protocol.js';
 import type { HostContext, MountedGame } from '@game-host/host/contract';
 import { closeSockets } from '@game-host/host/close';
 import { guardSocket } from '@game-host/host/guard';
 import { createLobbyHandlers } from '@game-host/lobby/server/handlers';
-import { attachGameHandlers } from './handlers';
-import { createRooms, type GameRoom } from './rooms';
-import { createFileStore } from './store';
+import { attachGameHandlers } from './handlers.js';
+import { createRooms, type GameRoom } from './rooms.js';
+import { createFileStore } from './store.js';
 
 export interface RunningServer {
   port: number;

@@ -1,6 +1,6 @@
-import { citiesIn } from './cities';
-import { REGIONS, regionById } from './regions';
-import type { CityId, RegionId, Rng } from './types';
+import { citiesIn } from './cities.js';
+import { REGIONS, regionById } from './regions.js';
+import type { CityId, RegionId, Rng } from './types.js';
 
 /**
  * Indexed [row][column]. Column 0 names a region by its position in REGIONS;

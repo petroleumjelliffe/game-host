@@ -1,0 +1,23 @@
+{
+  // The server, checked the way Node resolves rather than the way a bundler
+  // forgives. `tsx` patches Node's resolver to accept extensionless ESM
+  // imports and esbuild inlines them, so both of Rail Baron's real run paths
+  // hide a missing `.js` — this config is the only thing that sees it.
+  //
+  // `include` names only `server/`, but the program is bigger than that:
+  // TypeScript follows imports, and the server imports its game rules from
+  // `src/state/` and `engine/`. Those files join this program and need
+  // extensions too. They stop there — `src/state/` reaches into `engine/`,
+  // `session/` and itself, and never into `src/map`, `src/board` or `src/net`.
+  //
+  // `lib` and `jsx` are inherited deliberately: `src/state/storage.ts` uses
+  // DOM APIs and the state hooks import React, both of which are in this
+  // program by way of the server's imports.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["server/**/*"]
+}
