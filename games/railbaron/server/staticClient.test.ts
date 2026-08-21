@@ -88,3 +88,16 @@ describe('serving the built client', () => {
     expect((await res.json() as { ok: boolean }).ok).toBe(true);
   });
 });
+
+describe('cross-origin access', () => {
+  // Headers, not behaviour: a Node client ignores CORS, so only the response
+  // can testify. See docs/plans/2026-08-21-cors.md.
+  it('sends no CORS headers, even when asked as another origin', async () => {
+    const url = await boot(await fakeDist());
+    const res = await fetch(`${url}${BASE_PATH}/health`, {
+      headers: { Origin: 'https://evil.example' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+});

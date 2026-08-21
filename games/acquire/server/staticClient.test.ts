@@ -64,3 +64,21 @@ describe('serving the built client', () => {
     expect((await fetch(`${url}/health`)).status).toBe(200);
   });
 });
+
+describe('cross-origin access', () => {
+  // Both routes, because the standalone server used to register cors() twice:
+  // once globally in createServer and once scoped under the base path inside
+  // build(). The bare /health is the one the global middleware covered.
+  // Headers, not behaviour — see docs/plans/2026-08-21-cors.md.
+  it('sends no CORS headers on either health route, asked as another origin', async () => {
+    const url = await boot(await fakeDist());
+
+    for (const path of [`${BASE_PATH}/health`, '/health']) {
+      const res = await fetch(`${url}${path}`, {
+        headers: { Origin: 'https://evil.example' },
+      });
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('access-control-allow-origin'), path).toBeNull();
+    }
+  });
+});
