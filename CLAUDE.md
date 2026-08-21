@@ -95,6 +95,7 @@ npm test        # every package's suite, one command: 1658 tests / 160 files
 
 DATA_DIR=$(mktemp -d) npm run start:host   # all three games, one process, port 4000
 npm run typecheck
+npm run lint    # all seven workspaces, type-aware, one invocation, ~5s
 ```
 
 `npm test` runs `scripts/test-all.mjs`, which spawns one independent
@@ -138,6 +139,40 @@ separate discovery cycle. The script's own exit code is non-zero if *any*
 package failed, so CI still gates correctly; the printed summary (one line
 per package: pass/fail, exit code, test/file counts, and — distinctly — how
 many of those tests failed when the run wasn't clean) says which one(s).
+
+`npm run lint` is the opposite arrangement and deliberately so: **one**
+`eslint .` at the root covers all seven workspaces, because
+typescript-eslint's `projectService` resolves each file to its own package's
+`tsconfig.json`. Do not give this a `--workspaces` fan-out; it would be
+slower and buy nothing. Five rules, all errors, all type-aware — the two
+promise rules, `await-thenable`, and the two React hooks rules. 386 files in
+about five seconds, which is why it can afford to be type-aware at all.
+
+**The rule list is short on purpose, and the reasoning is worth keeping.**
+`strictTypeChecked` reports ~1,500 findings on this repo (911 of them
+`no-non-null-assertion`); oxlint's defaults report 146, of which 95 are one
+false positive firing on the `then:` key of every golden fixture. A gate
+that cries wolf is a gate that gets skipped, so rules get added when
+something bites rather than inherited by the preset. Two options are load-
+bearing: `NavigateFunction` is named in `allowForKnownSafeCalls` (react-router
+7 types `navigate()` as `void | Promise<void>`, so 29 ordinary calls would
+otherwise read as defects) and `checksVoidReturn.attributes` is off (an async
+`onClick` is ordinary React).
+
+**It gates pull requests, never a deploy.** CI runs it as its own job beside
+`check`, so neither can hide the other's answer; `npm run build` and
+`deploy.sh` are untouched. A type error still fails a deploy — that is
+`build`'s typecheck, and it is a different guarantee.
+
+**There is no formatter, and that was measured rather than overlooked.** The
+tree is already uniform (1,540 single-quoted imports to 38, semicolons, two
+spaces, no tabs); Prettier at the settings closest to that style would still
+rewrite 256 of 386 files, +7,077/−3,357, and would fold Rail Baron's
+triangular payout table into two different shapes down its own length.
+`.editorconfig` covers the drift that actually happens. The full ledger —
+including the fact that this gate found **no defects** when it landed, which
+is the part most likely to be misremembered — is in
+[docs/plans/2026-08-20-the-linter.md](docs/plans/2026-08-20-the-linter.md).
 
 ## Git history after the subtree merge
 

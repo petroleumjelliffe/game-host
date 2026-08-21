@@ -19,7 +19,14 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 npm install       # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
 npm test          # every package's suite in one command: 1658 tests / 160 files
 npm run typecheck
+npm run lint      # one type-aware eslint across all seven workspaces, ~5s
 ```
+
+`npm run lint` gates pull requests and nothing else: it is a CI job of its
+own, and neither `npm run build` nor `deploy.sh` runs it, so a lint error
+cannot fail a deploy the way a type error deliberately can. There is no
+formatter, which was a measurement rather than an oversight — see
+[docs/plans/2026-08-20-the-linter.md](docs/plans/2026-08-20-the-linter.md).
 
 This is a plain library-and-server checkout for developing the games — it
 works on any machine. The rest of this README (Caddy, launchd, the port
