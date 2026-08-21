@@ -1,6 +1,6 @@
 # The lobby pass
 
-**Status:** tasks 0–4 implemented 2026-08-20; task 5 proposed. Revised after a review pass
+**Status:** implemented in full, 2026-08-20 — six commits, tasks 0 through 5. Task 5 stopped at Marco Polo per its own scoping rule. Revised after a review pass
 that measured a baseline and found a larger hole than any task here named —
 see "The hole the first draft missed".
 **Follows:** [2026-08-19-cutover.md](2026-08-19-cutover.md)'s "Deliberately not
@@ -636,6 +636,35 @@ If it goes red, it has justified itself and the other two adopt it. If it goes
 green, the honest conclusion is that per-game wire tests were sufficient and
 this is a smaller win than it looked — record that and stop. `useRoom.ts` is the
 standing warning here: 81 and 119 lines that look like duplication and are not.
+
+#### As built, 2026-08-20
+
+`packages/lobby/server/conformance.ts` — `describeLobbyConformance(target)`,
+ten wire-level tests of the inherited contract (seat naming, rename with the
+binding not the payload, hostship passing on leave, token rejoin, refused
+tokens, one-seat-per-socket, `noSuchRoom`, version mismatch in all three
+flavours, host-only begin, presence on disconnect), pointed at Marco Polo by
+a five-line test file in its own suite. Shipped source that imports vitest,
+like `fakeConnection.ts` is shipped source for the games' suites.
+
+**It went red on first contact, and both reds were the suite's own fault**
+— which is the outcome the scoping rule did not enumerate and the honest
+record has to. One red was a plain race (subscribing to a roster that had
+already flown). The other taught the suite what the contract actually is:
+Marco Polo seats unnamed players as `Swimmer 2`, not `Player 2`, because
+`SeatSpace.defaultName` is a designed per-game option — the *word* is the
+game's, the *numbering by seat* is the contract, and the assertion now says
+exactly that.
+
+Corrected, it runs **green against Marco Polo: the games' lobby wiring has
+no bug this suite can find**, so per the rule above, Rail Baron and Acquire
+do not adopt it and the strong "one suite, three mounts" pitch stays
+unbuilt. What remains is still the point Marco Polo needed: the game that
+had zero lobby-over-the-wire coverage now has the whole contract on its
+wire, ten tests it did not write and cannot drift from.
+
+Suite: **1654 tests / 157 files** (importBoundary pin 16 -> 17), typecheck
+clean.
 
 ## Deliberately not in this plan
 

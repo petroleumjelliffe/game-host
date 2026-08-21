@@ -52,7 +52,12 @@ test('every relative import under the lobby resolves back inside the lobby', () 
   // task 3b — the shared no-answer timeout, extracted as a pure module
   // beside the connection rather than into it, per the backlog's design
   // note.
-  expect(files.length).toBe(16);
+  //
+  // 16 -> 17, same day, task 5: server/conformance.ts — the wire-level
+  // lobby contract as a suite any game's tests can point at their own
+  // mount. Shipped source that imports vitest, like fakeConnection.ts is
+  // shipped source for the games' suites: only test files reach it.
+  expect(files.length).toBe(17);
 
   const offences: string[] = [];
   for (const file of files) {
