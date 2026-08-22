@@ -422,5 +422,48 @@ export const GAMES: readonly GoldenGame[] = [
         then: { at: 'c4', usedCount: 0, legOwed: false } }
     ],
     final: { at: 'c4', usedCount: 0, legOwed: false }
+  },
+
+  /**
+   * The train standards (the money spec's golden shelf, first shelf): the
+   * same white pair on each train, pinning who earns the Bonus Roll. The
+   * discriminators come straight from `earnsBonus`: a Freight earns only on
+   * double sixes, an Express on any doubles, a Superchief always — so [4,4]
+   * splits Freight from Express, and [3,4] shows the Superchief needs no
+   * doubles at all. `entitled` is asserted the moment the whites land, which
+   * is when the rule fixes it.
+   */
+  {
+    id: 'train-freight-no-bonus-on-fours',
+    title: 'a Freight earns no Bonus Roll on double fours',
+    setup: { at: 'c13', destination: 'c17', train: 'freight' },
+    steps: [
+      { name: 'roll double fours', intent: { kind: 'roll', faces: [4, 4, 2] },
+        then: { remaining: 8, bonus: null, entitled: false } }
+    ],
+    final: { at: 'c13', spent: 0 }
+  },
+
+  {
+    id: 'train-express-bonus-on-doubles',
+    title: 'an Express earns its Bonus Roll on any doubles',
+    setup: { at: 'c13', destination: 'c17', train: 'express' },
+    steps: [
+      { name: 'roll the same double fours', intent: { kind: 'roll', faces: [4, 4, 2] },
+        then: { remaining: 8, bonus: null, entitled: true } }
+    ],
+    final: { at: 'c13', spent: 0 }
+  },
+
+  {
+    id: 'train-superchief-bonus-always',
+    title: 'a Superchief earns its Bonus Roll on any pair at all',
+    setup: { at: 'c13', destination: 'c17', train: 'superchief' },
+    steps: [
+      { name: 'roll a three and a four — no doubles anywhere',
+        intent: { kind: 'roll', faces: [3, 4, 2] },
+        then: { remaining: 7, bonus: null, entitled: true } }
+    ],
+    final: { at: 'c13', spent: 0 }
   }
 ];
