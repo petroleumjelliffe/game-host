@@ -89,6 +89,8 @@ export function useGame(rng: Rng = Math.random) {
   const roll = useCallback((seat: SeatId): RollOutcome | null => {
     const current = state.seats[seat];
     if (current.awaiting !== null || current.name === null) return null;
+    // A homeward baron rolls no destinations — home is the destination.
+    if (current.homeward) return null;
     // A destination is rolled once per trip, at its start. The guard is here
     // rather than on the screen so that no future screen can route round it.
     if (!needsDestination(current, nodeForCity)) return null;
@@ -133,7 +135,8 @@ export function useGame(rng: Rng = Math.random) {
   const rollDice = useCallback((seat: SeatId): TurnRoll | null => {
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (state.rolled !== null) return null;             // one roll per turn
-    if (needsDestination(state.seats[seat], nodeForCity)) return null;
+    const rollingSeat = state.seats[seat];
+    if (!rollingSeat.homeward && needsDestination(rollingSeat, nodeForCity)) return null;
     // The money spec kept its promise: the train is the rules' to name.
     const train: TrainType = state.rules.startingTrain;
     return rollTurn(train, rng);
@@ -161,7 +164,8 @@ export function useGame(rng: Rng = Math.random) {
   const rollBonus = useCallback((seat: SeatId): number | null => {
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (!state.bonusOwed) return null;
-    if (needsDestination(state.seats[seat], nodeForCity)) return null;
+    const bonusSeat = state.seats[seat];
+    if (!bonusSeat.homeward && needsDestination(bonusSeat, nodeForCity)) return null;
     return d6(rng);
   }, [state, rng]);
 

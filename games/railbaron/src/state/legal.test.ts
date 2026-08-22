@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { payoutBetween } from '../../engine/index.js';
 import type { GameEvent } from './events';
 import { appendLegality, undoLegality } from './legal';
 
@@ -26,7 +27,7 @@ const blueHome: GameEvent =
 const order: GameEvent = { type: 'orderRolled', seat: 'red', first: 'red' };
 /** Red's first destination, so red no longer owes a destination roll. */
 const redDestination: GameEvent =
-  { type: 'arrived', seat: 'red', city: 9, region: 'SE', payout: 45 };
+  { type: 'arrived', seat: 'red', city: 9, region: 'SE', payout: payoutBetween(20, 9) };
 
 /** Homes in, order rolled: phase `playing`, red to act, owing a destination. */
 const afterOrder = seeded(redHome, blueHome, order);

@@ -1,4 +1,5 @@
 import { mkdtemp } from 'node:fs/promises';
+import { payoutBetween } from '../engine/index.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { io as connect, type Socket as ClientSocket } from 'socket.io-client';
@@ -230,7 +231,7 @@ describe('the game wire', () => {
       await append(room.guest, greenHome);
       await append(room.host, { type: 'orderRolled', seat: 'red', first: 'red' });
       await append(room.host,
-        { type: 'arrived', seat: 'red', city: 9, region: 'SE', payout: 45 });
+        { type: 'arrived', seat: 'red', city: 9, region: 'SE', payout: payoutBetween(20, 9) });
       await append(room.host,
         { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null });
       await append(room.host,
