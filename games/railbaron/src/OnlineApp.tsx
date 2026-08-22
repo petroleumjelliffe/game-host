@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { askWithTimeout } from '@game-host/lobby/client/answerTimeout';
 import { lobbyView, type LobbyLimits } from '@game-host/lobby/client/view';
 import { Board } from './board/Board';
+import { MoneyStrip } from './board/MoneyStrip';
 import {
   joinRoom as joinRoomScreen, onlineLobby, roomGone, roomRefused, staleClient,
 } from './board/screens/online';
@@ -218,6 +219,7 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
     return (
       <main style={shellStyle}>
         <Suspense fallback={<div style={shellStyle} />}>
+          <MoneyStrip state={game.state} />
           <MapView
             state={game.state}
             onBack={() => setOnMap(false)}
@@ -233,6 +235,7 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
 
   return (
     <main style={shellStyle}>
+      {playing && <MoneyStrip state={game.state} />}
       <Board
         screen={screen}
         awaitRegion={playing ? shell.awaitRegion : null}

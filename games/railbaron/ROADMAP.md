@@ -18,8 +18,10 @@ wearing the same clothes.
 2. **Roll animation on the map** — destination and payout rolls animated; the design
    already exists in the design project. A small, shovel-ready win before the big
    design effort. Phase 5.
-3. **The money spec** — Phase 4's second half: cash, ownership, the bill per turn, the
-   auction, and trains. One design; the dependency order is inside Phase 4.
+3. **The money spec, second half** — ownership, the bill per turn, the auction,
+   trains, and the rover play (rule to be transcribed first). The first half — cash,
+   banked-vs-earned, the win condition, house rules, seeded dice — landed 2026-08-22;
+   see the game-host repo's `specs/2026-08-22-money-phase-1.md`.
 4. **Auto-zoom to the current player** — gated on a design-project pass first, so it
    trails the money work. Phase 5.
 

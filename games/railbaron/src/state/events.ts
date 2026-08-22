@@ -1,4 +1,5 @@
 import { CITIES, NODES, REGIONS, cityById, type CityId, type RegionId } from '../../engine/index.js';
+import { isRulesShape, type GameRules } from './rules.js';
 
 export type SeatId = 'red' | 'green' | 'blue' | 'yellow' | 'black' | 'white';
 export type NodeId = string;
@@ -16,7 +17,7 @@ export const SEATS: readonly SeatId[] = ['red', 'green', 'blue', 'yellow', 'blac
 export type GameEvent =
   | { type: 'joined'; seat: SeatId; name: string }
   | { type: 'renamed'; seat: SeatId; name: string | null }
-  | { type: 'started' }
+  | { type: 'started'; rules?: GameRules }
   | { type: 'regionRequested'; seat: SeatId; rolled: RegionId }
   /**
    * `arrived` fires when a destination is *rolled*, not when the pawn gets
@@ -78,8 +79,10 @@ export function isGameEvent(value: unknown): value is GameEvent {
     case 'joined':
       return VALID_SEATS.has(event.seat as string) && typeof event.name === 'string';
     case 'started':
-      // No payload to check: its presence is the whole fact.
-      return true;
+      // The payload, when present, is the house rules — stamped by the
+      // server, validated here so a hand-edited save cannot smuggle a
+      // malformed target into every future fold.
+      return event.rules === undefined || isRulesShape(event.rules);
     case 'renamed':
       // null is a real value here — it vacates the seat.
       return (

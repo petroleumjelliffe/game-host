@@ -6,10 +6,11 @@
 // needsDestination, replay), which is the point: the client's "may I?" and the
 // server's "you may not" are made of one set of rules and cannot drift into
 // disagreeing about the same board.
-import { nodeForCity } from '../../engine/index.js';
+import { nodeForCity, payoutBetween } from '../../engine/index.js';
 import type { GameRejection, GameRejectionCode } from '../../session/protocol.js';
 import type { GameEvent, SeatId } from './events.js';
-import { replay } from './game.js';
+import { currentCity, replay } from './game.js';
+import { seedConformance } from './seeded.js';
 import { homesDone, needsDestination, nextHomeSeat } from './turns.js';
 
 const not = (code: GameRejectionCode, message: string): GameRejection =>
@@ -23,6 +24,16 @@ export function appendLegality(
   log: readonly GameEvent[], event: GameEvent, sender: SeatId,
 ): GameRejection | null {
   const state = replay(log);
+
+  // A finished game accepts nothing. The winner derivation is replay's, so
+  // this is one comparison — and it outranks even the server-only events:
+  // a second `started` in a won room is as wrong as a move in one.
+  if (state.winner !== null) return not('notNow', 'the game is over');
+
+  // In a seeded game, the dice are the seed's — a nonconforming roll is
+  // refused before any other question is asked of it.
+  const nonconforming = seedConformance(log, event, state);
+  if (nonconforming !== null) return nonconforming;
 
   // Seating and starting belong to the lobby and to Begin. A client that
   // sends one is either confused or hostile, and the answer is the same.
@@ -51,20 +62,38 @@ export function appendLegality(
   const seat = state.seats[sender];
 
   switch (event.type) {
-    case 'arrived':
+    case 'arrived': {
+      if (seat.homeward) {
+        return not('notNow', 'homeward barons roll no destinations — home is the destination');
+      }
+      // The payout is the table's, not the sender's. The first stop is the
+      // home pick and pays null; every later one pays exactly payoutBetween —
+      // which throws on a city-to-itself journey, so that is refused first.
+      const from = currentCity(seat);
+      if (from === event.city) return not('notNow', 'already there');
+      const owed = from === null ? null : payoutBetween(from, event.city);
+      if (event.payout !== owed) {
+        return not('notNow', 'that is not what the payout table says');
+      }
       // Either a region ballot is open and this is its answer, or the baron is
       // standing where it was last sent and may be given somewhere new.
       return seat.awaiting !== null || needsDestination(seat, nodeForCity)
         ? null : not('notNow', 'no destination is owed');
+    }
 
     case 'regionRequested':
+      if (seat.homeward) {
+        return not('notNow', 'homeward barons roll no destinations — home is the destination');
+      }
       return seat.awaiting === null && needsDestination(seat, nodeForCity)
         ? null : not('notNow', 'no destination roll is owed');
 
     case 'turnRolled':
       if (state.phase !== 'playing') return not('notNow', 'the game has not begun');
       if (state.rolled !== null) return not('notNow', 'this turn already has its roll');
-      if (needsDestination(seat, nodeForCity)) return not('notNow', 'roll a destination first');
+      if (!seat.homeward && needsDestination(seat, nodeForCity)) {
+        return not('notNow', 'roll a destination first');
+      }
       return null;
 
     case 'bonusRolled':
@@ -73,7 +102,7 @@ export function appendLegality(
       // re-deriving entitlement is what stops the server accepting a roll
       // replay would then silently discard.
       return state.phase === 'playing' && state.bonusOwed
-        && !needsDestination(seat, nodeForCity)
+        && (seat.homeward || !needsDestination(seat, nodeForCity))
         ? null : not('notNow', 'no Bonus Roll is owed');
 
     case 'moved':

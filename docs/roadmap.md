@@ -97,12 +97,19 @@ enforcing. Item 2 is done; item 4 should be un-listed.
 
 ---
 
-## Phase 1 — the money spec, part one: make it finishable
+## ~~Phase 1 — the money spec, part one: make it finishable~~ — done 2026-08-22
 
-**Size: large, and the largest thing here that is worth doing anyway.**
-Sliced this way on purpose (decided 2026-08-21): the smallest change that
-makes the game winnable, so there is something playable at the end of it
-rather than at the end of the whole economy.
+**Done 2026-08-22** — [spec](../specs/2026-08-22-money-phase-1.md),
+[plan](plans/2026-08-22-money-phase-1.md), both with as-built notes. Smaller
+than sized, because most of it already existed: payoutBetween was correct and
+unused, the arrived event had carried payout on the wire all along, and the
+fold already summed it. What actually landed: banked (earned minus the
+in-flight trip — the timing caveat the spec caught), homeward, the winner
+derived from the moved that ends at home, appendLegality closing finished
+games and auditing payouts against the table, rules.json read once and
+stamped into started, seeded games that verify their own dice, the Total
+tile, and the golden standards shelf at two layers. **Rail Baron can be
+won.** The original slice text follows for the record.
 
 **In scope:**
 
@@ -239,6 +246,12 @@ someone standing at the host machine. The first is less code. Settle it in the
 money spec, since that is the first consumer, and generalise afterwards rather
 than building a settings system for one caller.
 
+**First consumer landed 2026-08-22:** `DATA_DIR/railbaron/rules.json` — win
+target, starting train, optional dice seed — read once at Rail Baron's mount
+and stamped into each room's `started` event, absent meaning the published
+rules and malformed refusing the mount by field. The DATA_DIR reading won,
+for the reason above. The generalisation now has one real example to copy.
+
 **Read `feat/host-env-local` before designing this.** It is a parked branch —
 two commits, unmerged, 47 behind `main` as of 2026-08-21 — that already solved
 this exact shape for `DATA_DIR`: the host reads it from a gitignored
@@ -265,9 +278,10 @@ today; that branch adds the entry.
 
 Recorded so they are not silently made by whoever implements first.
 
-1. **Phase 1's win condition** — cash plus home city, or cash alone, given
-   there is no ownership yet. See phase 1.
-2. **Where the rules config lives** — repo or `DATA_DIR`. See house rules.
+1. ~~**Phase 1's win condition**~~ — decided 2026-08-22: cash **plus** return
+   home; phase 2 adds the ownership clause without changing the rule's shape.
+2. ~~**Where the rules config lives**~~ — decided 2026-08-22: `DATA_DIR`.
+   See house rules.
 3. **Marco Polo's turbo meter** — carries a question mark in the backlog.
 4. **Acquire's "move lobby in game"** — same.
 5. **What is left of Acquire's reskin** — needs a look, not a grep.

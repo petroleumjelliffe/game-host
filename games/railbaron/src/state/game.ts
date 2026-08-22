@@ -3,6 +3,7 @@ import {
   type CityId, type NodeId, type RegionId, type TrainType, type TurnRoll
 } from '../../engine/index.js';
 import { SEATS, type GameEvent, type SeatId } from './events.js';
+import { PUBLISHED_RULES, type GameRules } from './rules.js';
 import { addSections, rotate } from './turns.js';
 
 export interface Stop {
@@ -19,6 +20,19 @@ export interface Seat {
   awaiting: RegionId | null;
   /** Derived at replay, never stored: payouts summed, home towns counting nothing. */
   earned: number;
+  /** The first stop's city — where a winning run must end. Null before homes. */
+  home: CityId | null;
+  /**
+   * Earnings from *completed* trips. `arrived` banks its payout into `earned`
+   * at assignment, before the trip is walked (see the event's own docs) —
+   * right for a running total, one trip early for a threshold. The end rule
+   * reads this, never `earned`. Tracked as an explicit in-flight amount that
+   * the arriving `moved` clears, NOT inferred from the pawn's position: a
+   * homeward baron who leaves their last stop has not un-earned that trip.
+   */
+  banked: number;
+  /** banked >= rules.winTarget: no more destinations, racing for home. */
+  homeward: boolean;
   /**
    * Where this baron's pawn stands, as a node — not a city. A baron between
    * two cities is the normal case, and the companion could get away with
@@ -37,7 +51,7 @@ export interface GameState {
    * before turn order existed has no `orderRolled`, so it resumes in `homes`
    * with every home already in — which is exactly the state it should be in.
    */
-  phase: 'setup' | 'homes' | 'playing';
+  phase: 'setup' | 'homes' | 'playing' | 'over';
   /** Seated barons, rotated to start with whoever won the roll. */
   order: readonly SeatId[];
   /** Whose turn it is, or null before play begins. */
@@ -61,27 +75,25 @@ export interface GameState {
   bonusOwed: boolean;
   /** The leg most recently committed, for the map to walk. */
   lastMove: { seat: SeatId; path: readonly NodeId[]; arrived: boolean } | null;
+  /** From started.rules; PUBLISHED_RULES when the log predates rules. */
+  rules: GameRules;
+  /** The seat whose moved ended at home while homeward. Ends the game. */
+  winner: SeatId | null;
 }
 
 function emptyState(): GameState {
   const seats = {} as Record<SeatId, Seat>;
   for (const id of SEATS) {
     seats[id] = {
-      id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map()
+      id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map(),
+      home: null, banked: 0, homeward: false
     };
   }
   return {
     seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0,
-    bonusOwed: false, lastMove: null
+    bonusOwed: false, lastMove: null, rules: PUBLISHED_RULES, winner: null
   };
 }
-
-/**
- * Every baron starts on a Freight and nothing upgrades one yet. Named here
- * rather than inlined so the money spec has one place to make it a lookup —
- * `src/state/useGame.ts` carries the same constant for the same reason.
- */
-const TRAIN: TrainType = 'freight';
 
 /** The turn under way, while the log is being folded. */
 interface OpenTurn {
@@ -107,11 +119,11 @@ interface OpenTurn {
  * reports. If those disagreed, the app would either offer a roll replay would
  * discard or discard one it had offered.
  */
-const owesBonusRoll = (turn: OpenTurn): boolean =>
+const owesBonusRoll = (turn: OpenTurn, train: TrainType): boolean =>
   !turn.legacy
   && turn.legs >= 1
   && turn.roll.bonus === null
-  && earnsBonus(TRAIN, turn.roll.white);
+  && earnsBonus(train, turn.roll.white);
 
 export function replay(events: readonly GameEvent[]): GameState {
   const state = emptyState();
@@ -120,10 +132,19 @@ export function replay(events: readonly GameEvent[]): GameState {
   let taken = 0;
   /** The turn under way, if any. */
   let open: OpenTurn | null = null;
+  /**
+   * The current trip's payout per seat: set when `arrived` assigns it (and
+   * banks it into `earned`), cleared by the `moved` that completes the walk.
+   * banked = earned - inFlight, always.
+   */
+  const inFlight = new Map<SeatId, number>();
 
   for (const event of events) {
     if (event.type === 'started') {
       state.phase = 'homes';
+      state.rules = event.rules === undefined
+        ? PUBLISHED_RULES
+        : { ...PUBLISHED_RULES, ...event.rules };
       continue;
     }
     const seat = state.seats[event.seat];
@@ -136,6 +157,7 @@ export function replay(events: readonly GameEvent[]): GameState {
         state.seats[event.seat] = { ...seat, awaiting: event.rolled };
         break;
       case 'arrived':
+        inFlight.set(event.seat, event.payout ?? 0);
         state.seats[event.seat] = {
           ...seat,
           awaiting: null,
@@ -173,7 +195,7 @@ export function replay(events: readonly GameEvent[]): GameState {
         // offer the very same face again for leg 1: fifteen dots of movement
         // walked as eighteen. Ignoring it leaves the die still owed, which is
         // what the rest of the log goes on to say.
-        if (open !== null && owesBonusRoll(open)) {
+        if (open !== null && owesBonusRoll(open, state.rules.startingTrain)) {
           open.roll = { white: open.roll.white, bonus: event.face };
         }
         break;
@@ -199,8 +221,22 @@ export function replay(events: readonly GameEvent[]): GameState {
           //   arrival inside the white dice left anything owed.
           const owed = open.legacy
             ? bonusLegOwed(open.roll, pathCost(event.path), event.arrived)
-            : earnsBonus(TRAIN, open.roll.white);
+            : earnsBonus(state.rules.startingTrain, open.roll.white);
           if (open.legs >= 2 || !owed) { taken += 1; open = null; }
+        }
+        if (event.arrived) inFlight.set(event.seat, 0);
+        {
+          // Settle the mover's money. Banked before tested, so a leg that
+          // both completes the crossing trip and ends at home wins here.
+          const mover = state.seats[event.seat];
+          const banked = mover.earned - (inFlight.get(event.seat) ?? 0);
+          const homeCity = mover.stops[0]?.city ?? null;
+          const homeward = homeCity !== null && banked >= state.rules.winTarget;
+          state.seats[event.seat] = { ...mover, banked, homeward, home: homeCity };
+          if (state.winner === null && homeward
+              && mover.at === nodeForCity(homeCity!)) {
+            state.winner = event.seat;
+          }
         }
         break;
     }
@@ -216,7 +252,19 @@ export function replay(events: readonly GameEvent[]): GameState {
   // Derived, never stored: an entitled turn that has walked its white leg and
   // has no face on the bonus die yet. A legacy turn never reaches it — its
   // face was in hand from the roll.
-  state.bonusOwed = open !== null && owesBonusRoll(open);
+  state.bonusOwed = open !== null && owesBonusRoll(open, state.rules.startingTrain);
+  // Money fields for every seat, movers or not — the in-loop settlement only
+  // touched seats as they moved, and they agree with this by construction.
+  for (const sid of SEATS) {
+    const seat = state.seats[sid];
+    const homeCity = seat.stops[0]?.city ?? null;
+    const banked = seat.earned - (inFlight.get(sid) ?? 0);
+    state.seats[sid] = {
+      ...seat, home: homeCity, banked,
+      homeward: homeCity !== null && banked >= state.rules.winTarget,
+    };
+  }
+  if (state.winner !== null) state.phase = 'over';
   return state;
 }
 
