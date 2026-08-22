@@ -193,6 +193,12 @@ gets golden games, and anything a save touches gets a store test.
     already — `roll.test.ts`, `movement.test.ts` — but a golden game is the
     record that the *whole cycle* treats a $0 trip as a real trip.)
   - **A win** — target reached, home reached, every append refused after.
+  - **The homeward run itself** — a seat crosses the target mid-game and
+    plays several more turns: `regionRequested` refused for it throughout,
+    ordinary turn rolls and movement still legal, other seats' destination
+    cycles unaffected, and the run ending in the winning arrival. Distinct
+    from "a win", which pins the ending; this pins the *journey* — the
+    stretch of game where one seat is under different rules than the rest.
   - **The overtaken leader** — one seat crosses the target first, another
     reaches target-and-home first and wins; cash alone ends nothing.
 
@@ -219,7 +225,13 @@ Ownership, user fees, auctions, train upgrades (Express $4,000, Superchief
 $40,000 — prices already recorded in `engine/dice.ts` for phase 2), forced
 sale, bankruptcy, and the shared-trackage question (`route.ts` keeps
 recording every company a leg could have ridden, unpriced — *"recording the
-set loses nothing it could need"*). Also out: any settings UI, per the
+set loses nothing it could need"*). **The rover play** is phase 2's too
+(decided 2026-08-22), with a debt attached: the rule exists nowhere in this
+repo — no comment, no doc, no fixture — and published editions vary, so
+phase 2's first task for it is transcribing the table's actual rule before
+designing anything. It interacts with the homeward run (an exact-count
+landing on a racing leader is the endgame's biggest swing), which is exactly
+why it must be written down rather than remembered. Also out: any settings UI, per the
 config-file decision, and any general house-rules system, per the roadmap.
 
 **One inherited gate, resolved:** Rail Baron's own pre-monorepo roadmap put
