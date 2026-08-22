@@ -24,6 +24,8 @@ import { guardSocket } from '@game-host/host/guard';
 import { createLobbyHandlers } from '@game-host/lobby/server/handlers';
 import { attachGameHandlers } from './handlers.js';
 import { createRooms, type GameRoom } from './rooms.js';
+import { readRules } from './rules.js';
+import { PUBLISHED_RULES } from '../src/state/rules.js';
 import { createFileStore } from './store.js';
 
 export interface RunningServer {
@@ -148,7 +150,14 @@ async function mountInto(
     destroyUpgrade: false,
     serveClient: false,
   });
-  const rooms = createRooms(createFileStore(dataDir));
+  // House rules, read once — the log carries them from `started` onward, so
+  // this is the only moment the file matters. A malformed file throws here
+  // and the mount refuses, loudly: see server/rules.ts.
+  const rules = await readRules(dataDir);
+  if (rules !== PUBLISHED_RULES) {
+    console.log('[railbaron] house rules in force:', JSON.stringify(rules));
+  }
+  const rooms = createRooms(createFileStore(dataDir), rules);
 
   const sendLog = (room: GameRoom, to: { emit: (e: string, m: LogMessage) => void }): void => {
     to.emit(GAME_SERVER_EVENTS.log, { roomId: room.id, events: room.log });

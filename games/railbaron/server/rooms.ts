@@ -5,6 +5,8 @@
 // a `started` event is what moves a room out of the lobby.
 import { RB_PROTOCOL_VERSION, RB_SAVE_VERSION } from '../session/protocol.js';
 import { SEATS, type GameEvent, type SeatId } from '../src/state/events.js';
+import { replay } from '../src/state/game.js';
+import { PUBLISHED_RULES, type GameRules } from '../src/state/rules.js';
 import type { Lifecycle } from '@game-host/lobby/protocol/protocol';
 import {
   createLobbyRegistry, type LobbyRegistry, type SeatHolder, type SeatSpace,
@@ -35,11 +37,14 @@ function makeRoom(id: string, players: SeatHolder[], log: GameEvent[] = []): Gam
     id,
     players,
     log,
-    // 'over' is unreachable: the game has no end rule yet. When the money spec
-    // lands one, it will be derived from the log right here, exactly as
-    // 'playing' is.
+    // Derived from the log right here, exactly as 'playing' is — the
+    // promise this comment made back when 'over' was unreachable. A replay
+    // per call is honest and cheap at lobby cadence; rooms are not folded
+    // per tick.
     lifecycle: (): Lifecycle =>
-      room.log.some((e) => e.type === 'started') ? 'playing' : 'lobby',
+      !room.log.some((e) => e.type === 'started') ? 'lobby'
+        : replay(room.log).winner !== null ? 'over'
+        : 'playing',
   };
   return room;
 }
@@ -64,7 +69,13 @@ export interface Rooms {
   remove(roomId: string): Promise<void>;
 }
 
-export function createRooms(store: RoomStore): Rooms {
+/**
+ * `rules` is what every room begun here starts under — read once at mount
+ * from DATA_DIR/railbaron/rules.json and stamped into each `started` event,
+ * after which the log alone is the authority. Defaulted so tests and the
+ * standalone boot need not care.
+ */
+export function createRooms(store: RoomStore, rules: GameRules = PUBLISHED_RULES): Rooms {
   const registry = createLobbyRegistry<GameRoom>(
     (id, players) => makeRoom(id, players),
     SEAT_SPACE,
@@ -100,7 +111,7 @@ export function createRooms(store: RoomStore): Rooms {
         if (seat === undefined) continue;
         room.log.push({ type: 'joined', seat, name: p.name });
       }
-      room.log.push({ type: 'started' });
+      room.log.push(rules === PUBLISHED_RULES ? { type: 'started' } : { type: 'started', rules });
     },
 
     persist,
