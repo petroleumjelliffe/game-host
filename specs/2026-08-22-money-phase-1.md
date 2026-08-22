@@ -172,12 +172,36 @@ log as receipts. Anything prettier belongs to the roadmap's phase 3 map work.
 House style throughout — the fold and `legal.ts` get unit tests, the wire
 gets golden games, and anything a save touches gets a store test.
 
-- **Golden games:** one played to a win (target, home, appends refused
-  after); one where the leader is overtaken before reaching home. Per the
-  fixture policy in `engine/golden/games.ts`, any existing golden game this
-  spec invalidates is **deleted, not patched**, with the retiring rule named
-  in the commit — though phase 1 only ends games that previously ran forever,
-  so none is expected to retire.
+- **Golden games.** The suite gains a standards shelf, not just the two
+  end-rule games — the turns-and-movement design deferred every money-shaped
+  scenario to this spec, so this is where they land. Two layers, named
+  because they drive different machinery:
+
+  *Engine goldens* (`engine/golden/`, scripted faces, movement intents):
+  - **Train types and the Bonus Roll** — the same faces rolled as freight,
+    express and superchief, pinning who earns the bonus and what it moves.
+    The runner already carries `state.train` and `earnsBonus`; nothing has
+    ever varied it.
+
+  *Event-level goldens* (the fold over `src/state/events.ts` — the shape this
+  spec introduces, since arrivals and destinations do not exist below it):
+  - **A standard turn cycle** — destination rolled by region and city,
+    travelled to, paid on arrival, next destination rolled.
+  - **The $0 neighbours** — Minneapolis→St. Paul and Oakland→San Francisco
+    rolled as destinations and arrived: `payout: 0`, banked as nothing,
+    legal throughout, and `earned` unchanged. (Unit tests pin the first pair
+    already — `roll.test.ts`, `movement.test.ts` — but a golden game is the
+    record that the *whole cycle* treats a $0 trip as a real trip.)
+  - **A win** — target reached, home reached, every append refused after.
+  - **The overtaken leader** — one seat crosses the target first, another
+    reaches target-and-home first and wins; cash alone ends nothing.
+
+  Goldens script their dice directly and need no seed; the seed exists so a
+  *live* game can be reproduced, after which the interesting sequence gets
+  transcribed into a fixture. Per the policy in `engine/golden/games.ts`, any
+  existing golden this spec invalidates is **deleted, not patched**, with the
+  retiring rule named in the commit — though phase 1 only ends games that
+  previously ran forever, so none is expected to retire.
 - **Fold:** homeward at exactly the target (`>=`, not `>`); home city
   identified from the first stop; `payout: 0` counts nothing; winner derived
   on the winning arrival and not before.
