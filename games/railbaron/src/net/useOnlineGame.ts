@@ -5,6 +5,7 @@ import {
 } from '../../engine';
 import { SEATS, type GameEvent, type SeatId } from '../state/events';
 import { currentCity, replay } from '../state/game';
+import { nextRng } from '../state/seeded';
 import { homesTaken, needsDestination, nextHomeSeat } from '../state/turns';
 import type { GameTransport } from './transport';
 
@@ -39,6 +40,14 @@ export function useOnlineGame(
 ) {
   const state = replay(log);
 
+  // Seeded games roll the seed's dice: the stream for the next roll event is
+  // derived from the log every render, so each append advances it — and the
+  // same derivation is what appendLegality verifies against (seeded.ts).
+  // The order-roll ceremony below stays on `rng`: its dice values are never
+  // recorded in the log, so a seed could neither replay nor verify them.
+  const liveRng: Rng = state.rules.seed === undefined
+    ? rng : nextRng(log, state.rules.seed);
+
   /** Whose move it is, by the same derivation the server's legality uses. */
   const actor = state.phase === 'homes' ? nextHomeSeat(state) : state.turn;
 
@@ -50,8 +59,8 @@ export function useOnlineGame(
     if (current.homeward) return null;
     if (!needsDestination(current, nodeForCity)) return null;
     if (actor !== seat) return null;
-    return rollDestination(currentCity(current), rng, homesTaken(state));
-  }, [state, actor, rng, mySeat]);
+    return rollDestination(currentCity(current), liveRng, homesTaken(state));
+  }, [state, actor, liveRng, mySeat]);
 
   const commitRoll = useCallback((seat: SeatId, outcome: RollOutcome) => {
     switch (outcome.kind) {
@@ -76,12 +85,12 @@ export function useOnlineGame(
     const current = state.seats[seat];
     const from = currentCity(current);
     if (from === null || current.awaiting === null) return;
-    const arrival = destinationInRegion(from, region, rng);
+    const arrival = destinationInRegion(from, region, liveRng);
     transport.append({
       type: 'arrived', seat, city: arrival.city,
       region: arrival.region, payout: arrival.payout,
     });
-  }, [state, rng, transport, mySeat]);
+  }, [state, liveRng, transport, mySeat]);
 
   const rollDice = useCallback((seat: SeatId): TurnRoll | null => {
     if (seat !== mySeat) return null;
@@ -91,8 +100,8 @@ export function useOnlineGame(
     if (!rollingSeat.homeward && needsDestination(rollingSeat, nodeForCity)) return null;
     // The money spec kept its promise: the train is the rules' to name.
     const train: TrainType = state.rules.startingTrain;
-    return rollTurn(train, rng);
-  }, [state, rng, mySeat]);
+    return rollTurn(train, liveRng);
+  }, [state, liveRng, mySeat]);
 
   const commitDice = useCallback((seat: SeatId, roll: TurnRoll) => {
     transport.append({
@@ -107,8 +116,8 @@ export function useOnlineGame(
     if (!state.bonusOwed) return null;
     const bonusSeat = state.seats[seat];
     if (!bonusSeat.homeward && needsDestination(bonusSeat, nodeForCity)) return null;
-    return d6(rng);
-  }, [state, rng, mySeat]);
+    return d6(liveRng);
+  }, [state, liveRng, mySeat]);
 
   const commitBonus = useCallback((seat: SeatId, face: number) => {
     transport.append({ type: 'bonusRolled', seat, face });

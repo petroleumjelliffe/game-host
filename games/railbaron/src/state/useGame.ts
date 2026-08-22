@@ -5,6 +5,7 @@ import {
 } from '../../engine';
 import { SEATS, type GameEvent, type SeatId } from './events';
 import { currentCity, replay, undo } from './game';
+import { nextRng } from './seeded';
 import { homesTaken, needsDestination, nextHomeSeat } from './turns';
 import { STORAGE_KEY, clearLog, loadLog, saveLog } from './storage';
 
@@ -51,6 +52,14 @@ export function useGame(rng: Rng = Math.random) {
 
   const state = replay(events);
 
+  // Seeded games roll the seed's dice — the same derivation the server
+  // verifies (seeded.ts). Pass-and-play logs normally carry no seed, so this
+  // is Math.random in practice; the mirror exists because useOnlineGame has
+  // it, and the two hooks' guards are kept in the same words by design. The
+  // order-roll ceremony keeps `rng`: its dice are never in the log.
+  const liveRng: Rng = state.rules.seed === undefined
+    ? rng : nextRng(events, state.rules.seed);
+
   // The dice roll happens here, in the event handler body, reading `state`
   // from this render's closure. It must not live inside the setEvents
   // updater below: React 19's StrictMode deliberately invokes updaters
@@ -96,8 +105,8 @@ export function useGame(rng: Rng = Math.random) {
     if (!needsDestination(current, nodeForCity)) return null;
     if (state.phase === 'homes' && nextHomeSeat(state) !== seat) return null;
     if (state.phase === 'playing' && state.turn !== seat) return null;
-    return rollDestination(currentCity(current), rng, homesTaken(state));
-  }, [state, rng]);
+    return rollDestination(currentCity(current), liveRng, homesTaken(state));
+  }, [state, liveRng]);
 
   /** The only way a roll reaches the log. See `roll`. */
   const commitRoll = useCallback((seat: SeatId, outcome: RollOutcome) => {
@@ -119,10 +128,10 @@ export function useGame(rng: Rng = Math.random) {
     const current = state.seats[seat];
     const from = currentCity(current);
     if (from === null || current.awaiting === null) return;
-    const arrival = destinationInRegion(from, region, rng);
+    const arrival = destinationInRegion(from, region, liveRng);
     setEvents(log => [...log,
       { type: 'arrived', seat, city: arrival.city, region: arrival.region, payout: arrival.payout }]);
-  }, [state, rng]);
+  }, [state, liveRng]);
 
   /**
    * The white movement dice — and only those. Deliberately appends nothing,
@@ -139,8 +148,8 @@ export function useGame(rng: Rng = Math.random) {
     if (!rollingSeat.homeward && needsDestination(rollingSeat, nodeForCity)) return null;
     // The money spec kept its promise: the train is the rules' to name.
     const train: TrainType = state.rules.startingTrain;
-    return rollTurn(train, rng);
-  }, [state, rng]);
+    return rollTurn(train, liveRng);
+  }, [state, liveRng]);
 
   const commitDice = useCallback((seat: SeatId, roll: TurnRoll) => {
     setEvents(log => [...log, {
@@ -166,8 +175,8 @@ export function useGame(rng: Rng = Math.random) {
     if (!state.bonusOwed) return null;
     const bonusSeat = state.seats[seat];
     if (!bonusSeat.homeward && needsDestination(bonusSeat, nodeForCity)) return null;
-    return d6(rng);
-  }, [state, rng]);
+    return d6(liveRng);
+  }, [state, liveRng]);
 
   /** The only way a Bonus Roll reaches the log. See `rollBonus`. */
   const commitBonus = useCallback((seat: SeatId, face: number) => {

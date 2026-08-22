@@ -10,6 +10,7 @@ import { nodeForCity, payoutBetween } from '../../engine/index.js';
 import type { GameRejection, GameRejectionCode } from '../../session/protocol.js';
 import type { GameEvent, SeatId } from './events.js';
 import { currentCity, replay } from './game.js';
+import { seedConformance } from './seeded.js';
 import { homesDone, needsDestination, nextHomeSeat } from './turns.js';
 
 const not = (code: GameRejectionCode, message: string): GameRejection =>
@@ -28,6 +29,11 @@ export function appendLegality(
   // this is one comparison — and it outranks even the server-only events:
   // a second `started` in a won room is as wrong as a move in one.
   if (state.winner !== null) return not('notNow', 'the game is over');
+
+  // In a seeded game, the dice are the seed's — a nonconforming roll is
+  // refused before any other question is asked of it.
+  const nonconforming = seedConformance(log, event, state);
+  if (nonconforming !== null) return nonconforming;
 
   // Seating and starting belong to the lobby and to Begin. A client that
   // sends one is either confused or hostile, and the answer is the same.
