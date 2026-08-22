@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { matchPath, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { Rng } from '../engine';
 import { Board } from './board/Board';
+import { MoneyStrip } from './board/MoneyStrip';
 import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
 import { saved } from './board/screens/saved';
@@ -101,6 +102,7 @@ export default function App({ rng }: AppProps = {}) {
             Warming the lamps
           </div>
         }>
+          <MoneyStrip state={state} />
           <MapView
             state={state}
             onBack={() => navigate('/pass-and-play/game')}
@@ -176,6 +178,8 @@ export default function App({ rng }: AppProps = {}) {
 
   return (
     <main style={{ height: '100%' }}>
+      {state.phase === 'playing' || state.phase === 'over'
+        ? <MoneyStrip state={state} /> : null}
       <Board
         screen={screens[pathname]}
         awaitRegion={shell.awaitRegion}

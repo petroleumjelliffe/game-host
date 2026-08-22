@@ -1,0 +1,70 @@
+// The Total tile and the endgame furniture, driven — like every screen on
+// this board — by nothing but replayed state.
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { CITIES, cityById, nodeForCity, payoutBetween } from '../../engine';
+import type { CityId } from '../../engine';
+import { replay } from '../state/game';
+import type { GameEvent, SeatId } from '../state/events';
+import { PUBLISHED_RULES } from '../state/rules';
+import { MoneyStrip } from './MoneyStrip';
+
+const id = (name: string): CityId => {
+  const city = CITIES.find((c) => c.name === name);
+  if (!city) throw new Error(`no city named ${name}`);
+  return city.id;
+};
+
+const CHICAGO = id('Chicago');
+const NEW_YORK = id('New York');
+const MIAMI = id('Miami');
+const PAY = payoutBetween(CHICAGO, NEW_YORK);
+
+const home = (seat: SeatId, city: CityId): GameEvent =>
+  ({ type: 'arrived', seat, city, region: cityById(city).region, payout: null });
+
+const opening = (rules: object): GameEvent[] => [
+  { type: 'joined', seat: 'red', name: 'Ada' },
+  { type: 'joined', seat: 'blue', name: 'Ben' },
+  { type: 'started', rules: { ...PUBLISHED_RULES, ...rules } } as GameEvent,
+  home('red', CHICAGO), home('blue', MIAMI),
+  { type: 'orderRolled', seat: 'red', first: 'red' },
+];
+
+const trip = (rules: object): GameEvent[] => [
+  ...opening(rules),
+  { type: 'arrived', seat: 'red', city: NEW_YORK,
+    region: cityById(NEW_YORK).region, payout: PAY },
+  { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+  { type: 'moved', seat: 'red',
+    path: [nodeForCity(CHICAGO), nodeForCity(NEW_YORK)], arrived: true },
+];
+
+describe('MoneyStrip', () => {
+  it("shows each seated baron's banked total in dollars", () => {
+    render(<MoneyStrip state={replay(trip({}))} />);
+    expect(screen.getByText(`$${PAY.toLocaleString('en-US')}`)).toBeInTheDocument();
+    expect(screen.getByText('$0')).toBeInTheDocument(); // Ben, no trips yet
+  });
+
+  it('marks a homeward baron with their home city', () => {
+    render(<MoneyStrip state={replay(trip({ winTarget: 1000 }))} />);
+    expect(screen.getByText(/racing home to Chicago/i)).toBeInTheDocument();
+  });
+
+  it('marks a seeded game', () => {
+    render(<MoneyStrip state={replay(opening({ seed: 'g' }))} />);
+    expect(screen.getByText(/seeded/i)).toBeInTheDocument();
+  });
+
+  it('announces the winner when the game is over', () => {
+    const won = [
+      ...trip({ winTarget: 1000 }),
+      { type: 'turnRolled', seat: 'red', white: [2, 5], bonus: null },
+      { type: 'moved', seat: 'red',
+        path: [nodeForCity(NEW_YORK), nodeForCity(CHICAGO)], arrived: true },
+    ] as GameEvent[];
+    render(<MoneyStrip state={replay(won)} />);
+    expect(screen.getByText(/Ada wins/i)).toBeInTheDocument();
+  });
+});

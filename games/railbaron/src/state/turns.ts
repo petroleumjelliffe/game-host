@@ -35,7 +35,12 @@ export const homeOf = (seat: Seat): CityId | null => seat.stops[0]?.city ?? null
  * home town is a stop but never a destination, so one stop means none.
  */
 export const destinationOf = (seat: Seat): CityId | null =>
-  seat.stops.length >= 2 ? seat.stops[seat.stops.length - 1]!.city : null;
+  // A homeward baron's destination IS home — one seam serving both surfaces:
+  // the map's route draft walks toward it, and needsDestination() below goes
+  // structurally false for a homeward baron mid-run (they are never owed a
+  // destination roll; legal.ts refuses one anyway, in the same words).
+  seat.homeward ? seat.home
+    : seat.stops.length >= 2 ? seat.stops[seat.stops.length - 1]!.city : null;
 
 /**
  * Whether this baron may be given a destination — and therefore the guard
