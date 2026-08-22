@@ -86,9 +86,8 @@ export function useOnlineGame(
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (state.rolled !== null) return null;
     if (needsDestination(state.seats[seat], nodeForCity)) return null;
-    // Every baron starts on a Freight and nothing upgrades one yet; the money
-    // spec is what makes this a lookup rather than a constant.
-    const train: TrainType = 'freight';
+    // The money spec kept its promise: the train is the rules' to name.
+    const train: TrainType = state.rules.startingTrain;
     return rollTurn(train, rng);
   }, [state, rng, mySeat]);
 
