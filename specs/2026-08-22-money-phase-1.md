@@ -22,7 +22,7 @@ The seams turned out to be further along than the comments admit. Checked
 | --- | --- |
 | Payout computation | **Done.** `payoutBetween(a, b)` in `engine/payouts.ts`, correct against the published table. |
 | Payout on the wire | **Done.** The `arrived` event carries `payout: number \| null` (`src/state/events.ts:27`), `null` meaning a home town, `0` a real zero-paying journey (Minneapolis↔St. Paul). |
-| The balance | **Done.** `Seat.earned` — *"Derived at replay, never stored: payouts summed, home towns counting nothing"* (`src/state/game.ts`). The fold at `game.ts:142` already banks every arrival. |
+| The balance | **Done, with a timing caveat found while planning.** `Seat.earned` — *"Derived at replay, never stored"* — but the `arrived` event is really *"next destination assigned"*, and the fold banks its payout at assignment, **before the trip is walked**. Correct for the running total; the end rule must use `banked` (earned minus the in-flight trip's payout) or a player goes homeward one trip early. |
 | The rng seam | **Done.** Every roll function takes an injected `Rng`; `useGame` and `useOnlineGame` default it to `Math.random` at exactly one seam each. |
 | An end rule | **Missing.** `'over'` unreachable; `appendLegality` never refuses on game-over; nothing derives a winner. |
 | Rules configuration | **Missing.** The win target and starting train exist only as comments and hardcoded constants. |
@@ -100,11 +100,16 @@ home is most of what makes real endings exciting and because phase 2 should
 Mechanically, nothing new travels on the wire. The fold in `src/state/game.ts`
 derives two things it does not derive today:
 
-- **Homeward.** A seat whose `earned >= winTarget` is homeward — a derived
-  flag, never an event. Its home city is already in the log: its first `Stop`.
-- **Winner.** When a homeward seat's `arrived` city equals its home city, the
-  fold yields a winner and the game is over. If the arrival that crosses the
-  target is itself at the home city, that arrival wins immediately.
+- **Homeward.** A seat whose **`banked` `>= winTarget`** is homeward — a
+  derived flag, never an event, where `banked` is `earned` minus the payout of
+  a trip still being walked. (Assignment-time banking would otherwise flip a
+  seat homeward a trip early — found while planning, see the table above.)
+  The home city is already in the log: the seat's first `Stop`.
+- **Winner.** A homeward seat appends no `arrived` events — its destination is
+  implicit — so the win derives from **the `moved` event that ends at the home
+  city's node**: banked at or over target, pawn standing at home, game over.
+  The fold banks the completing leg *before* testing, so a trip that both
+  crosses the target and ends at home wins on that same event.
 
 **Homeward changes what `legal.ts` permits, and this is the one place the
 flow itself changes:** a homeward seat rolls **no further destinations** —
