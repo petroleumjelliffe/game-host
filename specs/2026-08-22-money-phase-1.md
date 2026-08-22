@@ -1,9 +1,9 @@
 # Rail Baron money, phase 1 — the game becomes finishable
 
-**Status:** designed 2026-08-22, not implemented. Decisions below were made in
-conversation on 2026-08-21/22 and are recorded with their reasons; the
-implementation plan derives from this document. Phase 2 (ownership, fees,
-auctions, trains, forced sale) is deliberately not in it.
+**Status:** implemented 2026-08-22, same day — nine tasks, eight commits,
+1705 tests / 168 files across the repo afterwards. See **As built** at the
+end. Phase 2 (ownership, fees, auctions, trains, forced sale, the rover) is
+deliberately not in it.
 
 **Why this exists:** Rail Baron cannot be won. `server/rooms.ts` says it
 plainly — *"'over' is unreachable: the game has no end rule yet"* — and the
@@ -246,3 +246,40 @@ remaining item — a full LAN game — is circular, since no game can be played
 to completion until this spec lands an end rule. Decided 2026-08-22: design
 and build now, long LAN session in parallel, and note that this spec adds
 **no new wire messages** for that session to shake out.
+
+## As built
+
+Implemented the same day, to the plan at
+[`docs/plans/2026-08-22-money-phase-1.md`](../docs/plans/2026-08-22-money-phase-1.md).
+Five deltas, one of them a bug this spec's own test design caught before it
+shipped:
+
+1. **The plan's `bankedOf` was wrong, and the test written first caught it.**
+   It inferred "trip walked" from the pawn standing at its last stop — so a
+   homeward baron who *left* that stop toward home would have had the trip
+   silently un-banked, dropped below the target, and stopped being homeward
+   on the very run that was supposed to win. The fold tracks an explicit
+   in-flight amount instead: set when `arrived` assigns, cleared by the
+   `moved` that completes the walk.
+2. **The homeward route needed one seam, not the plan's caller edits.**
+   `destinationOf()` in `turns.ts` now answers home for a homeward baron,
+   which points the map's draft home *and* makes `needsDestination()`
+   structurally false mid-run — the derivation matching what the guards say
+   in words.
+3. **The payout audit caught two pre-existing fixtures lying about money.**
+   `legal.test.ts` and `gameSocket.test.ts` both carried `payout: 45`, an
+   arbitrary number nobody had checked; they now carry `payoutBetween(20, 9)`.
+   Their subjects (the ballot flow, undo) never touched the amount.
+4. **Default rules stamp nothing.** `seedOnBegin` writes a bare `started`
+   when the rules are the published constant, so ordinary rooms' logs stay
+   byte-identical to before this spec. Only house-ruled rooms carry the
+   payload.
+5. **The order-roll ceremony stays unseeded**, deliberately: its dice values
+   never enter the log (`orderRolled` records only who won), so a seed could
+   neither replay nor verify them.
+
+What held without a fight: the lobby's `Lifecycle` union had carried `'over'`
+since its extraction, waiting; every existing golden fixture survived (phase
+1 only ends games that previously ran forever); and the whole gate — lint,
+typecheck, 1705 tests, build — is green with no new dependencies and no new
+socket messages.

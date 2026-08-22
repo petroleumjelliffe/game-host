@@ -17,7 +17,7 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 
 ```bash
 npm install       # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
-npm test          # every package's suite in one command: 1661 tests / 160 files
+npm test          # every package's suite in one command: 1705 tests / 168 files
 npm run typecheck
 npm run lint      # one type-aware eslint across all seven workspaces, ~5s
 ```
