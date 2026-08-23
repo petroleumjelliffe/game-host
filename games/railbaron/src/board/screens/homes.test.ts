@@ -26,6 +26,12 @@ describe('the homes screen', () => {
     expect(rows[1]!.action).toBeNull();
   });
 
+  it('marks the baron picking a home active — the same amber the play screen uses', () => {
+    const rows = homes(replay(started)).rows;
+    expect(rows[0]!.tone).toBe('active');
+    expect(rows[1]!.tone).toBe('dim');
+  });
+
   it('moves the offer along in seat order', () => {
     const rows = homes(replay(withRedHome)).rows;
     expect(rows[0]!.action).toBeNull();

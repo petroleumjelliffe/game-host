@@ -21,7 +21,7 @@ const join: GameEvent[] = [
 /** Everything the map needs that these tests are not about. */
 const inert = {
   onMove: () => {},
-  dice: { roll: null, live: false },
+  dice: { roll: null, live: false, mine: false },
   onRollDice: () => {},
   onDiceLanded: () => {}
 };
@@ -166,7 +166,7 @@ describe('playing a turn on the map', () => {
         state={replay(midTurn)}
         onBack={() => {}}
         onMove={onMove}
-        dice={{ roll: null, live: false }}
+        dice={{ roll: null, live: false, mine: false }}
         onRollDice={() => {}}
         onDiceLanded={() => {}}
       />
@@ -234,7 +234,7 @@ describe('playing a turn on the map', () => {
         ])}
         onBack={() => {}}
         onMove={vi.fn()}
-        dice={{ roll: null, live: false }}
+        dice={{ roll: null, live: false, mine: false }}
         onRollDice={() => {}}
         onDiceLanded={() => {}}
       />
@@ -280,7 +280,7 @@ describe('playing a turn on the map', () => {
         state={replay(played)}
         onBack={() => {}}
         onMove={onMove}
-        dice={{ roll: null, live: false }}
+        dice={{ roll: null, live: false, mine: false }}
         onRollDice={() => {}}
         onDiceLanded={() => {}}
       />
@@ -316,7 +316,7 @@ describe('playing a turn on the map', () => {
           state={replay(events)}
           onBack={onBack}
           onMove={vi.fn()}
-          dice={{ roll: null, live: false }}
+          dice={{ roll: null, live: false, mine: false }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -381,7 +381,7 @@ describe('playing a turn on the map', () => {
           state={replay(events)}
           onBack={vi.fn()}
           onMove={vi.fn()}
-          dice={{ roll: { white: [6, 6], bonus: null }, live }}
+          dice={{ roll: { white: [6, 6], bonus: null }, live, mine: live }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -406,7 +406,7 @@ describe('playing a turn on the map', () => {
           state={replay(bonusOwed)}
           onBack={vi.fn()}
           onMove={vi.fn()}
-          dice={{ roll: { white: [6, 6], bonus: null }, live: true }}
+          dice={{ roll: { white: [6, 6], bonus: null }, live: true, mine: true }}
           onRollDice={onRollDice}
           onDiceLanded={() => {}}
         />
@@ -461,7 +461,7 @@ describe('playing a turn on the map', () => {
           state={replay(events)}
           onBack={vi.fn()}
           onMove={vi.fn()}
-          dice={{ roll: { white: [6, 6], bonus: null }, live: true }}
+          dice={{ roll: { white: [6, 6], bonus: null }, live: true, mine: true }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -528,7 +528,7 @@ describe('playing a turn on the map', () => {
           state={replay(events)}
           onBack={() => {}}
           onMove={vi.fn()}
-          dice={{ roll: null, live: false }}
+          dice={{ roll: null, live: false, mine: false }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -585,7 +585,7 @@ describe('playing a turn on the map', () => {
           state={replay(midTurn)}
           onBack={() => {}}
           onMove={vi.fn()}
-          dice={{ roll: null, live: false }}
+          dice={{ roll: null, live: false, mine: false }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -646,7 +646,7 @@ describe('playing a turn on the map', () => {
           state={replay(midTurn)}
           onBack={() => {}}
           onMove={vi.fn()}
-          dice={{ roll: null, live: false }}
+          dice={{ roll: null, live: false, mine: false }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -713,7 +713,7 @@ describe('playing a turn on the map', () => {
           state={replay(midTurn)}
           onBack={() => {}}
           onMove={onMove}
-          dice={{ roll: null, live: false }}
+          dice={{ roll: null, live: false, mine: false }}
           onRollDice={() => {}}
           onDiceLanded={() => {}}
         />
@@ -863,7 +863,7 @@ describe('playing a turn on the map', () => {
         state={replay(midTurn)}
         onBack={() => {}}
         onMove={vi.fn()}
-        dice={{ roll: null, live: false }}
+        dice={{ roll: null, live: false, mine: false }}
         onRollDice={() => {}}
         onDiceLanded={() => {}}
       />

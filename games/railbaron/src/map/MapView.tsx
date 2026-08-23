@@ -310,7 +310,7 @@ export interface MapViewProps {
   onBack: () => void;
   onMove: (seat: SeatId, path: readonly NodeId[], arrived: boolean) => void;
   /** The dice, threaded through so the map can roll them too — see below. */
-  dice: { roll: TurnRoll | null; live: boolean };
+  dice: { roll: TurnRoll | null; live: boolean; mine: boolean };
   onRollDice: () => void;
   onDiceLanded: () => void;
 }
@@ -660,6 +660,7 @@ export function MapView({
           <DiceReadout
             roll={dice.roll}
             live={dice.live}
+            highlight={dice.live && dice.mine}
             onRoll={onRollDice}
             onLanded={onDiceLanded}
           />

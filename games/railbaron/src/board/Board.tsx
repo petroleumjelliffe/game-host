@@ -125,6 +125,7 @@ export function Board({
           <DiceReadout
             roll={screen.dice.roll}
             live={screen.dice.live}
+            highlight={screen.dice.live && screen.dice.mine}
             onRoll={onRollDice}
             onLanded={awaitDice?.onLanded}
           />
