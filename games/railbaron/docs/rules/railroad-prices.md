@@ -1,0 +1,56 @@
+# Railroad purchase prices — rulebook transcription
+
+**Transcribed 2026-08-23**, supplied by the owner in thousands of dollars.
+One of the four debts the declaring-and-rover transcription left open. This
+document is the record; phase 2 turns it into an engine table with a digest
+test, the way `PAYOUT_TABLE` and `CODES` are pinned.
+
+Names are normalized to the ids `engine/network.json` already carries — the
+map data is the authority on spelling. Two normalizations from the paste,
+both checked against that list: `CMSt.P&P` → `CMStP&P` (punctuation) and
+`S&L` → `SAL` (Seaboard Air Line; no S&L exists on this map). All 28
+reconcile; nothing is missing and nothing is extra.
+
+| Railroad | Price ($000) |
+| --- | --- |
+| ACL | 12 |
+| AT&SF | 40 |
+| B&M | 4 |
+| B&O | 24 |
+| C&NW | 14 |
+| C&O | 20 |
+| CB&Q | 20 |
+| CMStP&P | 18 |
+| CRI&P | 29 |
+| D&RGW | 6 |
+| GM&O | 12 |
+| GN | 17 |
+| IC | 14 |
+| L&N | 18 |
+| MP | 21 |
+| N&W | 12 |
+| NP | 14 |
+| NYC | 28 |
+| NYNH&H | 4 |
+| PA | 30 |
+| RF&P | 4 |
+| SAL | 14 |
+| SLSF | **119 — as pasted; SUSPECTED TYPO, see below** |
+| SOU | 20 |
+| SP | 42 |
+| T&P | 10 |
+| UP | 40 |
+| WP | 8 |
+
+## The one suspect cell
+
+**SLSF at 119** is wildly out of family — every other price sits between 4
+and 42, and 119 would make the Frisco cost nearly three times the Southern
+Pacific. A doubled keystroke for **19** is the likely story. **Do not build
+the engine table until the owner confirms this cell against the printed
+rulebook.** The payout table's own history is the warning here: its digest
+tests exist because range checks pass on a mis-copied value and only the
+exact cell survives scrutiny.
+
+(For the eventual digest: prices are dollars ×1000 at runtime, matching
+`payoutBetween`'s convention.)
