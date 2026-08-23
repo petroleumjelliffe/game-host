@@ -23,18 +23,42 @@ Two derivations this hands the fold:
   each turn and is un-declared if they dip below $200,000 — at the $10,000
   tier, a long run home through other players' track is genuinely expensive.
 
-## Edges the schedule does not settle — confirm against the rulebook
+## Settlement: after the turn, and the balance may go negative
 
-1. **Several owners' tracks in one turn:** one $5,000/$10,000 fee to *each*
-   owner used, or one fee total (and then to whom)? The owner's earlier
-   answer ("flat per turn to the owner") reads as one fee per owner; the
-   printed text should confirm.
-2. **Own track:** riding your own railroad presumably costs nothing and
-   presumably does not trigger the unowned-$1,000 either when the whole turn
-   is on your own lines — confirm.
-3. **Mixed turns:** own + unowned in one turn; owned + unowned in one turn.
-   The usual reading is that any *other-owner* usage displaces the bank fee
-   (you pay the owner tier, not $1,000 + $5,000) — confirm.
+Confirmed 2026-08-23: **one fee per owner, not per line** — riding three
+railroads of one owner in a turn is one fee; riding two owners' lines is two.
+
+**Fees are settled after the turn, not during it.** A player may therefore
+go **negative** at settlement and then must raise the money — by selling off
+railroads — until the bill is met. Two consequences the design owns:
+
+- **A transiently negative balance is a legal state.** The fold cannot treat
+  `banked < 0` as corruption; it is the moment between the bill landing and
+  the liquidation covering it. (It still un-declares a runner: below
+  $200,000 is below $200,000.)
+- **Liquidation is a forced, ordered flow**: fee assessed → short → sell
+  until covered → then play continues (or, per the rulebook's "you are out
+  of the game!", cannot cover and is eliminated — that text is still owed).
+
+## The auction: STUBBED, by decision (2026-08-23)
+
+How a railroad is sold off to meet a bill — auction to the table, sale to
+the bank, at what price — is **not designed**, and the owner has said to
+stub it rather than invent it. Phase 2's spec must carry the stub honestly:
+the *trigger* (negative at settlement) and the *obligation* (sell until
+covered) are modelled; the *mechanism* is a named hole with the simplest
+possible placeholder until it gets its own design pass. Whatever the
+placeholder is, it must be an event in the log like everything else, so a
+later real auction changes the mechanism without rewriting history.
+
+## Edges still open against the rulebook
+
+- **Own track:** riding your own railroad presumably costs nothing and does
+  not trigger the unowned $1,000 when the whole turn is on your own lines —
+  confirm.
+- **Mixed turns:** owned + unowned in one turn — the usual reading is that
+  other-owner usage displaces the bank fee (owner tier only, not $1,000 +
+  $5,000) — confirm.
 
 `route.ts` already records, per leg, every company the movement could have
 ridden — including shared trackage, where a step names every company on the
