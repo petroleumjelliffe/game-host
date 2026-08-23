@@ -222,6 +222,7 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
           <MoneyStrip state={game.state} />
           <MapView
             state={game.state}
+            viewer={room.seat ?? 'all'}
             onBack={() => setOnMap(false)}
             onMove={shell.onMove}
             dice={shell.dice}

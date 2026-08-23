@@ -129,7 +129,15 @@ export function play(
 
   return {
     title: 'Departures',
-    sub: 'IN PLAY',
+    // The header answers "is it me?" in words. On the actor's own device it
+    // shouts; on every other device — and on the shared tablet, where "you"
+    // would mean six people — it names the baron. Acquire's TurnToast found
+    // this gap first: "I can't see whose turn it is."
+    sub: state.turn !== null && actAs === state.turn
+      ? 'YOUR TURN'
+      : (state.turn !== null && state.seats[state.turn].name
+        ? `${state.seats[state.turn].name!.toUpperCase()} IS UP`
+        : 'IN PLAY'),
     back: 'home',
     cols: ['Baron', 'Region', 'Destination', 'Payout', ''],
     rows: withMap,

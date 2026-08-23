@@ -111,6 +111,15 @@ describe('strict turn order', () => {
     expect(rows[1]!.tone).toBe('active');
   });
 
+  it('says whose turn it is in the header, per viewer', () => {
+    // Online, on the actor's own device: shout it. Anywhere else — another
+    // player's phone, the shared tablet — name the baron; a device six
+    // people look at should never say "you".
+    expect(play(replay(playing), {}, null, null, null, 'green').sub).toBe('YOUR TURN');
+    expect(play(replay(playing), {}, null, null, null, 'red').sub).toBe('GRACE IS UP');
+    expect(play(replay(playing)).sub).toBe('GRACE IS UP');
+  });
+
   it('drops the active tone once the destination is rolled', () => {
     const rows = play(replay([...playing,
       { type: 'arrived', seat: 'green', city: 43, region: 'PL', payout: 0 }])).rows;

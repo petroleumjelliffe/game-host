@@ -723,6 +723,22 @@ describe('playing a turn on the map', () => {
       return { svg, box, onMove };
     };
 
+    /** The same board, seen from a named device. */
+    const drawnAs = (viewer: 'red' | 'green' | 'all') => {
+      const { unmount } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false, mine: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+          viewer={viewer}
+        />
+      );
+      return { unmount };
+    };
+
     /** A drag, as the browser delivers one: down on the map, moves, then up. */
     const drag = (from: Element, dx: number, dy: number) => {
       fireEvent.pointerDown(from, { clientX: 700, clientY: 394, pointerId: 1, button: 0 });
@@ -806,10 +822,12 @@ describe('playing a turn on the map', () => {
       // could not collide; a cabinet that is now as wide as the window makes
       // them collide at every narrow size unless they share a flow.
       drawn();
-      const title = screen.getByText('Rail Baron');
+      // Mid-turn the centre slot carries the turn, not the title — the
+      // layout assertion is the same: one flex row, nothing stacked.
+      const centre = screen.getByText(/is up|your turn/i);
       const back = screen.getByRole('button', { name: /back/i });
       const commit = screen.getByRole('button', { name: 'COMMIT' });
-      const row = title.parentElement!;
+      const row = centre.parentElement!;
       expect(row.style.display).toBe('flex');
       expect(row.contains(back)).toBe(true);
       expect(row.contains(commit)).toBe(true);
@@ -825,10 +843,21 @@ describe('playing a turn on the map', () => {
       try {
         drawn();
         expect(screen.queryByText('Rail Baron')).not.toBeInTheDocument();
+        // The turn text is short and stays even where the title would not.
+        expect(screen.getByText(/is up|your turn/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'COMMIT' })).toBeInTheDocument();
       } finally {
         measured.mockRestore();
       }
+    });
+
+    it("says YOUR TURN only on the actor's own device", () => {
+      const { unmount } = drawnAs('red');
+      expect(screen.getByText(/your turn/i)).toBeInTheDocument();
+      unmount();
+      drawnAs('green');
+      expect(screen.queryByText(/your turn/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/is up/i)).toBeInTheDocument();
     });
 
     it('goes to the baron up when asked', async () => {
