@@ -35,22 +35,21 @@ reconcile; nothing is missing and nothing is extra.
 | PA | 30 |
 | RF&P | 4 |
 | SAL | 14 |
-| SLSF | **119 — as pasted; SUSPECTED TYPO, see below** |
+| SLSF | 19 |
 | SOU | 20 |
 | SP | 42 |
 | T&P | 10 |
 | UP | 40 |
 | WP | 8 |
 
-## The one suspect cell
+## Transcription note
 
-**SLSF at 119** is wildly out of family — every other price sits between 4
-and 42, and 119 would make the Frisco cost nearly three times the Southern
-Pacific. A doubled keystroke for **19** is the likely story. **Do not build
-the engine table until the owner confirms this cell against the printed
-rulebook.** The payout table's own history is the warning here: its digest
-tests exist because range checks pass on a mis-copied value and only the
-exact cell survives scrutiny.
+The paste originally read **SLSF 119** — out of family against a 4–42 range —
+and the cell was held out of the record until the owner checked the printed
+page: **it is 19** (confirmed 2026-08-23, a doubled keystroke). Kept here
+because the payout table's digest-test history says mis-copied cells survive
+range checks; this one was caught by exactly the scrutiny that policy asks
+for.
 
 (For the eventual digest: prices are dollars ×1000 at runtime, matching
 `payoutBetween`'s convention.)
