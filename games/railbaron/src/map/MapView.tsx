@@ -3,11 +3,11 @@ import {
   cityById, nodeForCity, path as pathOf, sectionKey, usedAfter,
   type NodeId, type RegionId, type TurnRoll
 } from '../../engine';
-import { DiceReadout } from '../board/DiceReadout';
-import { SEAT_COLORS } from '../game/tokens';
+import { SEAT_COLORS, TOKENS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { needsDestination } from '../state/turns';
+import { EngineChip, GLIDE } from './EngineChip';
 import {
   CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, visualRadius, type Placed
 } from './geo';
@@ -126,6 +126,26 @@ function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'>
         })}
       </g>
     </>
+  );
+}
+
+/**
+ * One segment of track the turn has traveled, in the mover's own colour: a
+ * wide soft underlay and a bright line over it, so the route reads as lit
+ * from beneath rather than merely drawn on. Each segment fades in as the
+ * pawn takes it — the animation runs once on mount, which is exactly when
+ * the step was walked. Both the committed trail and the draft draw through
+ * this, so the route being tapped and the route playing back cannot look
+ * like two different things.
+ */
+function TraveledSegment({ a, b, color }: { a: Placed; b: Placed; color: string }) {
+  return (
+    <g data-motion="" style={{ animation: 'rb-fade 260ms linear both' }}>
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
+            strokeWidth={9} strokeLinecap="round" opacity={0.16} />
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
+            strokeWidth={3} strokeLinecap="round" opacity={0.95} />
+    </g>
   );
 }
 
@@ -318,12 +338,14 @@ export interface MapViewProps {
 }
 
 /**
- * Why the dice appear on both surfaces. The readout lives on the board and is
- * shared; on one tablet that would mean tapping the dice there and then
- * navigating here to move — an extra trip every turn, on the view that is
- * *not* where the turn happens. The same component renders here, through the
- * same `onRollDice`/`onDiceLanded` gate, so there is one implementation and
- * one gate on two surfaces.
+ * Why the dice can be rolled on both surfaces. The readout lives on the board
+ * and is shared; on one tablet that would mean tapping the dice there and
+ * then navigating here to move — an extra trip every turn, on the view that
+ * is *not* where the turn happens. The map goes through the same
+ * `onRollDice`/`onDiceLanded` gate, so there is one gate on two surfaces —
+ * but it wears the map's own costume: the tap is a HUD button, and the throw
+ * tumbles on the chip above the engine (`EngineChip`), which is also what
+ * reports the landing here.
  */
 export function MapView({
   state, onBack, onMove, dice, onRollDice, onDiceLanded, viewer = 'all'
@@ -427,6 +449,24 @@ export function MapView({
     return out;
   }, [state, lastMove, replaying.shown, replaying.done, walkedTo]);
 
+  /**
+   * The pawns flattened to one entry per seat, in seat order. Keyed by seat
+   * rather than by node deliberately: a pawn that keeps its element across a
+   * move is what the glide transition carries to the new node — a key that
+   * changes with the node would remount it already arrived, and the move
+   * would cut instead of travel.
+   */
+  const engines = useMemo(() => {
+    const out: { seat: SeatId; node: Placed; slot: number }[] = [];
+    for (const [id, seats] of standing) {
+      const node = board.byId.get(id);
+      if (!node) continue;
+      seats.forEach((seatId, slot) => { out.push({ seat: seatId, node, slot }); });
+    }
+    out.sort((a, b) => SEATS.indexOf(a.seat) - SEATS.indexOf(b.seat));
+    return out;
+  }, [standing, board]);
+
   const playing = SEATS
     .map(id => state.seats[id])
     .filter(seat => seat.name !== null && seat.stops.length > 0);
@@ -483,6 +523,18 @@ export function MapView({
       background: '#e8e6e1',
       fontFamily: "'Roboto Condensed', system-ui, sans-serif"
     }}>
+      {/* The map's own motion vocabulary: the fade a traveled segment arrives
+          with, and the breathing of the engine whose turn it is. Keyframes
+          cannot be written inline, so this is the map's one style tag — and
+          everything tagged data-motion goes still, transitions included, for
+          anyone who asked the system for reduced motion. */}
+      <style>{`
+        @keyframes rb-fade { from { opacity: 0 } }
+        @keyframes rb-breathe { 0%, 100% { opacity: 0.95 } 50% { opacity: 0.62 } }
+        @media (prefers-reduced-motion: reduce) {
+          [data-motion] { animation: none !important; transition: none !important }
+        }
+      `}</style>
       {/* A tap anywhere on the cabinet finishes a playing-back move early —
           the same rule this board already applies to a flap. Harmless once
           there is nothing left to skip: `usePlayback` treats a further call
@@ -546,9 +598,8 @@ export function MapView({
                 const b = board.byId.get(id);
                 if (!a || !b) return null;
                 return (
-                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                        stroke={SEAT_COLORS[lastMove.seat]} strokeWidth={3.4}
-                        strokeLinecap="round" opacity={0.7} />
+                  <TraveledSegment key={i} a={a} b={b}
+                                   color={SEAT_COLORS[lastMove.seat]} />
                 );
               })}
             </g>
@@ -569,9 +620,9 @@ export function MapView({
                 const b = board.byId.get(id);
                 if (!a || !b) return null;
                 return (
-                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                        stroke="#fff6e2" strokeWidth={3.4} strokeLinecap="round"
-                        opacity={0.9} />
+                  <TraveledSegment key={i} a={a} b={b}
+                                   color={state.turn === null
+                                     ? '#fff6e2' : SEAT_COLORS[state.turn]} />
                 );
               })}
             </g>
@@ -609,22 +660,63 @@ export function MapView({
             })}
           </g>
 
-          {/* One pawn per baron, stacked where several share a node. */}
+          {/* One engine per baron, stacked where several share a node. The
+              look is the 5b piece from `Train Movement Style.dc.html`: a
+              seat-coloured disc in a dark rim with a specular catch, and —
+              on the baron up alone — a glow that breathes. Position is a
+              transform on the group so a move glides it there; see `engines`
+              above for why the key is the seat. */}
           <g>
-            {[...standing].map(([id, seats]) => {
-              const node = board.byId.get(id);
-              if (!node) return null;
-              return seats.map((seatId, i) => (
-                <g key={`${id}-${seatId}`} role="img" data-node={id}
-                   aria-label={state.seats[seatId].name ?? seatId}>
-                  <circle cx={node.x + i * 5} cy={node.y - 11} r={5}
-                          fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4}
-                          pointerEvents="none" />
+            {engines.map(({ seat: seatId, node, slot }) => {
+              const active = seatId === state.turn;
+              const color = SEAT_COLORS[seatId];
+              return (
+                <g key={seatId} role="img" data-node={node.id} data-motion=""
+                   aria-label={state.seats[seatId].name ?? seatId}
+                   style={{
+                     transform: `translate(${node.x + slot * 5}px, ${node.y - 11}px)`,
+                     transition: GLIDE
+                   }}>
+                  {active && (
+                    <g aria-hidden="true">
+                      <circle r={17} fill={color} opacity={0.18} pointerEvents="none" />
+                      <circle r={9} fill={color} opacity={0.34} pointerEvents="none" />
+                    </g>
+                  )}
+                  <g aria-hidden="true" data-motion=""
+                     style={active
+                       ? { animation: 'rb-breathe 1.6s ease-in-out infinite' }
+                       : undefined}>
+                    <circle cy={0.6} r={6.4} fill="#100c08" opacity={0.55}
+                            pointerEvents="none" />
+                    <circle r={5.6} fill={color} stroke="#100c08" strokeWidth={1.4}
+                            pointerEvents="none" />
+                    <circle cx={-1.7} cy={-1.6} r={1.5} fill="#fff" opacity={0.7}
+                            pointerEvents="none" />
+                  </g>
                   <title>{state.seats[seatId].name}</title>
                 </g>
-              ));
+              );
             })}
           </g>
+
+          {/* The chip riding above the baron up's engine — dice, then the
+              count, then END TURN. Hidden while a destination is owed (there
+              is nothing to walk) and while a committed move is playing back
+              (the walk on show is the log's, not a draft's). It stays mounted
+              through a Bonus Roll being owed: the red die tumbles there when
+              thrown, and with nothing to say it draws nothing. */}
+          {state.turn !== null && !owesDestination && replaying.done
+            && baron !== undefined && (
+            <EngineChip
+              x={baron.x} y={baron.y}
+              color={SEAT_COLORS[state.turn]}
+              roll={dice.roll}
+              remaining={route.remaining}
+              done={route.canCommit}
+              onLanded={onDiceLanded}
+            />
+          )}
 
           {/* The tappable surface, last of all: see InteractionLayer above
               for why it must render after every painted lamp and pawn.
@@ -654,19 +746,6 @@ export function MapView({
             onTap={id => { if (!viewport.wasDrag()) route.tap(id); }}
           />
         </svg>
-
-        <div style={{
-          position: 'absolute', top: 68, left: '50%', transform: 'translateX(-50%)',
-          width: 184, height: 56, zIndex: 4
-        }}>
-          <DiceReadout
-            roll={dice.roll}
-            live={dice.live}
-            highlight={dice.live && dice.mine}
-            onRoll={onRollDice}
-            onLanded={onDiceLanded}
-          />
-        </div>
 
         {/* The top rail: BACK, the name of the game, and whatever the turn is
             asking for, in one flow.
@@ -750,9 +829,26 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-                BONUS ROLL — TAKE THE RED DIE
-              </span>
+              {/* The tap that throws it, when these dice are this device's to
+                  throw. The readout used to carry the tap; the chip that
+                  replaced it is scenery, so the HUD holds it now, under the
+                  readout's own accessible name — it is the same action. */}
+              {dice.live && dice.mine ? (
+                <button
+                  aria-label="Roll the dice"
+                  onClick={onRollDice}
+                  style={{
+                    ...HUD_BUTTON, cursor: 'pointer',
+                    boxShadow: `0 0 0 2px ${TOKENS.amber}, 0 0 18px rgba(245, 196, 81, 0.35)`
+                  }}
+                >
+                  BONUS ROLL — TAKE THE RED DIE
+                </button>
+              ) : (
+                <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                  BONUS ROLL — TAKE THE RED DIE
+                </span>
+              )}
             </div>
           )}
 
@@ -761,9 +857,22 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-                {route.remaining} left
-              </span>
+              {/* The moves-left count is not here any more — it rides the
+                  chip above the engine, where the spending happens. What the
+                  HUD holds is the turn's two decisions, and — before the
+                  white pair is thrown — the throw itself. */}
+              {dice.live && dice.mine && (
+                <button
+                  aria-label="Roll the dice"
+                  onClick={onRollDice}
+                  style={{
+                    ...HUD_BUTTON, cursor: 'pointer',
+                    boxShadow: `0 0 0 2px ${TOKENS.amber}, 0 0 18px rgba(245, 196, 81, 0.35)`
+                  }}
+                >
+                  ROLL THE DICE
+                </button>
+              )}
               <button
                 onClick={route.undo}
                 disabled={!route.draft?.steps.length}
