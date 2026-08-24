@@ -98,7 +98,72 @@ config.
 
 ---
 
+## PARKED: the game-night destination reroll (2026-08-22)
+
+**Reported from the first real game on money phase 1:** a destination could
+be rerolled repeatedly — "three times in a row" — the shown destination
+cycling with the starting point, a new destination every other roll. **Not
+reproducible later the same night**, including by the reporter. Parked by
+decision, not solved; everything below is so the next session starts warm.
+
+**Proven that night, against the exact deploy played** (`cdacfe0`, live on
+Render at 22:43:49Z):
+
+- All three gates refuse a second destination roll — the play screen's row
+  affordance, the hooks' `roll()` guard, and `appendLegality` — verified
+  layer by layer and then end-to-end over real sockets, both against a local
+  server and **against production itself** (scratch room, taps 2–4 all
+  rejected "no destination is owed").
+- The deploy was live before play began; the tab was opened after the merge.
+- The laptop's `deploy.sh` error during `git pull` was a red herring — the
+  production post-merge hook is installed in the laptop clone and fails
+  harmlessly there; Render deploys on commit and never runs it.
+
+**Eliminated:** stale server; stale client (per the tab timeline as
+reported); the LAN host and the GitHub Pages companion (the game was on
+Render).
+
+**Still standing, in rough order of suspicion:**
+
+1. **The mid-deploy window.** "Earlier, 3×" may have straddled the deploy
+   flip (~22:43): a room created against the old instance, phones holding
+   the old bundle for minutes after the socket reconnected to the new one.
+   No specific old/new mismatch has been identified that grants rerolls —
+   both eras refuse them on paper — but the discontinuity matches
+   "worked-then-stopped" exactly.
+2. **A client display loop over server rejections:** the roll animation
+   playing for appends the server refused, the board snapping back to the
+   last real stop between taps. Would look precisely like the report and
+   leave *no trace in the log*.
+3. **Legal rerolls misread:** arrive-on-map, roll again is lawful play; with
+   passing phones and a crowded table, the boundary between the two can
+   blur. The reporter says the pawn was not walked between rolls.
+
+**The witness that settles it: the room's save file.** Rail Baron rooms are
+never age-evicted, so the log of what the server actually accepted is still
+at `/var/data/railbaron/<ROOM>.json` on the `game-night` Render service.
+Reading it requires an SSH key added at dashboard.render.com → Account
+Settings → SSH Public Keys, then:
+
+```bash
+ssh srv-d3klnhnfte5s73diht90@ssh.virginia.render.com \
+  "ls /var/data/railbaron/ && cat /var/data/railbaron/*.json"
+```
+
+Rerolls **in** the log → the server accepted them; replay the file locally
+and the bug is cornered. Rerolls **absent** → hypothesis 2, and the fix is
+in the client's announce/commit path (`GameShell`'s `rolling` hold and the
+board's rejection handling).
+
+**The probe is kept:** `games/railbaron/server/wireProbe.test.ts` runs the
+whole opening flow over a real socket as an ordinary test, and pointed at a
+deployment (`WIRE_URL=...`) it reports event-by-event what a live server
+accepts. It is how production was exonerated the first night.
+
+---
+
 ## Marco Polo's build configs are not typechecked
+## ~~Marco Polo's build configs are not typechecked~~ — done 2026-08-21
 
 **Found 2026-08-20**, by the linter, which could not resolve them to any
 project. `games/marcopolo/vite.config.ts` and `vitest.config.ts` belong to no
@@ -118,10 +183,17 @@ Vitest 4 moved a project's `name` under `test`; Marco Polo's two projects
 still declare it at the top level, so the labels are almost certainly being
 dropped. The tests all pass either way, which is why nobody noticed.
 
-**Fix:** move both `name` keys under `test`, confirm the project labels
-appear in `vitest run` output, then add both files to the `include` and drop
-`games/marcopolo/*.config.ts` from `allowDefaultProject` in
-`eslint.config.mjs`. Small, and worth doing while the reason is written down.
+**Fixed 2026-08-21**, exactly that way — and the entry above understated it.
+It called the dropped labels "almost certainly" cosmetic. They were not:
+`vitest run --root games/marcopolo --project=node` failed outright with **"No
+projects matched the filter 'node'"**, so neither project was addressable at
+all, while Rail Baron's identical filter selected 21 files. Both are named now
+(node: 8 files / 55 tests, jsdom: 9 / 57), both config files are in the
+`include`, and `games/marcopolo/*.config.ts` is out of `allowDefaultProject`.
+
+The general lesson is the one worth keeping: a file in no `tsconfig` is a file
+where a type error is a silent behaviour change. This one sat in the open from
+the subtree merge until a linter tripped over it for an unrelated reason.
 
 ---
 

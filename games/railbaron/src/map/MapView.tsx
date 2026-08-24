@@ -310,7 +310,9 @@ export interface MapViewProps {
   onBack: () => void;
   onMove: (seat: SeatId, path: readonly NodeId[], arrived: boolean) => void;
   /** The dice, threaded through so the map can roll them too — see below. */
-  dice: { roll: TurnRoll | null; live: boolean };
+  dice: { roll: TurnRoll | null; live: boolean; mine: boolean };
+  /** Whose device this is: a seat online, 'all' on the shared tablet. */
+  viewer?: SeatId | 'all';
   onRollDice: () => void;
   onDiceLanded: () => void;
 }
@@ -324,7 +326,7 @@ export interface MapViewProps {
  * one gate on two surfaces.
  */
 export function MapView({
-  state, onBack, onMove, dice, onRollDice, onDiceLanded
+  state, onBack, onMove, dice, onRollDice, onDiceLanded, viewer = 'all'
 }: MapViewProps) {
   // The projection is expensive and depends on nothing that changes — the
   // network is a build artefact and the cabinet is a fixed size.
@@ -660,6 +662,7 @@ export function MapView({
           <DiceReadout
             roll={dice.roll}
             live={dice.live}
+            highlight={dice.live && dice.mine}
             onRoll={onRollDice}
             onLanded={onDiceLanded}
           />
@@ -692,9 +695,26 @@ export function MapView({
             Back
           </button>
 
-          {/* Below this the row has room for BACK and the turn and nothing
-              else, and a title cut to "R" is worse than none. */}
-          {viewport.size.width >= TITLE_ROOM ? (
+          {/* The centre slot: whose turn, in words, when a turn is under way —
+              the thing a phone-holder actually needs — falling back to the
+              title. The turn stays even on narrow viewports (it is short);
+              the title still yields below TITLE_ROOM, where "R" is worse
+              than nothing. YOUR TURN only on the actor's own device; the
+              shared tablet names the baron — six people are looking at it. */}
+          {state.turn !== null && state.seats[state.turn].name ? (
+            <div style={{
+              flex: '1 1 auto', minWidth: 0, textAlign: 'center',
+              fontSize: 'clamp(13px, 2vw, 24px)', fontWeight: 700,
+              letterSpacing: '0.3em', textTransform: 'uppercase',
+              whiteSpace: 'nowrap', overflow: 'hidden',
+              color: viewer === state.turn ? '#f5c451' : '#f0cd94',
+              textShadow: '0 2px 0 #2b170a'
+            }}>
+              {viewer === state.turn
+                ? 'Your turn'
+                : `${state.seats[state.turn].name} is up`}
+            </div>
+          ) : viewport.size.width >= TITLE_ROOM ? (
             <div style={{
               flex: '1 1 auto', minWidth: 0, textAlign: 'center',
               fontSize: 'clamp(15px, 2.2vw, 30px)', fontWeight: 700,

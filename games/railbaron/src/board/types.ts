@@ -75,7 +75,8 @@ export interface Row {
   showDollar: boolean;
   right: string;
   chip: string | null;
-  tone: 'normal' | 'dim' | 'disabled';
+  /** 'active' is the your-move treatment: amber text, amber chip ring. */
+  tone: 'normal' | 'dim' | 'disabled' | 'active';
   action: RowAction;
 }
 
@@ -100,7 +101,7 @@ export interface ScreenDef {
    * The dice this screen shows. There is one pair on the table and everyone
    * uses it, so this belongs to the screen rather than to a row.
    */
-  dice?: { roll: TurnRoll | null; live: boolean } | null;
+  dice?: { roll: TurnRoll | null; live: boolean; mine: boolean } | null;
 }
 
 /** The board is this many rows on every screen, without exception. */

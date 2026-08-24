@@ -19,8 +19,9 @@ import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../type
 export function diceFor(
   state: GameState,
   pendingDice: TurnRoll | null = null,
-  pendingBonus: number | null = null
-): { roll: TurnRoll | null; live: boolean } {
+  pendingBonus: number | null = null,
+  actAs: SeatId | 'all' = 'all'
+): { roll: TurnRoll | null; live: boolean; mine: boolean } {
   const waiting = pendingDice !== null || pendingBonus !== null;
   // A pending bonus face rides on the white pair already in the log: it is one
   // roll of one turn, not a new pair of dice.
@@ -36,7 +37,12 @@ export function diceFor(
     live: state.turn !== null
       && !waiting
       && (state.rolled === null || state.bonusOwed)
-      && !needsDestination(state.seats[state.turn], nodeForCity)
+      && !needsDestination(state.seats[state.turn], nodeForCity),
+    // Whether these dice belong to this device: the shared tablet ('all')
+    // always owns them; online, only the seated actor's own phone does. The
+    // amber ring reads `live && mine`, so a spectator never sees a glow that
+    // is not theirs to act on.
+    mine: actAs === 'all' || state.turn === actAs
   };
 }
 
@@ -51,7 +57,8 @@ export function play(
   turns: Partial<Record<SeatId, number>> = {},
   pending: { seat: SeatId; region: RegionId } | null = null,
   pendingDice: TurnRoll | null = null,
-  pendingBonus: number | null = null
+  pendingBonus: number | null = null,
+  actAs: SeatId | 'all' = 'all'
 ): ScreenDef {
   const rows: Row[] = SEATS
     .map(id => state.seats[id])
@@ -80,7 +87,13 @@ export function play(
         // Only the baron whose turn it is can act, and only to start a trip:
         // the dice are rolled from the board's own readout and the pawn is
         // walked on the map, so a row with a destination has nothing to offer.
-        tone: state.turn === null || state.turn === seat.id ? 'normal' : 'dim',
+        // 'active' is reserved for the row that is the tap — the actor owed
+        // a destination. An actor mid-trip is 'normal': their move is on the
+        // dice and the map, and lighting their row would point at the wrong
+        // control.
+        tone: state.turn === seat.id && needsDestination(seat, nodeForCity)
+          ? 'active'
+          : state.turn === null || state.turn === seat.id ? 'normal' : 'dim',
         action: state.turn === seat.id && needsDestination(seat, nodeForCity)
           ? { kind: 'act', seat: seat.id }
           : (state.turn === null ? { kind: 'act', seat: seat.id } : null)
@@ -135,7 +148,15 @@ export function play(
 
   return {
     title: 'Departures',
-    sub: 'IN PLAY',
+    // The header answers "is it me?" in words. On the actor's own device it
+    // shouts; on every other device — and on the shared tablet, where "you"
+    // would mean six people — it names the baron. Acquire's TurnToast found
+    // this gap first: "I can't see whose turn it is."
+    sub: state.turn !== null && actAs === state.turn
+      ? 'YOUR TURN'
+      : (state.turn !== null && state.seats[state.turn].name
+        ? `${state.seats[state.turn].name!.toUpperCase()} IS UP`
+        : 'IN PLAY'),
     back: 'home',
     cols: ['Baron', 'Region', 'Destination', 'Payout', ''],
     rows: withMap,
@@ -144,6 +165,6 @@ export function play(
     // so a panel built from the rows would have the answer and a blank to
     // turn between.
     panel: REGIONS.map(region => region.name),
-    dice: diceFor(state, pendingDice, pendingBonus)
+    dice: diceFor(state, pendingDice, pendingBonus, actAs)
   };
 }

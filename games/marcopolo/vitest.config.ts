@@ -5,8 +5,12 @@ export default defineConfig({
   test: {
     projects: [
       {
-        name: 'node',
         test: {
+          // `name` belongs to `test`, not beside it. Sitting one level out it
+          // typechecked nowhere (this file was in no tsconfig until
+          // 2026-08-21) and registered nothing: `vitest --project=node` said
+          // "No projects matched the filter". Both other games nest it.
+          name: 'node',
           globals: true,
           environment: 'node',
           include: [
@@ -16,8 +20,8 @@ export default defineConfig({
         },
       },
       {
-        name: 'jsdom',
         test: {
+          name: 'jsdom',
           globals: true,
           environment: 'jsdom',
           // The client reaches localStorage only through the lobby's

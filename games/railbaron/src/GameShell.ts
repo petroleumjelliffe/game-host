@@ -166,7 +166,8 @@ export function useGameShell(game: GameSurface, actAs: ActAs): GameShell {
             : play(state, turns,
                    announcing && { seat: announcing.seat, region: regionOf(announcing.outcome) },
                    rollingDice?.roll ?? null,
-                   rollingBonus?.face ?? null);
+                   rollingBonus?.face ?? null,
+                   actAs);
 
   const actOnRow = (row: Row, index: number): boolean => {
     if (row.action === null) return false;
@@ -261,7 +262,7 @@ export function useGameShell(game: GameSurface, actAs: ActAs): GameShell {
     awaitDice: (rollingDice || rollingBonus) && { onLanded: onDiceLanded },
     onRollDice,
     onDiceLanded,
-    dice: diceFor(state, rollingDice?.roll ?? null, rollingBonus?.face ?? null),
+    dice: diceFor(state, rollingDice?.roll ?? null, rollingBonus?.face ?? null, actAs),
     onMove: game.commitMove,
     actOnRow,
   };

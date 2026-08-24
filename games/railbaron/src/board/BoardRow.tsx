@@ -161,7 +161,10 @@ export function BoardRow({
   const amountFace = amount.map(face => face.top).join('').trimEnd();
   const interactive = row.action !== null && row.tone !== 'disabled' && input === undefined;
   const colour =
-    row.tone === 'disabled' ? '#4a463e' : row.tone === 'dim' ? TOKENS.dim : TOKENS.pale;
+    row.tone === 'disabled' ? '#4a463e'
+      : row.tone === 'dim' ? TOKENS.dim
+      : row.tone === 'active' ? TOKENS.amber
+      : TOKENS.pale;
 
   const body = (
     <>
@@ -176,7 +179,14 @@ export function BoardRow({
           width: BOARD_COLUMN_WIDTHS.chip, height: '80%',
           flex: `0 0 ${BOARD_COLUMN_WIDTHS.chip}px`, borderRadius: 2,
           background: row.chip ?? '#141414',
-          boxShadow: row.chip ? '0 0 0 2px rgba(255,255,255,0.14)' : 'inset 0 0 0 1px #2c2c2c'
+          // The active row's chip rings in amber — the departures-board way
+          // of saying "this line is boarding". Everyone else keeps the faint
+          // white keyline.
+          boxShadow: row.chip
+            ? (row.tone === 'active'
+              ? `0 0 0 2px ${TOKENS.amber}`
+              : '0 0 0 2px rgba(255,255,255,0.14)')
+            : 'inset 0 0 0 1px #2c2c2c'
         }}
       />
       <span
