@@ -2,10 +2,15 @@
 // rolls with nextRng() always passes seedConformance() — asserted directly
 // through appendLegality, the gate that actually runs it.
 import { describe, expect, it } from 'vitest';
-import { CITIES, cityById, nodeForCity, payoutBetween, rollTurn } from '../../engine/index.js';
+import {
+  CITIES, REGIONS, cityById, destinationInRegion, nodeForCity, payoutBetween,
+  rollDestination, rollTurn,
+} from '../../engine/index.js';
 import type { CityId } from '../../engine/index.js';
 import { appendLegality } from './legal.js';
+import { replay } from './game.js';
 import { countRollEvents, nextRng } from './seeded.js';
+import { homesTaken } from './turns.js';
 import type { GameEvent, SeatId } from './events.js';
 import { PUBLISHED_RULES } from './rules.js';
 
@@ -67,5 +72,51 @@ describe('a seeded game', () => {
     const anything: GameEvent =
       { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null };
     expect(appendLegality(log, anything, 'red')).toBeNull();
+  });
+
+  it('verifies the declared alternate against the seed, choice and all', () => {
+    // Red walks the assigned trip and blue takes a turn, so red stands at
+    // their latest destination, over winTarget 1000, as the actor — the
+    // declare window. History is scripted freely: only the append under
+    // test is checked, exactly as the header says.
+    const log: GameEvent[] = [
+      ...opening('test-night'),
+      { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'red',
+        path: [nodeForCity(CHICAGO), nodeForCity(NEW_YORK)], arrived: true },
+      { type: 'arrived', seat: 'blue', city: id('Los Angeles'),
+        region: cityById(id('Los Angeles')).region,
+        payout: payoutBetween(MIAMI, id('Los Angeles')) },
+      { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'blue',
+        path: [nodeForCity(MIAMI), 'c95'], arrived: false },
+    ];
+    // Generate exactly as the hook will: one stream for the whole event,
+    // rollDestination first, and the city drawn from the same stream when
+    // the region roll handed the choice over.
+    const rng = nextRng(log, 'test-night');
+    const from = NEW_YORK;
+    const taken = homesTaken(replay(log));
+    const outcome = rollDestination(from, rng, taken);
+    const alternate = outcome.kind === 'arrived'
+      ? { city: outcome.city, region: outcome.region, payout: outcome.payout }
+      : (() => {
+          const region = REGIONS.find((r) => r.id !== cityById(from).region)!.id;
+          const arrival = destinationInRegion(from, region, rng);
+          return { city: arrival.city, region, payout: arrival.payout };
+        })();
+
+    const event: GameEvent = { type: 'declared', seat: 'red', alternate };
+    expect(appendLegality(log, event, 'red')).toBeNull();
+
+    // Any other alternate city is not the seed's.
+    const elsewhere = CITIES.find((c) =>
+      c.region === alternate.region && c.id !== alternate.city && c.id !== from)!;
+    const cooked: GameEvent = { type: 'declared', seat: 'red',
+      alternate: { city: elsewhere.id, region: elsewhere.region,
+                   payout: payoutBetween(from, elsewhere.id) } };
+    const refusal = appendLegality(log, cooked, 'red');
+    expect(refusal).not.toBeNull();
+    expect(refusal!.message).toMatch(/seeded/);
   });
 });

@@ -90,6 +90,16 @@ export function mayDeclare(state: GameState, id: SeatId): boolean {
   return seat.at === nodeForCity(latest) && seat.banked >= state.rules.winTarget;
 }
 
-/** The seat a fee bill has put under zero, if any — the liquidation gate. */
+/**
+ * The seat a fee bill has put under zero *while it still holds railroads
+ * to sell* — the liquidation gate. The holdings condition is load-bearing:
+ * the obligation is "sell until covered", and a seat with nothing left to
+ * sell is the spec's named hole (the elimination text is still owed), so
+ * its negative balance rides and the table resolves it by house rule
+ * rather than the app freezing. Until starting cash is transcribed, early
+ * trips can dip below zero on bank fees alone, and that must not stall a
+ * game nobody in has anything to liquidate.
+ */
 export const shortSeat = (state: GameState): SeatId | null =>
-  SEATS.find((id) => state.seats[id].banked < 0) ?? null;
+  SEATS.find((id) =>
+    state.seats[id].banked < 0 && state.seats[id].holdings.length > 0) ?? null;

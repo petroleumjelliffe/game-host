@@ -3,7 +3,7 @@
 // said. Refusals are asserted by *reason* — a turn-order mistake in a builder
 // must not impersonate a pass.
 import { describe, expect, it } from 'vitest';
-import { CITIES, cityById, nodeForCity, payoutBetween } from '../../engine/index.js';
+import { CITIES, bankSalePrice, cityById, nodeForCity, payoutBetween, railroadPrice } from '../../engine/index.js';
 import type { CityId } from '../../engine/index.js';
 import { appendLegality } from './legal.js';
 import type { GameEvent, SeatId } from './events.js';
@@ -32,11 +32,12 @@ const CHICAGO = id('Chicago');
 const NEW_YORK = id('New York');
 const LOS_ANGELES = id('Los Angeles');
 const MIAMI = id('Miami');
+const STP = id('St. Paul');
 
-const opening = (): GameEvent[] => [
+const opening = (rules: object = { winTarget: 1000 }): GameEvent[] => [
   { type: 'joined', seat: 'red', name: 'A' },
   { type: 'joined', seat: 'blue', name: 'B' },
-  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+  { type: 'started', rules: { ...PUBLISHED_RULES, ...rules } } as GameEvent,
   home('red', CHICAGO), home('blue', MIAMI),
   { type: 'orderRolled', seat: 'red', first: 'red' },
 ];
@@ -48,13 +49,15 @@ const opening = (): GameEvent[] => [
  * blue's intervening turn, every red append would be refused `not your turn`
  * and these tests would pass for the wrong reason.
  */
-const brink = (): GameEvent[] => [
-  ...opening(),
+const brinkAt = (rules: object): GameEvent[] => [
+  ...opening(rules),
   assign('red', CHICAGO, NEW_YORK),
   ...walk('red', CHICAGO, NEW_YORK),
   assign('blue', MIAMI, LOS_ANGELES),
   ...walk('blue', MIAMI, LOS_ANGELES),
 ];
+
+const brink = (): GameEvent[] => brinkAt({ winTarget: 1000 });
 
 const declare = (seat: SeatId, from: CityId, alt: CityId): GameEvent =>
   ({ type: 'declared', seat,
@@ -108,3 +111,135 @@ describe('payout honesty', () => {
     expect(appendLegality(log, assign('red', CHICAGO, NEW_YORK), 'red')).toBeNull();
   });
 });
+
+/** Append through the gate, asserting it passes — the legality IS the setup. */
+const play = (log: GameEvent[], event: GameEvent, sender: SeatId): GameEvent[] => {
+  const refusal = appendLegality(log, event, sender);
+  expect(refusal, `${event.type} by ${sender}: ${refusal?.message ?? ''}`).toBeNull();
+  return [...log, event];
+};
+
+const buy = (seat: SeatId, railroad: string): GameEvent =>
+  ({ type: 'bought', seat, railroad, price: railroadPrice(railroad) });
+
+describe('the purchase window', () => {
+  // brink(): red's turn, standing paid at New York, owing a destination
+  // roll — the window. Red's balance is one Chicago–New York payout, so
+  // the affordable lines below are the $4,000–$8,000 ones.
+  it('opens on arrival, admits several purchases, and never blocks rolling', () => {
+    let log = brink();
+    log = play(log, buy('red', 'B&M'), 'red');
+    log = play(log, buy('red', 'RF&P'), 'red');
+    // Rolling was never blocked: the destination roll stays legal.
+    log = play(log,
+      { type: 'regionRequested', seat: 'red', rolled: cityById(CHICAGO).region }, 'red');
+  });
+
+  it('refuses the wrong price, the owned railroad, and the empty purse', () => {
+    const log = [...brink(), buy('red', 'B&M')];
+    const wrong = appendLegality(log,
+      { type: 'bought', seat: 'red', railroad: 'RF&P', price: 5000 }, 'red');
+    expect(wrong!.message).toMatch(/price list/);
+    const owned = appendLegality(log, buy('red', 'B&M'), 'red');
+    expect(owned!.message).toMatch(/already owned/);
+    const broke = appendLegality(log, buy('red', 'NYC'), 'red');
+    expect(broke!.message).toMatch(/balance/);
+  });
+
+  it('closes for a declared baron, and once the destination roll has begun', () => {
+    const declared = appendLegality(
+      [...brink(), declare('red', NEW_YORK, LOS_ANGELES)], buy('red', 'B&M'), 'red');
+    expect(declared!.message).toMatch(/window closed/);
+    const midRoll = appendLegality(
+      [...brink(), { type: 'regionRequested', seat: 'red', rolled: cityById(CHICAGO).region }],
+      buy('red', 'B&M'), 'red');
+    expect(midRoll!.message).toMatch(/destination roll has begun/);
+  });
+});
+
+describe('declaring', () => {
+  it('needs all three conditions and audits the alternate payout', () => {
+    // Eligible: at the latest destination, over the target, before the roll.
+    expect(appendLegality(brink(), declare('red', NEW_YORK, LOS_ANGELES), 'red')).toBeNull();
+
+    // Mid-trip — not standing at the latest destination.
+    let log = brink();
+    log = play(log, assign('red', NEW_YORK, STP), 'red');
+    log = play(log, { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null }, 'red');
+    log = play(log, { type: 'moved', seat: 'red',
+      path: [nodeForCity(NEW_YORK), 'c13'], arrived: false }, 'red');
+    log = play(log, assign('blue', LOS_ANGELES, MIAMI), 'blue');
+    log = play(log, { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null }, 'blue');
+    log = play(log, { type: 'moved', seat: 'blue',
+      path: [nodeForCity(LOS_ANGELES), 'c95'], arrived: false }, 'blue');
+    const midTrip = appendLegality(log, declare('red', NEW_YORK, MIAMI), 'red');
+    expect(midTrip!.message).toMatch(/declaring needs/);
+
+    // Short of the published target: the same trip under real rules.
+    const short = appendLegality(brinkAt(PUBLISHED_RULES),
+      declare('red', NEW_YORK, LOS_ANGELES), 'red');
+    expect(short!.message).toMatch(/declaring needs/);
+
+    // The alternate payout is the table's.
+    const cooked = { ...declare('red', NEW_YORK, LOS_ANGELES) } as GameEvent & {
+      alternate: { city: CityId; region: string; payout: number } };
+    cooked.alternate = { ...cooked.alternate, payout: 999999 };
+    const audited = appendLegality(brink(), cooked, 'red');
+    expect(audited!.message).toMatch(/payout table/);
+  });
+});
+
+describe('the liquidation gate', () => {
+  /**
+   * Red ends up short: after buying WP their balance is one payout minus
+   * $8,000; blue then owns C&NW, and red's next turn rides it for a $5,000
+   * fee. Every append below goes through the gate, so the fixture is
+   * itself proof the flow is reachable in legal play.
+   */
+  const shortLog = (): GameEvent[] => {
+    let log = brink();
+    log = play(log, buy('red', 'WP'), 'red');
+    log = play(log, assign('red', NEW_YORK, STP), 'red');
+    log = play(log, { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null }, 'red');
+    log = play(log, { type: 'moved', seat: 'red',
+      path: [nodeForCity(NEW_YORK), 'c13'], arrived: false }, 'red');
+    log = play(log, buy('blue', 'C&NW'), 'blue');
+    log = play(log, assign('blue', LOS_ANGELES, MIAMI), 'blue');
+    log = play(log, { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null }, 'blue');
+    log = play(log, { type: 'moved', seat: 'blue',
+      path: [nodeForCity(LOS_ANGELES), 'c95'], arrived: false }, 'blue');
+    log = play(log, { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null }, 'red');
+    log = play(log, { type: 'moved', seat: 'red', path: ['c13', 'd131'], arrived: false }, 'red');
+    return log;
+  };
+
+  it('refuses every event while a seat is short — except the sale that pays', () => {
+    const log = shortLog();
+    const blocked = appendLegality(log,
+      { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null }, 'blue');
+    expect(blocked!.message).toMatch(/sold to the bank/);
+
+    const sale = appendLegality(log,
+      { type: 'sold', seat: 'red', railroad: 'WP', price: bankSalePrice('WP') }, 'red');
+    expect(sale).toBeNull();
+
+    const cheap = appendLegality(log,
+      { type: 'sold', seat: 'red', railroad: 'WP', price: 1000 }, 'red');
+    expect(cheap!.message).toMatch(/half the purchase price/);
+
+    const notYours = appendLegality(log,
+      { type: 'sold', seat: 'red', railroad: 'C&NW', price: bankSalePrice('C&NW') }, 'red');
+    expect(notYours!.message).toMatch(/not yours to sell/);
+
+    const solvent = appendLegality(log,
+      { type: 'sold', seat: 'blue', railroad: 'C&NW', price: bankSalePrice('C&NW') }, 'blue');
+    expect(solvent!.message).toMatch(/only for meeting a bill/);
+
+    // The sale covers the bill, and play resumes.
+    const after = [...log,
+      { type: 'sold', seat: 'red', railroad: 'WP', price: bankSalePrice('WP') } as GameEvent];
+    expect(appendLegality(after,
+      { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null }, 'blue')).toBeNull();
+  });
+});
+
