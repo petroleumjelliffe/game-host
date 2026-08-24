@@ -28,6 +28,30 @@ export const GLIDE = 'transform 380ms cubic-bezier(.35,.7,.3,1)';
 const COUNT = { height: 24, lift: 26 } as const;
 const END = { width: 86, height: 26, lift: 30 } as const;
 
+/** The ground the chip needs on one side of the engine, with lamp margin. */
+const ZONE = { halfWidth: 58, near: 10, far: 64 } as const;
+
+/**
+ * Which side of the engine the chip should ride.
+ *
+ * Above is the design's home — but the next-move indicators light up around
+ * the engine, and a counter parked on top of a candidate lamp hides exactly
+ * the thing the player is choosing between. So the chip yields: when lamps
+ * crowd the space above and the space below is clearer, it swings under the
+ * engine instead. Ties stay above, so it never flaps between sides for
+ * nothing.
+ */
+export function chipSide(
+  at: { x: number; y: number },
+  lamps: readonly { x: number; y: number }[]
+): 'above' | 'below' {
+  const crowd = (sign: -1 | 1) => lamps.filter(p =>
+    Math.abs(p.x - at.x) < ZONE.halfWidth
+    && (p.y - at.y) * sign > ZONE.near
+    && (p.y - at.y) * sign < ZONE.far).length;
+  return crowd(1) < crowd(-1) ? 'below' : 'above';
+}
+
 /** Whether a seat's colour is too dark to carry dark text or read as ink. */
 const dark = (hex: string): boolean => {
   const v = parseInt(hex.slice(1), 16);
@@ -45,18 +69,21 @@ export interface EngineChipProps {
   remaining: number;
   /** The leg is finished — arrived, or every move spent — and may commit. */
   done: boolean;
+  /** Which side of the engine to ride — see `chipSide`. */
+  side?: 'above' | 'below';
 }
 
-export function EngineChip({ x, y, color, remaining, done }: EngineChipProps) {
+export function EngineChip({ x, y, color, remaining, done, side = 'above' }: EngineChipProps) {
   const lightInk = dark(color);
 
   let costume = null;
   if (done) {
+    const top = side === 'below' ? END.lift : -END.lift - END.height;
     costume = (
       <g aria-hidden="true">
-        <rect x={-END.width / 2} y={-END.lift - END.height} width={END.width}
+        <rect x={-END.width / 2} y={top} width={END.width}
               height={END.height} rx={END.height / 2} fill={color} pointerEvents="none" />
-        <text x={0} y={-END.lift - END.height / 2 + 4} textAnchor="middle"
+        <text x={0} y={top + END.height / 2 + 4} textAnchor="middle"
               fontSize={12} fontWeight={700} letterSpacing="0.14em"
               fill={lightInk ? '#f2efe6' : '#0f0c08'}
               fontFamily="'Roboto Condensed', sans-serif" pointerEvents="none">
@@ -67,7 +94,7 @@ export function EngineChip({ x, y, color, remaining, done }: EngineChipProps) {
   } else if (remaining > 0) {
     const digits = String(remaining).length;
     const width = 56 + digits * 10;
-    const top = -COUNT.lift - COUNT.height;
+    const top = side === 'below' ? COUNT.lift : -COUNT.lift - COUNT.height;
     costume = (
       <g role="img" aria-label={`${remaining} left`}>
         <rect x={-width / 2} y={top} width={width} height={COUNT.height}
@@ -88,7 +115,7 @@ export function EngineChip({ x, y, color, remaining, done }: EngineChipProps) {
   }
 
   return (
-    <g data-chip="" data-motion="" pointerEvents="none"
+    <g data-chip="" data-side={side} data-motion="" pointerEvents="none"
        style={{ transform: `translate(${x}px, ${y}px)`, transition: GLIDE }}>
       {costume}
     </g>

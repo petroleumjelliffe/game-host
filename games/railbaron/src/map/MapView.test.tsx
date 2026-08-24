@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { nodeForCity } from '../../engine';
+import { chipSide } from './EngineChip';
 import { layout } from './geo';
 import { MapView } from './MapView';
 import { useRoute } from './useRoute';
@@ -659,6 +660,29 @@ describe('playing a turn on the map', () => {
       // And the chip stands where the engine stands.
       const at = layout(1400, 788).byId.get(nodeForCity(MINNEAPOLIS))!;
       expect(chip.style.transform).toBe(`translate(${at.x}px, ${at.y}px)`);
+    });
+
+    it('moves out of the way of the next-move lamps', async () => {
+      // The side is the pure `chipSide` decision over the very lamps on
+      // offer; this pins that the map actually feeds it the candidates and
+      // honours the answer, at both moments of the leg.
+      const user = userEvent.setup();
+      const { container } = show(midTurn);
+      const board = layout(1400, 788);
+      const chip = () => container.querySelector('[data-chip]')!;
+      const lampsOnOffer = () =>
+        [...container.querySelectorAll('[role="button"]')]
+          .map(el => el.getAttribute('aria-label') ?? '')
+          .filter(name => name.startsWith('Dot '))
+          .map(name => board.byId.get(name.slice('Dot '.length))!)
+          .concat(board.byId.get(nodeForCity(ST_PAUL))!);
+      const baron = board.byId.get(nodeForCity(MINNEAPOLIS))!;
+      expect(chip().getAttribute('data-side'))
+        .toBe(chipSide(baron, lampsOnOffer()));
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      // Arrived: no candidates left, so END TURN takes the design's home side.
+      expect(chip().getAttribute('data-side')).toBe('above');
     });
 
     it('hardens into END TURN — a real button — when the leg is done', async () => {

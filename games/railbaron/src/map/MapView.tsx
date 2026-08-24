@@ -8,7 +8,7 @@ import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { destinationOf, needsDestination } from '../state/turns';
-import { EngineChip, GLIDE } from './EngineChip';
+import { chipSide, EngineChip, GLIDE } from './EngineChip';
 import {
   CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, visualRadius, type Placed
 } from './geo';
@@ -304,7 +304,12 @@ function InteractionLayer({ nodes, legal, enabled, onTap, onHover, action }: {
    * is offered independently of `enabled`, because the Bonus Roll is taken
    * exactly when every lamp is closed.
    */
-  action: { label: string; x: number; y: number; onTap: () => void } | null;
+  action: {
+    label: string; x: number; y: number;
+    /** The chip has swung under the engine — the target follows it. */
+    below: boolean;
+    onTap: () => void;
+  } | null;
 }) {
   const targets = useMemo(() => {
     const candidates = nodes.filter(node => legal.has(node.id));
@@ -316,7 +321,8 @@ function InteractionLayer({ nodes, legal, enabled, onTap, onHover, action }: {
     <g>
       {action && (
         <rect
-          x={action.x - 44} y={action.y - 80} width={88} height={94}
+          x={action.x - 44} y={action.below ? action.y - 14 : action.y - 80}
+          width={88} height={94}
           fill="transparent"
           role="button" aria-label={action.label}
           onClick={action.onTap}
@@ -570,6 +576,16 @@ export function MapView({
     && baron !== undefined;
 
   /**
+   * Which side of the engine the chip rides: out of the way of the lit
+   * candidates, which are exactly what the player is looking at next.
+   */
+  const side = baron === undefined
+    ? 'above' as const
+    : chipSide(baron, [...route.legal]
+        .map(id => board.byId.get(id))
+        .filter((node): node is Placed => node !== undefined));
+
+  /**
    * The one tap the chip offers — END TURN, the commit — drawn as a target in
    * the interaction layer (see its `action` prop for why it lives there). A
    * pan begun on the chip must not also take its tap — the same rule every
@@ -577,7 +593,7 @@ export function MapView({
    */
   const chipAction = !chipShowing || baron === undefined || !route.canCommit
     ? null
-    : { label: 'End turn', x: baron.x, y: baron.y,
+    : { label: 'End turn', x: baron.x, y: baron.y, below: side === 'below',
         onTap: () => { if (!viewport.wasDrag()) route.commit(); } };
 
   return (
@@ -761,6 +777,7 @@ export function MapView({
               color={SEAT_COLORS[state.turn]}
               remaining={route.remaining}
               done={route.canCommit}
+              side={side}
             />
           )}
 
