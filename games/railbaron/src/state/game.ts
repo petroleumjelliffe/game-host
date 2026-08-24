@@ -1,6 +1,6 @@
 import {
-  bonusLegOwed, earnsBonus, nodeForCity, pathCost,
-  type CityId, type NodeId, type RegionId, type TrainType, type TurnRoll
+  RAILROADS, bonusLegOwed, earnsBonus, nodeForCity, pathCost,
+  type CityId, type NodeId, type RailroadId, type RegionId, type TrainType, type TurnRoll
 } from '../../engine/index.js';
 import { SEATS, type GameEvent, type SeatId } from './events.js';
 import { PUBLISHED_RULES, type GameRules } from './rules.js';
@@ -33,6 +33,8 @@ export interface Seat {
   banked: number;
   /** banked >= rules.winTarget: no more destinations, racing for home. */
   homeward: boolean;
+  /** Railroads this baron owns, in purchase order. */
+  holdings: readonly RailroadId[];
   /**
    * Where this baron's pawn stands, as a node — not a city. A baron between
    * two cities is the normal case, and the companion could get away with
@@ -79,6 +81,8 @@ export interface GameState {
   rules: GameRules;
   /** The seat whose moved ended at home while homeward. Ends the game. */
   winner: SeatId | null;
+  /** Who owns what. Empty for every pre-phase-2 log. */
+  owners: ReadonlyMap<RailroadId, SeatId>;
 }
 
 function emptyState(): GameState {
@@ -86,12 +90,13 @@ function emptyState(): GameState {
   for (const id of SEATS) {
     seats[id] = {
       id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map(),
-      home: null, banked: 0, homeward: false
+      home: null, banked: 0, homeward: false, holdings: []
     };
   }
   return {
     seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0,
-    bonusOwed: false, lastMove: null, rules: PUBLISHED_RULES, winner: null
+    bonusOwed: false, lastMove: null, rules: PUBLISHED_RULES, winner: null,
+    owners: new Map()
   };
 }
 
@@ -138,6 +143,20 @@ export function replay(events: readonly GameEvent[]): GameState {
    * banked = earned - inFlight, always.
    */
   const inFlight = new Map<SeatId, number>();
+  /** Who owns what, folded as purchases and sales land. */
+  const owners = new Map<RailroadId, SeatId>();
+  /**
+   * Every dollar that is not a stop's payout: purchases and sales now,
+   * fees and the rover when their derivations land. banked =
+   * earned − inFlight + adjust, always — one ledger, so no money flow
+   * needs its own bookkeeping field on Seat.
+   */
+  const adjust = new Map<SeatId, number>();
+  const credit = (sid: SeatId, amount: number): void => {
+    adjust.set(sid, (adjust.get(sid) ?? 0) + amount);
+  };
+  const cashOf = (sid: SeatId): number =>
+    state.seats[sid].earned - (inFlight.get(sid) ?? 0) + (adjust.get(sid) ?? 0);
 
   for (const event of events) {
     if (event.type === 'started') {
@@ -172,6 +191,21 @@ export function replay(events: readonly GameEvent[]): GameState {
       case 'orderRolled':
         first = event.first;
         state.phase = 'playing';
+        break;
+      case 'bought':
+        owners.set(event.railroad, event.seat);
+        credit(event.seat, -event.price);
+        state.seats[event.seat] = { ...seat, holdings: [...seat.holdings, event.railroad] };
+        break;
+      case 'sold':
+        // The Decision 4 stub: a forced sale to the bank. The event is
+        // ordinary log history, so a future auction replaces the mechanism
+        // without touching how this replays.
+        owners.delete(event.railroad);
+        credit(event.seat, event.price);
+        state.seats[event.seat] = {
+          ...seat, holdings: seat.holdings.filter((line) => line !== event.railroad),
+        };
         break;
       case 'turnRolled':
         open = {
@@ -229,7 +263,7 @@ export function replay(events: readonly GameEvent[]): GameState {
           // Settle the mover's money. Banked before tested, so a leg that
           // both completes the crossing trip and ends at home wins here.
           const mover = state.seats[event.seat];
-          const banked = mover.earned - (inFlight.get(event.seat) ?? 0);
+          const banked = cashOf(event.seat);
           const homeCity = mover.stops[0]?.city ?? null;
           const homeward = homeCity !== null && banked >= state.rules.winTarget;
           state.seats[event.seat] = { ...mover, banked, homeward, home: homeCity };
@@ -258,12 +292,13 @@ export function replay(events: readonly GameEvent[]): GameState {
   for (const sid of SEATS) {
     const seat = state.seats[sid];
     const homeCity = seat.stops[0]?.city ?? null;
-    const banked = seat.earned - (inFlight.get(sid) ?? 0);
+    const banked = cashOf(sid);
     state.seats[sid] = {
       ...seat, home: homeCity, banked,
       homeward: homeCity !== null && banked >= state.rules.winTarget,
     };
   }
+  state.owners = owners;
   if (state.winner !== null) state.phase = 'over';
   return state;
 }
