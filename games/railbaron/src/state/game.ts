@@ -3,7 +3,7 @@ import {
   type CityId, type NodeId, type RailroadId, type RegionId, type TrainType, type TurnRoll
 } from '../../engine/index.js';
 import { SEATS, type GameEvent, type SeatId } from './events.js';
-import { turnBill } from './money.js';
+import { ROVER_PRIZE, turnBill } from './money.js';
 import { PUBLISHED_RULES, type GameRules } from './rules.js';
 import { addSections, rotate } from './turns.js';
 
@@ -186,6 +186,16 @@ export function replay(events: readonly GameEvent[]): GameState {
       credit(owner, fee);
     }
     if (total > 0) credit(turn.seat, -total);
+    // Un-declaring by poverty: "as soon as a declared player falls below
+    // $200,000 … he is no longer declared." Below the target is below the
+    // target, whichever bill did it — this sweep and the rover's own clear
+    // are the only two ways a declaration ends short of winning.
+    for (const sid of SEATS) {
+      const runner = state.seats[sid];
+      if (runner.run?.toHome === true && cashOf(sid) < state.rules.winTarget) {
+        state.seats[sid] = { ...runner, run: { ...runner.run, toHome: false } };
+      }
+    }
   };
 
   for (const event of events) {
@@ -293,6 +303,54 @@ export function replay(events: readonly GameEvent[]): GameState {
         // after being paid", and the poverty sweep reads the same cash.
         if (event.arrived) inFlight.set(event.seat, 0);
         state.lastMove = { seat: event.seat, path: event.path, arrived: event.arrived };
+        // The Rover Play, as a derivation (spec Decision 3): the paths are
+        // in the log and so is every pawn's position, so no new message can
+        // disagree with the movement that caused a catch. "The first player
+        // to move onto or through a dot occupied by the declared pawn
+        // collects $50,000" — path[0] is where the mover already stood, so
+        // it does not count as moving onto anyone.
+        for (const sid of SEATS) {
+          if (sid === event.seat) continue;
+          const runner = state.seats[sid];
+          if (runner.run?.toHome !== true || runner.at === null) continue;
+          if (event.path.slice(1).includes(runner.at)) {
+            credit(sid, -ROVER_PRIZE);
+            credit(event.seat, ROVER_PRIZE);
+            // "He pays only the first pawn that catches him — after that he
+            // is no longer declared": clearing toHome here is both the
+            // payment cap and the cancellation.
+            state.seats[sid] = { ...runner, run: { ...runner.run, toHome: false } };
+          }
+        }
+        {
+          // A cancelled run ends where the declare said it would: arrival
+          // at the alternate appends the stop the trip was owed, pays the
+          // carried payout, and hands back the ordinary rules — including
+          // re-declaring next trip. Nothing reset `used` at cancellation,
+          // deliberately: "the interrupted trip to his home city and the
+          // following trip to his alternate destination count as parts of
+          // the same trip" — the sections carry over precisely because no
+          // code touches them. (The rulebook's reuse mercy — "no more than
+          // is absolutely necessary" when stranded — is NOT implemented:
+          // the draft UI keeps refusing reused sections, and a genuinely
+          // stranded runner is resolved at the table, the honor level the
+          // spec assigns it.)
+          const mover = state.seats[event.seat];
+          if (mover.run !== null && !mover.run.toHome
+              && mover.at === nodeForCity(mover.run.alternate.city)) {
+            const { alternate } = mover.run;
+            state.seats[event.seat] = {
+              ...mover,
+              run: null,
+              earned: mover.earned + alternate.payout,
+              stops: [...mover.stops,
+                      { city: alternate.city, region: alternate.region,
+                        payout: alternate.payout }],
+            };
+            // No inFlight entry: this payout banks now, on arrival — the
+            // one stop that is never assigned ahead of being walked.
+          }
+        }
         if (open !== null) {
           open.paths.push(event.path);
           open.legs += 1;
