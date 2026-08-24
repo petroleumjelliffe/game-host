@@ -17,6 +17,8 @@ const id = (name: string): CityId => {
   return city.id;
 };
 
+const START = PUBLISHED_RULES.startingCash;
+
 const CHICAGO = id('Chicago');
 const NEW_YORK = id('New York');
 const LOS_ANGELES = id('Los Angeles');
@@ -57,18 +59,19 @@ describe('the standard cycle', () => {
     const pay = payoutBetween(CHICAGO, NEW_YORK);
 
     log = play(log, assign('red', CHICAGO, NEW_YORK), 'red');
-    expect(replay(log).seats.red.banked).toBe(0);       // assigned, not walked
+    // Assigned, not walked: only the rulebook's starting cash is in hand.
+    expect(replay(log).seats.red.banked).toBe(START);
 
     log = play(log, roll('red'), 'red');
     log = play(log, move('red', [nodeForCity(CHICAGO), nodeForCity(NEW_YORK)], true), 'red');
-    expect(replay(log).seats.red.banked).toBe(pay);      // walked, banked
+    expect(replay(log).seats.red.banked).toBe(START + pay);  // walked, banked
 
     // Blue's turn; then red is owed its next destination, and it is legal.
     log = play(log, assign('blue', MIAMI, LOS_ANGELES), 'blue');
     log = play(log, roll('blue'), 'blue');
     log = play(log, move('blue', [nodeForCity(MIAMI), nodeForCity(LOS_ANGELES)], true), 'blue');
     log = play(log, assign('red', NEW_YORK, MIAMI), 'red');
-    expect(replay(log).seats.red.banked).toBe(pay);      // next trip in flight
+    expect(replay(log).seats.red.banked).toBe(START + pay);  // next trip in flight
   });
 });
 
@@ -90,8 +93,9 @@ describe('the $0 neighbours', () => {
 
       const state = replay(log);
       // The trip banks its real $0 — and the twin spur is a real edge, so
-      // since phase 2 the turn bills its $1,000 bank fee at close.
-      expect(state.seats.red.banked).toBe(-1000);
+      // since phase 2 the turn bills its $1,000 bank fee at close, straight
+      // out of the starting cash.
+      expect(state.seats.red.banked).toBe(START - 1000);
       expect(state.seats.red.run).toBeNull();
       expect(state.winner).toBeNull();
     });

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, renderHook, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { nodeForCity } from '../../engine';
+import { chipSide } from './EngineChip';
 import { layout } from './geo';
 import { MapView } from './MapView';
 import { useRoute } from './useRoute';
@@ -174,16 +175,16 @@ describe('playing a turn on the map', () => {
     return onMove;
   };
 
-  it('will not commit before a route has been tapped out', () => {
+  it('offers no END TURN before a route has been tapped out', () => {
     play();
-    expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'End turn' })).not.toBeInTheDocument();
   });
 
-  it('commits the tapped route as one leg', async () => {
+  it('commits the tapped route as one leg, from END TURN over the engine', async () => {
     const user = userEvent.setup();
     const onMove = play();
     await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
-    await user.click(screen.getByRole('button', { name: 'COMMIT' }));
+    await user.click(screen.getByRole('button', { name: 'End turn' }));
     expect(onMove).toHaveBeenCalledWith(
       'red', [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], true);
   });
@@ -192,9 +193,9 @@ describe('playing a turn on the map', () => {
     const user = userEvent.setup();
     play();
     await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
-    expect(screen.getByRole('button', { name: 'COMMIT' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'End turn' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'UNDO' }));
-    expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'End turn' })).not.toBeInTheDocument();
   });
 
   it('announces only the lamps that may be tapped', () => {
@@ -214,13 +215,7 @@ describe('playing a turn on the map', () => {
    * arrives at d432 twice. 33 edges permit that, and the network has around
    * 161 independent cycles, so a route that revisits a node is ordinary play.
    */
-  it('draws every segment of a route that doubles back on itself', async () => {
-    // React only *warns* about duplicate keys and may still render both
-    // children, so counting segments does not on its own catch this — the
-    // damage is to reconciliation on later updates, which is undefined
-    // behaviour rather than a reliable symptom. The warning is the signal
-    // that discriminates, so it is asserted alongside what the player sees.
-    const complaints = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('lights every section of a route that doubles back on itself', async () => {
     const user = userEvent.setup();
     const { container } = render(
       <MapView
@@ -240,52 +235,70 @@ describe('playing a turn on the map', () => {
       />
     );
 
-    const segments = () => container.querySelectorAll('[data-route="draft"] line');
     await user.click(screen.getByRole('button', { name: 'Dot d432' }));
     await user.click(screen.getByRole('button', { name: 'Dot d393' }));
     await user.click(screen.getByRole('button', { name: 'Dot d432' }));
 
-    // Three steps walked, so three lines drawn...
-    expect(segments()).toHaveLength(3);
-    // ...each of them its own child. Keying by node id collides on the
-    // repeated d432, and React is explicit that two children sharing a key
-    // no longer keep their identity across updates.
-    const keyed = complaints.mock.calls
-      .map(call => String(call[0]))
-      .filter(message => message.includes('same key'));
-    expect(keyed).toEqual([]);
-    complaints.mockRestore();
+    // The there-and-back crossed its two-line section once on each company,
+    // so it draws fully spent: lit, at the bright line's full strength.
+    const doubled = container.querySelector('[data-edge="d393|d432"]')!;
+    expect(doubled.getAttribute('data-spent')).toBe('true');
+    const lit = doubled.querySelector('[data-motion]')!;
+    const lines = lit.querySelectorAll('line');
+    expect(lines).toHaveLength(2);
+    expect(lines[1]!.getAttribute('opacity')).toBe('0.95');
   });
 
-  it('will not take a tap while the last move is still playing back', () => {
-    const onMove = vi.fn();
-    // A Bonus Roll turn: the primary leg lands within the white dice with a
-    // bonus die still owed, so the turn stays open — a new destination is
-    // rolled, and the bonus leg (Minneapolis, one hop away) becomes a real,
-    // tappable candidate. Without the guard, `route.legal` genuinely holds
-    // it; this is the scenario the guard exists for, not one where there is
-    // nothing to tap regardless.
-    const played: GameEvent[] = [
-      { type: 'joined', seat: 'red', name: 'ADA' },
-      { type: 'started' },
-      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
-      { type: 'orderRolled', seat: 'red', first: 'red' },
-      { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
-      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 },
-      { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true },
-      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: 3000 }
-    ];
+  /**
+   * A Bonus Roll turn: the primary leg lands within the white dice with a
+   * bonus die still owed, so the turn stays open — a new destination is
+   * rolled, and the bonus leg (Minneapolis, one hop away) becomes a real,
+   * tappable candidate. Without the guard, `route.legal` genuinely holds
+   * it; this is the scenario the guard exists for, not one where there is
+   * nothing to tap regardless.
+   */
+  const played: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'started' },
+    { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+    { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 },
+    { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true },
+    { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: 3000 }
+  ];
+
+  const playedAs = (viewer: 'red' | 'blue' | 'all') =>
     render(
       <MapView
         state={replay(played)}
         onBack={() => {}}
-        onMove={onMove}
+        onMove={vi.fn()}
         dice={{ roll: null, live: false, mine: false }}
         onRollDice={() => {}}
         onDiceLanded={() => {}}
+        viewer={viewer}
       />
     );
+
+  it('will not take a tap while a broadcast move is still playing back', () => {
+    // Blue's device is being told about red's move, so the walk animates
+    // there — and nothing is tappable over the animation.
+    playedAs('blue');
     expect(screen.queryByRole('button', { name: /Minneapolis/ })).not.toBeInTheDocument();
+  });
+
+  it('does not replay the move on the device that made it', () => {
+    // Red tapped this route out and watched it happen; replaying it at them
+    // would double the move. The playback lands complete, so nothing gated
+    // on it — here, the bonus leg's candidate lamp — ever closes.
+    playedAs('red');
+    expect(screen.getByRole('button', { name: /Minneapolis/ })).toBeInTheDocument();
+  });
+
+  it('never replays on the shared tablet, where every move is made in person', () => {
+    playedAs('all');
+    expect(screen.getByRole('button', { name: /Minneapolis/ })).toBeInTheDocument();
   });
 
   /**
@@ -324,20 +337,20 @@ describe('playing a turn on the map', () => {
       return onBack;
     };
 
-    it('says what the game is waiting for, and offers the way to it', async () => {
+    it('says what the game is waiting for, and saying it is the way there', async () => {
       const user = userEvent.setup();
       const onBack = shown(bonusLegOwed);
-      expect(screen.getByText(/roll a new destination/i)).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: /to the board/i }));
+      // One button: the roll it names lives on the board, so it opens it.
+      await user.click(screen.getByRole('button', { name: /roll a new destination/i }));
       expect(onBack).toHaveBeenCalledOnce();
     });
 
     it('offers no lamp and no move controls while it waits', () => {
       shown(bonusLegOwed);
       // The route controls would be a lie: there is no destination to route to.
-      expect(screen.queryByRole('button', { name: 'COMMIT' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'End turn' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'UNDO' })).not.toBeInTheDocument();
-      expect(screen.queryByText(/\d+ left/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/\d+ left/)).not.toBeInTheDocument();
       // Nothing is offered, and not because the screen suppresses it: the
       // draft runs from where the pawn stands to where it stands, and the
       // engine refuses every step out of it with `already-arrived`.
@@ -348,9 +361,8 @@ describe('playing a turn on the map', () => {
     it('says none of it mid-leg, when there is a route to walk', () => {
       shown(midTurn);
       expect(screen.queryByText(/roll a new destination/i)).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /to the board/i })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeInTheDocument();
-      expect(screen.getByText(/2 left/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'UNDO' })).toBeInTheDocument();
+      expect(screen.getByLabelText('2 left')).toBeInTheDocument();
     });
   });
 
@@ -392,8 +404,8 @@ describe('playing a turn on the map', () => {
       expect(screen.getByText(/bonus roll/i)).toBeInTheDocument();
       // Not the move controls: the leg has no movement until the die lands,
       // and "0 left" over a greyed COMMIT is the stranding this replaced.
-      expect(screen.queryByRole('button', { name: 'COMMIT' })).not.toBeInTheDocument();
-      expect(screen.queryByText(/0 left/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'End turn' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/0 left/)).not.toBeInTheDocument();
       // And not the destination cluster either — nothing was arrived at.
       expect(screen.queryByText(/roll a new destination/i)).not.toBeInTheDocument();
     });
@@ -494,9 +506,13 @@ describe('playing a turn on the map', () => {
     });
 
     it('says none of it once the die has been thrown', () => {
-      shown([...bonusOwed, { type: 'bonusRolled', seat: 'red', face: 3 }], false);
+      const { container } =
+        shown([...bonusOwed, { type: 'bonusRolled', seat: 'red', face: 3 }], false);
+      // The chip keeps quiet until the white leg's playback is done — finish
+      // it, the same way a player's tap on the cabinet would.
+      fireEvent.click(container.querySelector('svg')!.parentElement!);
       expect(screen.queryByText(/bonus roll/i)).not.toBeInTheDocument();
-      expect(screen.getByText(/3 left/)).toBeInTheDocument();
+      expect(screen.getByLabelText('3 left')).toBeInTheDocument();
     });
   });
 
@@ -625,6 +641,175 @@ describe('playing a turn on the map', () => {
       const [x, y, width, height] = box();
       expect(x! + width! / 2).toBeCloseTo(walkedTo.x, 0);
       expect(y! + height! / 2).toBeCloseTo(walkedTo.y, 0);
+    });
+  });
+
+  /**
+   * The turn's arithmetic rides the engine itself — variant 5b of the design
+   * project's `Train Movement Style.dc.html`: the thrown dice tumble above
+   * the piece, the moves left count down there as the route is tapped out,
+   * and END TURN lands there once the leg is spent.
+   */
+  describe('the chip above the engine', () => {
+    it('counts the moves left above the engine, not on the HUD', () => {
+      const { container } = show(midTurn);
+      const chip = container.querySelector('[data-chip]') as SVGGElement;
+      expect(chip).not.toBeNull();
+      const counter = screen.getByLabelText('2 left');
+      expect(chip.contains(counter)).toBe(true);
+      // And the chip stands where the engine stands.
+      const at = layout(1400, 788).byId.get(nodeForCity(MINNEAPOLIS))!;
+      expect(chip.style.transform).toBe(`translate(${at.x}px, ${at.y}px)`);
+    });
+
+    it('moves out of the way of the next-move lamps', async () => {
+      // The side is the pure `chipSide` decision over the very lamps on
+      // offer; this pins that the map actually feeds it the candidates and
+      // honours the answer, at both moments of the leg.
+      const user = userEvent.setup();
+      const { container } = show(midTurn);
+      const board = layout(1400, 788);
+      const chip = () => container.querySelector('[data-chip]')!;
+      const lampsOnOffer = () =>
+        [...container.querySelectorAll('[role="button"]')]
+          .map(el => el.getAttribute('aria-label') ?? '')
+          .filter(name => name.startsWith('Dot '))
+          .map(name => board.byId.get(name.slice('Dot '.length))!)
+          .concat(board.byId.get(nodeForCity(ST_PAUL))!);
+      const baron = board.byId.get(nodeForCity(MINNEAPOLIS))!;
+      expect(chip().getAttribute('data-side'))
+        .toBe(chipSide(baron, lampsOnOffer()));
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      // Arrived: no candidates left, so END TURN takes the design's home side.
+      expect(chip().getAttribute('data-side')).toBe('above');
+    });
+
+    it('hardens into END TURN — a real button — when the leg is done', async () => {
+      const user = userEvent.setup();
+      show(midTurn);
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      expect(screen.getByRole('button', { name: 'End turn' })).toBeInTheDocument();
+      expect(screen.queryByLabelText(/\d+ left/)).not.toBeInTheDocument();
+    });
+
+    it('offers the roll at the top of the map, and keeps the chip quiet until it lands', async () => {
+      const user = userEvent.setup();
+      const onRollDice = vi.fn();
+      const { container } = render(
+        <MapView
+          state={replay(midTurn.slice(0, -1))} onBack={() => {}} onMove={vi.fn()}
+          dice={{ roll: null, live: true, mine: true }}
+          onRollDice={onRollDice} onDiceLanded={() => {}}
+        />
+      );
+      // Nothing rides the engine before the throw — the counter would have
+      // nothing to count.
+      expect(container.querySelector('[data-chip] *')).toBeNull();
+      await user.click(screen.getByRole('button', { name: /roll the dice/i }));
+      expect(onRollDice).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the roll on show at the top while the counter spends it down', () => {
+      // The whole point of the readout staying: the count over the engine is
+      // spending a roll, and the roll it is spending stays readable above.
+      vi.useFakeTimers();
+      try {
+        render(
+          <MapView
+            state={replay(midTurn)} onBack={() => {}} onMove={vi.fn()}
+            dice={{ roll: { white: [1, 1], bonus: null }, live: false, mine: true }}
+            onRollDice={() => {}} onDiceLanded={() => {}}
+          />
+        );
+        // Let the drums land, so the faces are readable.
+        act(() => { vi.advanceTimersByTime(4000); });
+        expect(screen.getAllByRole('img', { name: 'White die, 1' })).toHaveLength(2);
+        expect(screen.getByLabelText('2 left')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  /** The 5b piece: a seat-coloured disc that travels rather than teleports. */
+  describe('the engine piece', () => {
+    it('glides the same element to the tapped node', async () => {
+      const user = userEvent.setup();
+      const { container } = show(midTurn);
+      const engine = container.querySelector('[aria-label="ADA"]') as SVGGElement;
+      const from = layout(1400, 788).byId.get(nodeForCity(MINNEAPOLIS))!;
+      expect(engine.style.transform).toBe(`translate(${from.x}px, ${from.y - 11}px)`);
+      expect(engine.style.transition).toContain('380ms');
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+
+      // The same element, repositioned — a remount would cut instead of glide.
+      expect(container.querySelector('[aria-label="ADA"]')).toBe(engine);
+      const to = layout(1400, 788).byId.get(nodeForCity(ST_PAUL))!;
+      expect(engine.style.transform).toBe(`translate(${to.x}px, ${to.y - 11}px)`);
+      expect(engine.getAttribute('data-node')).toBe(nodeForCity(ST_PAUL));
+    });
+
+    it('breathes only on the baron whose turn it is', () => {
+      const twoBarons: GameEvent[] = [
+        { type: 'joined', seat: 'red', name: 'ADA' },
+        { type: 'joined', seat: 'blue', name: 'MARGO' },
+        { type: 'started' },
+        { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+        { type: 'arrived', seat: 'blue', city: CHICAGO, region: 'NC', payout: null },
+        { type: 'orderRolled', seat: 'red', first: 'red' },
+        { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+        { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null }
+      ];
+      const { container } = show(twoBarons);
+      const ada = container.querySelector('[aria-label="ADA"]')!;
+      const margo = container.querySelector('[aria-label="MARGO"]')!;
+      expect(ada.querySelector('[style*="rb-breathe"]')).not.toBeNull();
+      expect(margo.querySelector('[style*="rb-breathe"]')).toBeNull();
+    });
+  });
+
+  /**
+   * Traveled track lights in the mover's own colour: a wide soft underlay
+   * with a bright line over it, fading in as each section is taken — drawn by
+   * the spent-track map itself, so what lights up is exactly what the engine
+   * will refuse to cross again. The old burn-out (colour draining to 12%) is
+   * gone: where the trip has been is the thing the player is reading, and a
+   * lit line is legible where a darkened one never was.
+   */
+  describe('the traveled track', () => {
+    it("lights a tapped section in the mover's colour, wide under bright", async () => {
+      const user = userEvent.setup();
+      const { container } = show(midTurn);
+      const section = () => container.querySelector('[data-edge="c13|c95"]')!;
+      expect(section().querySelector('[data-motion]')).toBeNull();
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      // Four companies share Minneapolis–St. Paul, so one crossing is 'part':
+      // lit, with the bright line held back below a fully spent section's.
+      expect(section().getAttribute('data-spent')).toBe('part');
+      const lit = section().querySelector('[data-motion]')!;
+      expect(lit.getAttribute('style')).toContain('rb-fade');
+      const lines = lit.querySelectorAll('line');
+      expect(lines).toHaveLength(2);
+      for (const line of lines) expect(line.getAttribute('stroke')).toBe('#e02b1d');
+      expect(lines[0]!.getAttribute('stroke-width')).toBe('9');
+      expect(lines[1]!.getAttribute('stroke-width')).toBe('3');
+      expect(lines[1]!.getAttribute('opacity')).toBe('0.5');
+    });
+
+    it('draws the committed trail the same way', () => {
+      const played: GameEvent[] = [...midTurn,
+        { type: 'moved', seat: 'red',
+          path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true }];
+      const { container } = show(played);
+      // Finish the playback, so the whole walked path is on the board.
+      fireEvent.click(container.querySelector('svg')!.parentElement!);
+      const segments = container.querySelectorAll('[data-route="trail"] > g');
+      expect(segments).toHaveLength(1);
+      const lines = segments[0]!.querySelectorAll('line');
+      expect(lines).toHaveLength(2);
+      for (const line of lines) expect(line.getAttribute('stroke')).toBe('#e02b1d');
     });
   });
 
@@ -791,7 +976,8 @@ describe('playing a turn on the map', () => {
       const lamp = screen.getByRole('button', { name: /St\. Paul/ });
       drag(lamp, -60, 0);
       fireEvent.click(lamp);
-      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+      // No step drafted, so no leg to end.
+      expect(screen.queryByRole('button', { name: 'End turn' })).not.toBeInTheDocument();
     });
 
     it('still takes a tap that stays put', () => {
@@ -802,7 +988,7 @@ describe('playing a turn on the map', () => {
       fireEvent.pointerDown(lamp, { clientX: 700, clientY: 394, pointerId: 1, button: 0 });
       fireEvent.pointerUp(window, { clientX: 700, clientY: 394, pointerId: 1 });
       fireEvent.click(lamp);
-      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'End turn' })).toBeInTheDocument();
       expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
     });
 
@@ -826,11 +1012,11 @@ describe('playing a turn on the map', () => {
       // layout assertion is the same: one flex row, nothing stacked.
       const centre = screen.getByText(/is up|your turn/i);
       const back = screen.getByRole('button', { name: /back/i });
-      const commit = screen.getByRole('button', { name: 'COMMIT' });
+      const undo = screen.getByRole('button', { name: 'UNDO' });
       const row = centre.parentElement!;
       expect(row.style.display).toBe('flex');
       expect(row.contains(back)).toBe(true);
-      expect(row.contains(commit)).toBe(true);
+      expect(row.contains(undo)).toBe(true);
     });
 
     it('drops the title rather than clipping it when the cabinet is narrow', () => {
@@ -845,7 +1031,7 @@ describe('playing a turn on the map', () => {
         expect(screen.queryByText('Rail Baron')).not.toBeInTheDocument();
         // The turn text is short and stays even where the title would not.
         expect(screen.getByText(/is up|your turn/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'COMMIT' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'UNDO' })).toBeInTheDocument();
       } finally {
         measured.mockRestore();
       }
@@ -860,18 +1046,26 @@ describe('playing a turn on the map', () => {
       expect(screen.getByText(/is up/i)).toBeInTheDocument();
     });
 
-    it('goes to the baron up when asked', async () => {
+    it('frames the whole journey when asked — the baron and their destination together', async () => {
       const user = userEvent.setup();
       const { box } = drawn();
-      const at = replay(midTurn).seats.red.at!;
-      const pawn = layout(1400, 788).byId.get(at)!;
+      const pawn = layout(1400, 788).byId.get(replay(midTurn).seats.red.at!)!;
+      const dest = layout(1400, 788).byId.get(nodeForCity(ST_PAUL))!;
 
       await user.click(screen.getByRole('button', { name: /find the baron/i }));
 
       const [x, y, width, height] = box();
       expect(width).toBeLessThan(1400);
-      expect(x! + width! / 2).toBeCloseTo(pawn.x, 0);
-      expect(y! + height! / 2).toBeCloseTo(pawn.y, 0);
+      // Both ends of the trip inside the frame...
+      for (const p of [pawn, dest]) {
+        expect(p.x).toBeGreaterThan(x!);
+        expect(p.x).toBeLessThan(x! + width!);
+        expect(p.y).toBeGreaterThan(y!);
+        expect(p.y).toBeLessThan(y! + height!);
+      }
+      // ...and centred between them, not on one end.
+      expect(x! + width! / 2).toBeCloseTo((pawn.x + dest.x) / 2, 0);
+      expect(y! + height! / 2).toBeCloseTo((pawn.y + dest.y) / 2, 0);
     });
   });
 

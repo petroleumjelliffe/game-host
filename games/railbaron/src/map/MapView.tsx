@@ -7,7 +7,8 @@ import { DiceReadout } from '../board/DiceReadout';
 import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
-import { needsDestination } from '../state/turns';
+import { destinationOf, needsDestination } from '../state/turns';
+import { chipSide, EngineChip, GLIDE } from './EngineChip';
 import {
   CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, visualRadius, type Placed
 } from './geo';
@@ -63,10 +64,12 @@ type Spent = 'true' | 'part' | null;
 const spentState = (crossings: number, lines: number): Spent =>
   crossings <= 0 ? null : crossings >= lines ? 'true' : 'part';
 
-function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'> & {
+function Track({ nodes, edges, spent, spentColor }: Pick<ReturnType<typeof layout>, 'edges'> & {
   nodes: Map<string, Placed>;
   /** Crossings this trip, by section — the very map the engine refuses steps with. */
   spent: ReadonlyMap<string, number>;
+  /** The baron up's colour — spent track is theirs alone, and lights in it. */
+  spentColor: string;
 }) {
   // Geometry depends on the projection alone, so tapping out a route — which
   // changes `spent` on every step — does not recompute any of it.
@@ -112,20 +115,52 @@ function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'>
                     x1={s.a.x + s.nx * k} y1={s.a.y + s.ny * k}
                     x2={s.b.x + s.nx * k} y2={s.b.y + s.ny * k}
                     stroke={RAILROADS.get(id)?.color ?? '#8b6a42'}
-                    strokeWidth={1.5} strokeLinecap="round"
-                    // Spent track burns out: the colour drops away and the
-                    // dark bed beneath shows through. Part-spent track is
-                    // dashed — still there, and only on another line.
-                    opacity={state === 'true' ? 0.12 : 0.85}
-                    {...(state === 'part' ? { strokeDasharray: '3 3' } : {})}
+                    strokeWidth={1.5} strokeLinecap="round" opacity={0.85}
                   />
                 );
               })}
+              {/* Spent track lights up in the baron's colour instead of the
+                  old burn-out: where the trip has been is the thing the
+                  player is actually reading, and a lit line is legible where
+                  colour draining to 12% never was. `usedAfter` counts the
+                  draft's own steps, so this is also the tapped route drawing
+                  itself — one vocabulary for "traveled", live and committed. */}
+              {state !== null && (
+                <TraveledSegment a={s.a} b={s.b} color={spentColor}
+                                 partial={state === 'part'} />
+              )}
             </g>
           );
         })}
       </g>
     </>
+  );
+}
+
+/**
+ * One segment of track the trip has traveled, in the mover's own colour: a
+ * wide soft underlay and a bright line over it, so the route reads as lit
+ * from beneath rather than merely drawn on. Each segment fades in as the
+ * pawn takes it — the animation runs once on mount, which is exactly when
+ * the step was walked. The spent track and the committed trail both draw
+ * through this, so the route being tapped out and the route playing back
+ * cannot look like two different things.
+ *
+ * `partial` is the shared-trackage case: one line across the section is
+ * crossed, another still free. The section is lit — it has been traveled —
+ * but the bright line holds back, so a fully spent section still reads
+ * brighter than one the pawn may cross again.
+ */
+function TraveledSegment({ a, b, color, partial = false }: {
+  a: Placed; b: Placed; color: string; partial?: boolean;
+}) {
+  return (
+    <g data-motion="" style={{ animation: 'rb-fade 260ms linear both' }}>
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
+            strokeWidth={9} strokeLinecap="round" opacity={0.16} />
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
+            strokeWidth={3} strokeLinecap="round" opacity={partial ? 0.5 : 0.95} />
+    </g>
   );
 }
 
@@ -258,10 +293,23 @@ function NodeLabels({ nodes }: { nodes: readonly Placed[] }) {
  * the ones offered at this moment, and they are the ones in this layer. See
  * `sizeCandidates`.
  */
-function InteractionLayer({ nodes, legal, enabled, onTap, onHover }: {
+function InteractionLayer({ nodes, legal, enabled, onTap, onHover, action }: {
   nodes: readonly Placed[]; legal: ReadonlySet<NodeId>; enabled: boolean;
   onTap: (id: NodeId) => void;
   onHover: (id: NodeId | null) => void;
+  /**
+   * The chip's own tap, riding above the baron up's engine: the dice when it
+   * is time to roll, END TURN when the leg is done. It lives here, not on the
+   * chip, because this layer is the one place a hit target may paint — and it
+   * is offered independently of `enabled`, because the Bonus Roll is taken
+   * exactly when every lamp is closed.
+   */
+  action: {
+    label: string; x: number; y: number;
+    /** The chip has swung under the engine — the target follows it. */
+    below: boolean;
+    onTap: () => void;
+  } | null;
 }) {
   const targets = useMemo(() => {
     const candidates = nodes.filter(node => legal.has(node.id));
@@ -271,6 +319,16 @@ function InteractionLayer({ nodes, legal, enabled, onTap, onHover }: {
 
   return (
     <g>
+      {action && (
+        <rect
+          x={action.x - 44} y={action.below ? action.y - 14 : action.y - 80}
+          width={88} height={94}
+          fill="transparent"
+          role="button" aria-label={action.label}
+          onClick={action.onTap}
+          style={{ cursor: 'pointer' }}
+        />
+      )}
       {enabled && targets.map(({ node, hit }) => {
         const label = node.kind === 'city' ? (node.name ?? node.id) : `Dot ${node.id}`;
         return (
@@ -323,7 +381,9 @@ export interface MapViewProps {
  * navigating here to move — an extra trip every turn, on the view that is
  * *not* where the turn happens. The same component renders here, through the
  * same `onRollDice`/`onDiceLanded` gate, so there is one implementation and
- * one gate on two surfaces.
+ * one gate on two surfaces — and the roll stays on show at the top for the
+ * whole turn, which is what makes the chip's counter under it legible: a
+ * count spending down means little without the roll it is spending.
  */
 export function MapView({
   state, onBack, onMove, dice, onRollDice, onDiceLanded, viewer = 'all'
@@ -376,12 +436,23 @@ export function MapView({
   const owesBonus = state.turn !== null && !owesDestination && state.bonusOwed;
 
   // The path comes from the log, not from the draft: this is what makes the
-  // walk visible in the tab that played it *and* any tab just watching along.
+  // walk visible in any tab just watching along.
   const lastMove = state.lastMove;
+  /**
+   * Whether this device is the one that made the move. The animation is for
+   * players the move is *broadcast* to — whoever tapped it out has already
+   * watched it happen, and replaying it at them doubles the move. The shared
+   * tablet is every seat's own device, so it never watches a replay; online,
+   * only the mover's phone skips it. The path still lands complete (the trail
+   * draws in full at once), only the walk itself is skipped.
+   */
+  const ownMove = lastMove !== null
+    && (viewer === 'all' || viewer === lastMove.seat);
   // The mover is part of the key: two barons can commit the same dots one
   // after the other, and the path alone would make the second walk look like
   // the first still showing.
-  const replaying = usePlayback(lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null);
+  const replaying = usePlayback(
+    lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null, !ownMove);
 
   /**
    * Where the baron up has walked to so far this leg.
@@ -426,6 +497,24 @@ export function MapView({
     else out.set(playing.at, [playing.seat]);
     return out;
   }, [state, lastMove, replaying.shown, replaying.done, walkedTo]);
+
+  /**
+   * The pawns flattened to one entry per seat, in seat order. Keyed by seat
+   * rather than by node deliberately: a pawn that keeps its element across a
+   * move is what the glide transition carries to the new node — a key that
+   * changes with the node would remount it already arrived, and the move
+   * would cut instead of travel.
+   */
+  const engines = useMemo(() => {
+    const out: { seat: SeatId; node: Placed; slot: number }[] = [];
+    for (const [id, seats] of standing) {
+      const node = board.byId.get(id);
+      if (!node) continue;
+      seats.forEach((seatId, slot) => { out.push({ seat: seatId, node, slot }); });
+    }
+    out.sort((a, b) => SEATS.indexOf(a.seat) - SEATS.indexOf(b.seat));
+    return out;
+  }, [standing, board]);
 
   const playing = SEATS
     .map(id => state.seats[id])
@@ -473,6 +562,39 @@ export function MapView({
     ? null
     : walkedTo ?? state.seats[state.turn].at;
   const baron = standingAt === null ? undefined : board.byId.get(standingAt);
+  /** The other end of the journey FIND frames — the destination, once rolled. */
+  const destinationCity = upNext === null ? null : destinationOf(upNext);
+  const destinationNode = destinationCity === null
+    ? undefined
+    : board.byId.get(nodeForCity(destinationCity));
+
+  /**
+   * Whether the chip is on duty at all: a turn under way with somewhere to
+   * walk, and no committed move still playing back over it.
+   */
+  const chipShowing = state.turn !== null && !owesDestination && replaying.done
+    && baron !== undefined;
+
+  /**
+   * Which side of the engine the chip rides: out of the way of the lit
+   * candidates, which are exactly what the player is looking at next.
+   */
+  const side = baron === undefined
+    ? 'above' as const
+    : chipSide(baron, [...route.legal]
+        .map(id => board.byId.get(id))
+        .filter((node): node is Placed => node !== undefined));
+
+  /**
+   * The one tap the chip offers — END TURN, the commit — drawn as a target in
+   * the interaction layer (see its `action` prop for why it lives there). A
+   * pan begun on the chip must not also take its tap — the same rule every
+   * lamp follows.
+   */
+  const chipAction = !chipShowing || baron === undefined || !route.canCommit
+    ? null
+    : { label: 'End turn', x: baron.x, y: baron.y, below: side === 'below',
+        onTap: () => { if (!viewport.wasDrag()) route.commit(); } };
 
   return (
     <div style={{
@@ -483,6 +605,18 @@ export function MapView({
       background: '#e8e6e1',
       fontFamily: "'Roboto Condensed', system-ui, sans-serif"
     }}>
+      {/* The map's own motion vocabulary: the fade a traveled segment arrives
+          with, and the breathing of the engine whose turn it is. Keyframes
+          cannot be written inline, so this is the map's one style tag — and
+          everything tagged data-motion goes still, transitions included, for
+          anyone who asked the system for reduced motion. */}
+      <style>{`
+        @keyframes rb-fade { from { opacity: 0 } }
+        @keyframes rb-breathe { 0%, 100% { opacity: 0.95 } 50% { opacity: 0.62 } }
+        @media (prefers-reduced-motion: reduce) {
+          [data-motion] { animation: none !important; transition: none !important }
+        }
+      `}</style>
       {/* A tap anywhere on the cabinet finishes a playing-back move early —
           the same rule this board already applies to a flap. Harmless once
           there is nothing left to skip: `usePlayback` treats a further call
@@ -534,7 +668,8 @@ export function MapView({
           <path d={board.landPath} fill="rgba(255,240,214,0.045)" stroke="#d6ab6d" strokeWidth={1.5}
                 strokeLinejoin="round" />
 
-          <Track edges={board.edges} nodes={board.byId} spent={spentTrack} />
+          <Track edges={board.edges} nodes={board.byId} spent={spentTrack}
+                 spentColor={state.turn === null ? '#fff6e2' : SEAT_COLORS[state.turn]} />
 
           {/* The portion of the last committed move walked so far — the same
               path everyone watching this log sees, drawn in the mover's own
@@ -546,36 +681,18 @@ export function MapView({
                 const b = board.byId.get(id);
                 if (!a || !b) return null;
                 return (
-                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                        stroke={SEAT_COLORS[lastMove.seat]} strokeWidth={3.4}
-                        strokeLinecap="round" opacity={0.7} />
+                  <TraveledSegment key={i} a={a} b={b}
+                                   color={SEAT_COLORS[lastMove.seat]} />
                 );
               })}
             </g>
           )}
 
-          {/* The route as tapped out so far, drawn over the track so it reads
-              as the line the pawn is about to walk. */}
-          {drafted && (
-            <g data-route="draft">
-              {/* Keyed by position, deliberately. A route may pass through the
-                  same node twice — an edge carrying two railroads may be
-                  crossed once on each — so keying by node id would collide and
-                  React would reconcile two segments into one, dropping a leg
-                  of the drawn route. The list is positional and never
-                  reordered, which is exactly when an index key is right. */}
-              {drafted.slice(1).map((id, i) => {
-                const a = board.byId.get(drafted[i]!);
-                const b = board.byId.get(id);
-                if (!a || !b) return null;
-                return (
-                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                        stroke="#fff6e2" strokeWidth={3.4} strokeLinecap="round"
-                        opacity={0.9} />
-                );
-              })}
-            </g>
-          )}
+          {/* There is no separate drawing of the draft any more. The route as
+              tapped out IS the spent track: `usedAfter` counts the draft's
+              steps section by section, so the lit treatment inside Track
+              draws each one as it is taken — and what is drawn lit is exactly
+              what `section-used` will refuse, one map for both. */}
 
           <g>
             {board.nodes.filter(n => n.kind === 'dot').map(node => {
@@ -609,22 +726,60 @@ export function MapView({
             })}
           </g>
 
-          {/* One pawn per baron, stacked where several share a node. */}
+          {/* One engine per baron, stacked where several share a node. The
+              look is the 5b piece from `Train Movement Style.dc.html`: a
+              seat-coloured disc in a dark rim with a specular catch, and —
+              on the baron up alone — a glow that breathes. Position is a
+              transform on the group so a move glides it there; see `engines`
+              above for why the key is the seat. */}
           <g>
-            {[...standing].map(([id, seats]) => {
-              const node = board.byId.get(id);
-              if (!node) return null;
-              return seats.map((seatId, i) => (
-                <g key={`${id}-${seatId}`} role="img" data-node={id}
-                   aria-label={state.seats[seatId].name ?? seatId}>
-                  <circle cx={node.x + i * 5} cy={node.y - 11} r={5}
-                          fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4}
-                          pointerEvents="none" />
+            {engines.map(({ seat: seatId, node, slot }) => {
+              const active = seatId === state.turn;
+              const color = SEAT_COLORS[seatId];
+              return (
+                <g key={seatId} role="img" data-node={node.id} data-motion=""
+                   aria-label={state.seats[seatId].name ?? seatId}
+                   style={{
+                     transform: `translate(${node.x + slot * 5}px, ${node.y - 11}px)`,
+                     transition: GLIDE
+                   }}>
+                  {active && (
+                    <g aria-hidden="true">
+                      <circle r={17} fill={color} opacity={0.18} pointerEvents="none" />
+                      <circle r={9} fill={color} opacity={0.34} pointerEvents="none" />
+                    </g>
+                  )}
+                  <g aria-hidden="true" data-motion=""
+                     style={active
+                       ? { animation: 'rb-breathe 1.6s ease-in-out infinite' }
+                       : undefined}>
+                    <circle cy={0.6} r={6.4} fill="#100c08" opacity={0.55}
+                            pointerEvents="none" />
+                    <circle r={5.6} fill={color} stroke="#100c08" strokeWidth={1.4}
+                            pointerEvents="none" />
+                    <circle cx={-1.7} cy={-1.6} r={1.5} fill="#fff" opacity={0.7}
+                            pointerEvents="none" />
+                  </g>
                   <title>{state.seats[seatId].name}</title>
                 </g>
-              ));
+              );
             })}
           </g>
+
+          {/* The chip riding above the baron up's engine — the count, then
+              END TURN. Hidden while a destination is owed (there is nothing
+              to walk) and while a committed move is playing back (the walk on
+              show is the log's, not a draft's); with nothing to say — a Bonus
+              Roll owed, the whites unthrown — it draws nothing. */}
+          {chipShowing && state.turn !== null && baron !== undefined && (
+            <EngineChip
+              x={baron.x} y={baron.y}
+              color={SEAT_COLORS[state.turn]}
+              remaining={route.remaining}
+              done={route.canCommit}
+              side={side}
+            />
+          )}
 
           {/* The tappable surface, last of all: see InteractionLayer above
               for why it must render after every painted lamp and pawn.
@@ -647,6 +802,7 @@ export function MapView({
             nodes={board.nodes}
             legal={route.legal}
             enabled={canTap}
+            action={chipAction}
             onHover={setPointedAt}
             /* A pan begun on a lamp must not also tap it. The lamps sit on
                the surface the player drags, so without this every drag that
@@ -655,6 +811,10 @@ export function MapView({
           />
         </svg>
 
+        {/* The roll, on show at the top for the whole turn — the persistent
+            record the chip's counter is spending down. Tapping it is also how
+            the dice are thrown here, white pair and Bonus Roll alike, through
+            the same gate the board uses. */}
         <div style={{
           position: 'absolute', top: 68, left: '50%', transform: 'translateX(-50%)',
           width: 184, height: 56, zIndex: 4
@@ -727,20 +887,19 @@ export function MapView({
           ) : <div style={{ flex: '1 1 auto' }} />}
 
           {/* The turn's controls. The draft they act on lives in screen state
-              and never in the log, which is why UNDO costs nothing and COMMIT
-              is the only thing here that writes anything down. */}
+              and never in the log, which is why UNDO costs nothing — the one
+              thing that writes anything down is END TURN, over the engine. */}
           {state.turn !== null && owesDestination && (
             <div style={{
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+              {/* One button, not a notice beside a separate way out: the roll
+                  it names lives on the board, so saying it IS the way there. */}
+              <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
                 {state.rolled === null
                   ? 'ROLL A NEW DESTINATION'
                   : 'ARRIVED — ROLL A NEW DESTINATION'}
-              </span>
-              <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
-                TO THE BOARD
               </button>
             </div>
           )}
@@ -750,6 +909,8 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
+              {/* A notice, not the control: the roll that clears it is the
+                  readout this screen already shows, three inches away. */}
               <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
                 BONUS ROLL — TAKE THE RED DIE
               </span>
@@ -761,9 +922,12 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-                {route.remaining} left
-              </span>
+              {/* Only UNDO is left up here. The rest of the turn rides the
+                  engine itself: the dice wait there to be thrown, the count
+                  spends down there, and END TURN — the tap that commits — is
+                  the pill the counter hardens into. UNDO stays on the rail
+                  because it acts on the route as a whole, not on the place
+                  the pawn stands. */}
               <button
                 onClick={route.undo}
                 disabled={!route.draft?.steps.length}
@@ -774,17 +938,6 @@ export function MapView({
                 }}
               >
                 UNDO
-              </button>
-              <button
-                onClick={route.commit}
-                disabled={!route.canCommit}
-                style={{
-                  ...HUD_BUTTON,
-                  cursor: route.canCommit ? 'pointer' : 'default',
-                  opacity: route.canCommit ? 1 : 0.45
-                }}
-              >
-                COMMIT
               </button>
             </div>
           )}
@@ -822,7 +975,11 @@ export function MapView({
           {baron && (
             <button
               aria-label="Find the baron up"
-              onClick={() => viewport.goTo(baron)}
+              /* The whole journey, not one end of it: where the pawn stands
+                 and where it is going, framed together. Mid-trip with no
+                 destination rolled yet, the pawn alone is the journey. */
+              onClick={() => viewport.fitTo(destinationNode !== undefined
+                ? [baron, destinationNode] : [baron])}
               style={{ ...HUD_BUTTON, cursor: 'pointer' }}
             >
               FIND

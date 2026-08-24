@@ -11,7 +11,10 @@ import { office } from './office';
 const opening: GameEvent[] = [
   { type: 'joined', seat: 'red', name: 'ADA' },
   { type: 'joined', seat: 'green', name: 'GRACE' },
-  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+  // Starting cash zeroed: this file's subject is affordability read off a
+  // single banked payout, and the published $20,000 cushion would make
+  // every line affordable.
+  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000, startingCash: 0 } },
   { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
   { type: 'arrived', seat: 'green', city: 47, region: 'PL', payout: null },
   { type: 'orderRolled', seat: 'red', first: 'red' },

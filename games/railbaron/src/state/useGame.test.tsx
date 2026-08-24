@@ -323,8 +323,14 @@ describe('phase 2 money actions', () => {
 
   it('sells while short, and only while short', () => {
     // Scripted straight into the log — the fold is tolerant — so red holds
-    // three cheap railroads and sits below zero.
-    const shortLog: GameEvent[] = [...funded,
+    // three cheap railroads and sits below zero. Starting cash zeroed:
+    // this test's subject is the ledger going short, and the published
+    // $20,000 cushion would hide it.
+    const broke: GameEvent[] = funded.map((e) => e.type === 'started'
+      ? { type: 'started',
+          rules: { ...PUBLISHED_RULES, winTarget: 1000, startingCash: 0 } } as GameEvent
+      : e);
+    const shortLog: GameEvent[] = [...broke,
       { type: 'bought', seat: 'red', railroad: 'B&M', price: railroadPrice('B&M') },
       { type: 'bought', seat: 'red', railroad: 'RF&P', price: railroadPrice('RF&P') },
       { type: 'bought', seat: 'red', railroad: 'NYNH&H', price: railroadPrice('NYNH&H') },

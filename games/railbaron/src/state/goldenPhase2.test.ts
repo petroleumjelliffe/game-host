@@ -23,6 +23,8 @@ const id = (name: string): CityId => {
   return city.id;
 };
 
+const START = PUBLISHED_RULES.startingCash;
+
 const CHICAGO = id('Chicago');
 const NEW_YORK = id('New York');
 const LOS_ANGELES = id('Los Angeles');
@@ -67,8 +69,8 @@ const opening = (rules: object = { winTarget: 1000 }): GameEvent[] => [
 ];
 
 /** Red banks Chicago–New York, blue banks Miami–LA; red's window is open. */
-const brink = (): GameEvent[] => [
-  ...opening(),
+const brink = (rules?: object): GameEvent[] => [
+  ...(rules === undefined ? opening() : opening(rules)),
   assign('red', CHICAGO, NEW_YORK),
   ...walk('red', CHICAGO, NEW_YORK),
   assign('blue', MIAMI, LOS_ANGELES),
@@ -89,7 +91,8 @@ describe('the purchase window, used and skipped', () => {
     const state = replay(log);
     expect(state.seats.red.holdings).toEqual(['B&M', 'RF&P']);
     expect(state.seats.red.banked).toBe(
-      payoutBetween(CHICAGO, NEW_YORK) - railroadPrice('B&M') - railroadPrice('RF&P'));
+      START + payoutBetween(CHICAGO, NEW_YORK)
+      - railroadPrice('B&M') - railroadPrice('RF&P'));
   });
 });
 
@@ -103,21 +106,21 @@ describe('fee bills at all three tiers, and the flip both ways', () => {
   it('bills $5,000 while any railroad is unowned, $10,000 once none is, and drops back on a sale', () => {
     // Blue owns C&NW alone: the c13–d131 crossing pays the owner tier.
     const some = replay([...opening(), buy('blue', 'C&NW'), ...crossing]);
-    expect(some.seats.red.banked).toBe(-OWNER_FEE);
+    expect(some.seats.red.banked).toBe(START - OWNER_FEE);
 
     // Blue owns all 28 (scripted; the fold is tolerant of the debt):
     // the same crossing pays the all-owned tier.
     const allBought = everyRailroad.map((line) => buy('blue', line));
     const all = replay([...opening(), ...allBought, ...crossing]);
     expect(all.owners.size).toBe(28);
-    expect(all.seats.red.banked).toBe(-ALL_OWNED_FEE);
+    expect(all.seats.red.banked).toBe(START - ALL_OWNED_FEE);
 
     // A sale to the bank flips the tier straight back down.
     const after = replay([...opening(), ...allBought,
       { type: 'sold', seat: 'blue', railroad: 'GN', price: bankSalePrice('GN') },
       ...crossing]);
     expect(after.owners.size).toBe(27);
-    expect(after.seats.red.banked).toBe(-OWNER_FEE);
+    expect(after.seats.red.banked).toBe(START - OWNER_FEE);
   });
 });
 
@@ -162,7 +165,9 @@ describe('a declare cancelled by fees reaches its alternate', () => {
   it('the bill breaks the target, the trip redirects, the alternate pays', () => {
     const target = payoutBetween(CHICAGO, NEW_YORK);
     const cancelled: GameEvent[] = [
-      ...opening({ winTarget: target }),
+      // Starting cash zeroed: this test's subject is a fee breaking the
+      // target, and the published $20,000 cushion would keep it unbroken.
+      ...opening({ winTarget: target, startingCash: 0 }),
       assign('red', CHICAGO, NEW_YORK), ...walk('red', CHICAGO, NEW_YORK),
       declare('red', NEW_YORK, MIAMI),
       { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
@@ -235,7 +240,9 @@ describe('liquidation, forced and cleared', () => {
     // Red buys down to $1,000, blue takes C&NW, and red's next turn rides
     // it: $5,000 owed on $1,000 in hand. Every append goes through the
     // gate, so the fixture is itself proof the flow arises in legal play.
-    let log = brink();
+    // Starting cash zeroed: this test's subject is the ledger going short,
+    // and the published $20,000 cushion would hide it.
+    let log = brink({ winTarget: 1000, startingCash: 0 });
     log = play(log, buy('red', 'WP'), 'red');
     log = play(log, assign('red', NEW_YORK, STP), 'red');
     log = play(log, { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null }, 'red');

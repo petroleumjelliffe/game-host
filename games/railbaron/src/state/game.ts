@@ -170,8 +170,14 @@ export function replay(events: readonly GameEvent[]): GameState {
   const credit = (sid: SeatId, amount: number): void => {
     adjust.set(sid, (adjust.get(sid) ?? 0) + amount);
   };
+  // Starting cash rides in front of the ledger rather than being credited by
+  // an event: logs from before the rule existed replay with it too, which is
+  // the point — those games were simply short $20,000 that the rulebook says
+  // every baron had. A log whose `started` names its own startingCash keeps
+  // its own number, exactly as winTarget already works.
   const cashOf = (sid: SeatId): number =>
-    state.seats[sid].earned - (inFlight.get(sid) ?? 0) + (adjust.get(sid) ?? 0);
+    state.rules.startingCash
+    + state.seats[sid].earned - (inFlight.get(sid) ?? 0) + (adjust.get(sid) ?? 0);
 
   const settleFees = (turn: OpenTurn): void => {
     // "He must pay all the fines and penalties each turn" — settled here,

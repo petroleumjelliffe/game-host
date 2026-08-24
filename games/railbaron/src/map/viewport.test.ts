@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ZOOM, centreOn, fit, frame, panBy, screenToMap, viewBox, zoomAbout,
+  ZOOM, centreOn, fit, fitPoints, frame, panBy, screenToMap, viewBox, zoomAbout,
   type Size, type View
 } from './viewport';
 
@@ -110,6 +110,39 @@ describe('the map viewport', () => {
   it('writes the frame as an SVG viewBox', () => {
     const box = viewBox({ k: 2, cx: 700, cy: 394 }, SQUARE_ON, EXTENT);
     expect(box).toBe('350 197 700 394');
+  });
+
+  it('fits a journey: both ends in frame with air, centred between them', () => {
+    const a = { x: 300, y: 300 };
+    const b = { x: 700, y: 400 };
+    const view = fitPoints([a, b], 3, SQUARE_ON, EXTENT);
+    const f = frame(view, SQUARE_ON, EXTENT);
+    for (const p of [a, b]) {
+      expect(p.x).toBeGreaterThan(f.x);
+      expect(p.x).toBeLessThan(f.x + f.width);
+      expect(p.y).toBeGreaterThan(f.y);
+      expect(p.y).toBeLessThan(f.y + f.height);
+    }
+    expect(view.cx).toBeCloseTo(500);
+    expect(view.cy).toBeCloseTo(350);
+    expect(view.k).toBeGreaterThan(1);
+  });
+
+  it('never dives closer than the cap, even for one point alone', () => {
+    // The pawn standing at its destination is a journey of no length; the
+    // fit must land at the follow zoom, not at ZOOM.max.
+    const view = fitPoints([{ x: 500, y: 300 }], 3, SQUARE_ON, EXTENT);
+    expect(view.k).toBe(3);
+    expect(view.cx).toBeCloseTo(500);
+    expect(view.cy).toBeCloseTo(300);
+  });
+
+  it('falls back toward extents for a coast-to-coast journey', () => {
+    const view = fitPoints(
+      [{ x: 100, y: 200 }, { x: 1300, y: 600 }], 3, SQUARE_ON, EXTENT);
+    // 1200 wide plus the padding wants more width than the whole map allows
+    // past k ≈ 1.06 — nowhere near the cap.
+    expect(view.k).toBeLessThan(1.2);
   });
 });
 

@@ -19,6 +19,7 @@ const CHICAGO = id('Chicago');
 const NEW_YORK = id('New York');
 const MIAMI = id('Miami');
 const PAY = payoutBetween(CHICAGO, NEW_YORK);
+const START = PUBLISHED_RULES.startingCash;
 
 const home = (seat: SeatId, city: CityId): GameEvent =>
   ({ type: 'arrived', seat, city, region: cityById(city).region, payout: null });
@@ -43,8 +44,9 @@ const trip = (rules: object): GameEvent[] => [
 describe('MoneyStrip', () => {
   it("shows each seated baron's banked total in dollars", () => {
     render(<MoneyStrip state={replay(trip({}))} />);
-    expect(screen.getByText(`$${PAY.toLocaleString('en-US')}`)).toBeInTheDocument();
-    expect(screen.getByText('$0')).toBeInTheDocument(); // Ben, no trips yet
+    expect(screen.getByText(`$${(START + PAY).toLocaleString('en-US')}`)).toBeInTheDocument();
+    // Ben, no trips yet: the rulebook's starting cash and nothing more.
+    expect(screen.getByText(`$${START.toLocaleString('en-US')}`)).toBeInTheDocument();
   });
 
   it('marks a declared baron with their home city', () => {
@@ -78,8 +80,10 @@ describe('MoneyStrip', () => {
   });
 
   it('shows holdings and a signed negative balance', () => {
+    // Starting cash zeroed: this test's subject is a negative balance on
+    // the strip, and the published $20,000 cushion would keep it positive.
     const indebted = [
-      ...opening({ winTarget: 1000 }),
+      ...opening({ winTarget: 1000, startingCash: 0 }),
       { type: 'bought', seat: 'red', railroad: 'B&M', price: 4000 },
       { type: 'bought', seat: 'red', railroad: 'WP', price: 8000 },
     ] as GameEvent[];

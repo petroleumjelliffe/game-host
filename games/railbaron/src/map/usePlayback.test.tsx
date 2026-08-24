@@ -42,6 +42,17 @@ describe('walking a committed path', () => {
     expect(result.current.done).toBe(true);
   });
 
+  it('lands complete at once when told not to animate', () => {
+    // The device that made the move already watched it happen — its playback
+    // must be finished on the very first render, never gating anything.
+    const { result } = renderHook(() => usePlayback(PATH, 100, 'red', false));
+    expect(result.current.shown).toEqual(PATH);
+    expect(result.current.done).toBe(true);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(result.current.shown).toEqual(PATH);
+    expect(result.current.done).toBe(true);
+  });
+
   it('starts over when another baron walks the very same dots', () => {
     // Two barons following one another down the same line commit identical
     // paths back-to-back. Keyed on the dots alone the second leg never

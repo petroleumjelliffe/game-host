@@ -10,15 +10,19 @@ describe('parseRules', () => {
   });
 
   it('accepts a full house-rules object, seed included', () => {
-    const result = parseRules({ winTarget: 100000, startingTrain: 'express', seed: 'g' });
+    const result = parseRules(
+      { winTarget: 100000, startingCash: 5000, startingTrain: 'express', seed: 'g' });
     expect(result).toEqual({
-      ok: true, rules: { winTarget: 100000, startingTrain: 'express', seed: 'g' },
+      ok: true,
+      rules: { winTarget: 100000, startingCash: 5000, startingTrain: 'express', seed: 'g' },
     });
   });
 
   it('names the field it refuses', () => {
     expect(parseRules({ winTarget: -5 })).toEqual({ ok: false, field: 'winTarget' });
     expect(parseRules({ winTarget: 'lots' })).toEqual({ ok: false, field: 'winTarget' });
+    expect(parseRules({ startingCash: -5 })).toEqual({ ok: false, field: 'startingCash' });
+    expect(parseRules({ startingCash: 'lots' })).toEqual({ ok: false, field: 'startingCash' });
     expect(parseRules({ startingTrain: 'fast freight' }))
       .toEqual({ ok: false, field: 'startingTrain' });
     expect(parseRules({ seed: 12 })).toEqual({ ok: false, field: 'seed' });

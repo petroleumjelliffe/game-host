@@ -36,7 +36,10 @@ const MIAMI = id('Miami');
 const opening = (aHome: CityId, bHome: CityId): GameEvent[] => [
   { type: 'joined', seat: 'red', name: 'A' },
   { type: 'joined', seat: 'blue', name: 'B' },
-  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+  // Starting cash zeroed: this file's subject is the fee alone landing on
+  // the ledger — going negative included — and the published $20,000
+  // cushion would hide it.
+  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000, startingCash: 0 } },
   home('red', aHome), home('blue', bHome),
   { type: 'orderRolled', seat: 'red', first: 'red' },
 ];
