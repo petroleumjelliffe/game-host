@@ -1,7 +1,7 @@
-import { cityById, nodeForCity, regionById, REGIONS, type RegionId, type TurnRoll } from '../../../engine';
+import { RAILROADS, cityById, nodeForCity, regionById, REGIONS, type RegionId, type TurnRoll } from '../../../engine';
 import { SEATS, type SeatId } from '../../state/events';
 import type { GameState } from '../../state/game';
-import { needsDestination } from '../../state/turns';
+import { mayDeclare, needsDestination } from '../../state/turns';
 import { SEAT_COLORS } from '../../game/tokens';
 import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../types';
 
@@ -104,6 +104,25 @@ export function play(
   if (state.phase === 'playing' && rows.length < BOARD_ROWS - 1) {
     withMap[BOARD_ROWS - 2] = { ...blankRow(), label: 'Undo', text: 'Take back a turn',
                                 tone: 'dim', action: { kind: 'undo' } };
+  }
+
+  // The phase-2 rows, on the Undo precedent: pinned indices, only while a
+  // slot is free, barons never displaced — a crowded table simply loses the
+  // extras, and the extras only matter to the actor anyway.
+  if (state.turn !== null && state.phase === 'playing') {
+    const actor = state.seats[state.turn];
+    const windowOpen = actor.run === null && actor.awaiting === null
+      && needsDestination(actor, nodeForCity)
+      && state.owners.size < RAILROADS.size;
+    if (windowOpen && rows.length < BOARD_ROWS - 3) {
+      withMap[BOARD_ROWS - 4] = { ...blankRow(), label: 'Office',
+        text: 'Buy railroads', tone: 'dim', action: { kind: 'office', page: 0 } };
+    }
+    if (mayDeclare(state, state.turn) && rows.length < BOARD_ROWS - 2) {
+      withMap[BOARD_ROWS - 3] = { ...blankRow(), label: 'Declare',
+        text: 'Race for home', tone: 'normal',
+        action: { kind: 'declare', seat: state.turn } };
+    }
   }
 
   withMap.push({

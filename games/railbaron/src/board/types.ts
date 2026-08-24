@@ -1,4 +1,4 @@
-import type { TurnRoll } from '../../engine';
+import type { RailroadId, TurnRoll } from '../../engine';
 import type { SeatId } from '../state/events';
 
 /**
@@ -37,6 +37,14 @@ export type RowAction =
   | { kind: 'begin' }
   /** Give up your seat and go home. Lobby-only; mid-game leaving is a drop. */
   | { kind: 'leave' }
+  /** Buy the named railroad, at the price list's price. */
+  | { kind: 'buy'; railroad: RailroadId }
+  /** Forced sale to the bank, half price — the liquidation screen's rows. */
+  | { kind: 'sell'; railroad: RailroadId }
+  /** Announce the run home; rolls the alternate. */
+  | { kind: 'declare'; seat: SeatId }
+  /** Toggle the railroad office; with a page, turn the listing. */
+  | { kind: 'office'; page?: number }
   | null;
 
 /**

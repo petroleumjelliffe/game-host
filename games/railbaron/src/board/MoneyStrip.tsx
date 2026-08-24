@@ -9,7 +9,8 @@ import { SEAT_COLORS } from '../game/tokens';
 import { SEATS } from '../state/events';
 import type { GameState } from '../state/game';
 
-const dollars = (amount: number): string => `$${amount.toLocaleString('en-US')}`;
+const dollars = (amount: number): string =>
+  `${amount < 0 ? '−' : ''}$${Math.abs(amount).toLocaleString('en-US')}`;
 
 const strip: React.CSSProperties = {
   display: 'flex', flexWrap: 'wrap', gap: '0.35em 1.25em', alignItems: 'baseline',
@@ -39,6 +40,9 @@ export function MoneyStrip({ state }: { state: GameState }) {
             <li key={id}>
               <span style={{ color: SEAT_COLORS[id] }}>●</span>{' '}
               <span>{seat.name}</span> <strong>{dollars(seat.banked)}</strong>
+              {seat.holdings.length > 0 && (
+                <span> · {seat.holdings.length} RR</span>
+              )}
               {seat.run !== null && state.winner === null && (
                 <em>{seat.run.toHome
                   ? ` declared — racing home to ${seat.home === null ? '?' : cityById(seat.home).name}`

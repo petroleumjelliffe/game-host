@@ -76,4 +76,16 @@ describe('MoneyStrip', () => {
     render(<MoneyStrip state={replay(won)} />);
     expect(screen.getByText(/Ada wins/i)).toBeInTheDocument();
   });
+
+  it('shows holdings and a signed negative balance', () => {
+    const indebted = [
+      ...opening({ winTarget: 1000 }),
+      { type: 'bought', seat: 'red', railroad: 'B&M', price: 4000 },
+      { type: 'bought', seat: 'red', railroad: 'WP', price: 8000 },
+    ] as GameEvent[];
+    render(<MoneyStrip state={replay(indebted)} />);
+    expect(screen.getByText(/2 RR/)).toBeInTheDocument();
+    expect(screen.getByText('−$12,000')).toBeInTheDocument();
+  });
 });
+
