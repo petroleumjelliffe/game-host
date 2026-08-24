@@ -3,7 +3,7 @@ import {
   cityById, nodeForCity, path as pathOf, sectionKey, usedAfter,
   type NodeId, type RegionId, type TurnRoll
 } from '../../engine';
-import { SEAT_COLORS, TOKENS } from '../game/tokens';
+import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { needsDestination } from '../state/turns';
@@ -278,10 +278,18 @@ function NodeLabels({ nodes }: { nodes: readonly Placed[] }) {
  * the ones offered at this moment, and they are the ones in this layer. See
  * `sizeCandidates`.
  */
-function InteractionLayer({ nodes, legal, enabled, onTap, onHover }: {
+function InteractionLayer({ nodes, legal, enabled, onTap, onHover, action }: {
   nodes: readonly Placed[]; legal: ReadonlySet<NodeId>; enabled: boolean;
   onTap: (id: NodeId) => void;
   onHover: (id: NodeId | null) => void;
+  /**
+   * The chip's own tap, riding above the baron up's engine: the dice when it
+   * is time to roll, END TURN when the leg is done. It lives here, not on the
+   * chip, because this layer is the one place a hit target may paint — and it
+   * is offered independently of `enabled`, because the Bonus Roll is taken
+   * exactly when every lamp is closed.
+   */
+  action: { label: string; x: number; y: number; onTap: () => void } | null;
 }) {
   const targets = useMemo(() => {
     const candidates = nodes.filter(node => legal.has(node.id));
@@ -291,6 +299,15 @@ function InteractionLayer({ nodes, legal, enabled, onTap, onHover }: {
 
   return (
     <g>
+      {action && (
+        <rect
+          x={action.x - 44} y={action.y - 80} width={88} height={94}
+          fill="transparent"
+          role="button" aria-label={action.label}
+          onClick={action.onTap}
+          style={{ cursor: 'pointer' }}
+        />
+      )}
       {enabled && targets.map(({ node, hit }) => {
         const label = node.kind === 'city' ? (node.name ?? node.id) : `Dot ${node.id}`;
         return (
@@ -343,9 +360,9 @@ export interface MapViewProps {
  * then navigating here to move — an extra trip every turn, on the view that
  * is *not* where the turn happens. The map goes through the same
  * `onRollDice`/`onDiceLanded` gate, so there is one gate on two surfaces —
- * but it wears the map's own costume: the tap is a HUD button, and the throw
- * tumbles on the chip above the engine (`EngineChip`), which is also what
- * reports the landing here.
+ * but it wears the map's own costume: the dice wait, are tapped, and tumble
+ * on the chip above the engine (`EngineChip`, plus the interaction layer's
+ * target riding it), which is also what reports the landing here.
  */
 export function MapView({
   state, onBack, onMove, dice, onRollDice, onDiceLanded, viewer = 'all'
@@ -513,6 +530,31 @@ export function MapView({
     ? null
     : walkedTo ?? state.seats[state.turn].at;
   const baron = standingAt === null ? undefined : board.byId.get(standingAt);
+
+  /**
+   * Whether the chip is on duty at all: a turn under way with somewhere to
+   * walk, and no committed move still playing back over it.
+   */
+  const chipShowing = state.turn !== null && !owesDestination && replaying.done
+    && baron !== undefined;
+
+  /**
+   * The one tap the chip offers, drawn as a target in the interaction layer
+   * (see its `action` prop for why it lives there). Time to roll wins: dice
+   * waiting to be thrown and a committable leg cannot both be true, since
+   * `live` means the white pair is unthrown or the Bonus Roll is owed, and
+   * either way there is no finished leg to commit. A pan begun on the chip
+   * must not also take its tap — the same rule every lamp follows.
+   */
+  const chipAction = !chipShowing || baron === undefined
+    ? null
+    : dice.live && dice.mine
+      ? { label: 'Roll the dice', x: baron.x, y: baron.y,
+          onTap: () => { if (!viewport.wasDrag()) onRollDice(); } }
+      : route.canCommit
+        ? { label: 'End turn', x: baron.x, y: baron.y,
+            onTap: () => { if (!viewport.wasDrag()) route.commit(); } }
+        : null;
 
   return (
     <div style={{
@@ -706,14 +748,14 @@ export function MapView({
               (the walk on show is the log's, not a draft's). It stays mounted
               through a Bonus Roll being owed: the red die tumbles there when
               thrown, and with nothing to say it draws nothing. */}
-          {state.turn !== null && !owesDestination && replaying.done
-            && baron !== undefined && (
+          {chipShowing && state.turn !== null && baron !== undefined && (
             <EngineChip
               x={baron.x} y={baron.y}
               color={SEAT_COLORS[state.turn]}
               roll={dice.roll}
               remaining={route.remaining}
               done={route.canCommit}
+              live={dice.live && dice.mine}
               onLanded={onDiceLanded}
             />
           )}
@@ -739,6 +781,7 @@ export function MapView({
             nodes={board.nodes}
             legal={route.legal}
             enabled={canTap}
+            action={chipAction}
             onHover={setPointedAt}
             /* A pan begun on a lamp must not also tap it. The lamps sit on
                the surface the player drags, so without this every drag that
@@ -806,20 +849,19 @@ export function MapView({
           ) : <div style={{ flex: '1 1 auto' }} />}
 
           {/* The turn's controls. The draft they act on lives in screen state
-              and never in the log, which is why UNDO costs nothing and COMMIT
-              is the only thing here that writes anything down. */}
+              and never in the log, which is why UNDO costs nothing — the one
+              thing that writes anything down is END TURN, over the engine. */}
           {state.turn !== null && owesDestination && (
             <div style={{
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+              {/* One button, not a notice beside a separate way out: the roll
+                  it names lives on the board, so saying it IS the way there. */}
+              <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
                 {state.rolled === null
                   ? 'ROLL A NEW DESTINATION'
                   : 'ARRIVED — ROLL A NEW DESTINATION'}
-              </span>
-              <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
-                TO THE BOARD
               </button>
             </div>
           )}
@@ -829,26 +871,12 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              {/* The tap that throws it, when these dice are this device's to
-                  throw. The readout used to carry the tap; the chip that
-                  replaced it is scenery, so the HUD holds it now, under the
-                  readout's own accessible name — it is the same action. */}
-              {dice.live && dice.mine ? (
-                <button
-                  aria-label="Roll the dice"
-                  onClick={onRollDice}
-                  style={{
-                    ...HUD_BUTTON, cursor: 'pointer',
-                    boxShadow: `0 0 0 2px ${TOKENS.amber}, 0 0 18px rgba(245, 196, 81, 0.35)`
-                  }}
-                >
-                  BONUS ROLL — TAKE THE RED DIE
-                </button>
-              ) : (
-                <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-                  BONUS ROLL — TAKE THE RED DIE
-                </span>
-              )}
+              {/* A notice, not the control: the red die itself sits above the
+                  engine, and the tap that throws it is there — the same place
+                  the pair was thrown from at the top of the turn. */}
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                BONUS ROLL — TAKE THE RED DIE
+              </span>
             </div>
           )}
 
@@ -857,22 +885,12 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              {/* The moves-left count is not here any more — it rides the
-                  chip above the engine, where the spending happens. What the
-                  HUD holds is the turn's two decisions, and — before the
-                  white pair is thrown — the throw itself. */}
-              {dice.live && dice.mine && (
-                <button
-                  aria-label="Roll the dice"
-                  onClick={onRollDice}
-                  style={{
-                    ...HUD_BUTTON, cursor: 'pointer',
-                    boxShadow: `0 0 0 2px ${TOKENS.amber}, 0 0 18px rgba(245, 196, 81, 0.35)`
-                  }}
-                >
-                  ROLL THE DICE
-                </button>
-              )}
+              {/* Only UNDO is left up here. The rest of the turn rides the
+                  engine itself: the dice wait there to be thrown, the count
+                  spends down there, and END TURN — the tap that commits — is
+                  the pill the counter hardens into. UNDO stays on the rail
+                  because it acts on the route as a whole, not on the place
+                  the pawn stands. */}
               <button
                 onClick={route.undo}
                 disabled={!route.draft?.steps.length}
@@ -883,17 +901,6 @@ export function MapView({
                 }}
               >
                 UNDO
-              </button>
-              <button
-                onClick={route.commit}
-                disabled={!route.canCommit}
-                style={{
-                  ...HUD_BUTTON,
-                  cursor: route.canCommit ? 'pointer' : 'default',
-                  opacity: route.canCommit ? 1 : 0.45
-                }}
-              >
-                COMMIT
               </button>
             </div>
           )}

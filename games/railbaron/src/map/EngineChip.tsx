@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TurnRoll } from '../../engine';
 import { COLORS, DICE_MS, PIPS } from '../board/dice';
+import { TOKENS } from '../game/tokens';
 
 /**
  * The chip: one overlay riding above the baron's engine, changing costume as
- * the turn goes — the dice tumble there when thrown, the moves left count
- * down there as the route is tapped out, and END TURN lands there when the
- * leg is spent. Geometry and colours are copied from variant 5b of
- * `Train Movement Style.dc.html` in the Rail Baron Game Board Design project;
- * change them there first.
+ * the turn goes — the dice sit there waiting to be thrown, tumble there when
+ * they are, the moves left count down there as the route is tapped out, and
+ * END TURN lands there when the leg is spent. Geometry and colours are copied
+ * from variant 5b of `Train Movement Style.dc.html` in the Rail Baron Game
+ * Board Design project; change them there first.
  *
  * It is drawn in map coordinates inside the map's own SVG, which is what lets
  * it ride the pan, the zoom and the pawn's own glide without a screen-space
- * projection of its own. Everything here is scenery: no element takes a tap
- * (the roll lives on the HUD), so the interaction layer's guarantee — every
- * hit target above every painted shape — holds without an exception.
+ * projection of its own. Everything here is scenery all the same: the chip's
+ * two actions — throwing the dice, ending the turn — are taken through a
+ * matching target the interaction layer draws over it, so its guarantee that
+ * every hit target paints above every painted shape holds without an
+ * exception. The waiting dice and the END TURN pill are therefore
+ * aria-hidden: the target riding them carries the name.
  */
 
 /**
@@ -68,11 +72,20 @@ export interface EngineChipProps {
   remaining: number;
   /** The leg is finished — arrived, or every move spent — and may commit. */
   done: boolean;
+  /**
+   * It is time to roll, and these dice are this device's to throw. The chip
+   * shows them at rest above the engine — the white pair before the turn's
+   * roll, the red die alone when the Bonus Roll is owed — under the amber
+   * your-move ring, and the interaction layer's target over them is the tap.
+   */
+  live?: boolean;
   /** Fires once per roll, when the tumble has landed. The announce gate. */
   onLanded?: () => void;
 }
 
-export function EngineChip({ x, y, color, roll, remaining, done, onLanded }: EngineChipProps) {
+export function EngineChip({
+  x, y, color, roll, remaining, done, live = false, onLanded
+}: EngineChipProps) {
   const [phase, setPhase] = useState<'idle' | 'tumbling' | 'settled'>('idle');
   const [tick, setTick] = useState(0);
   /** Only the red die turns for a Bonus Roll — the whites were already told. */
@@ -162,9 +175,27 @@ export function EngineChip({ x, y, color, roll, remaining, done, onLanded }: Eng
         ))}
       </g>
     );
+  } else if (live && !done) {
+    // The dice at rest, waiting to be thrown — blank faces, because showing
+    // numbers nobody rolled would read as a roll already made. The amber ring
+    // is the board readout's own your-move mark, worn here instead.
+    const faces = roll === null ? [false, false] : [true];
+    const width = TRAY.pad * 2 + faces.length * DIE.size + (faces.length - 1) * TRAY.gap;
+    const top = -TRAY.lift - TRAY.height;
+    costume = (
+      <g aria-hidden="true">
+        <rect x={-width / 2} y={top} width={width} height={TRAY.height} rx={TRAY.radius}
+              fill="rgba(20,15,10,0.78)" stroke={TOKENS.amber} strokeWidth={1.6}
+              pointerEvents="none" />
+        {faces.map((red, i) => (
+          <Die key={i} x={-width / 2 + TRAY.pad + i * (DIE.size + TRAY.gap)}
+               y={top + (TRAY.height - DIE.size) / 2} value={0} red={red} />
+        ))}
+      </g>
+    );
   } else if (done) {
     costume = (
-      <g role="img" aria-label="End turn">
+      <g aria-hidden="true">
         <rect x={-END.width / 2} y={-END.lift - END.height} width={END.width}
               height={END.height} rx={END.height / 2} fill={color} pointerEvents="none" />
         <text x={0} y={-END.lift - END.height / 2 + 4} textAnchor="middle"
