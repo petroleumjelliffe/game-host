@@ -138,7 +138,9 @@ describe('rules in the fold', () => {
     ];
     const state = replay(log);
     expect(payoutBetween(MPLS, STP)).toBe(0);
-    expect(state.seats.red.banked).toBe(0);
+    // The trip banks nothing — but Minneapolis–St. Paul is a real edge, so
+    // since phase 2 the turn itself bills its $1,000 bank fee at close.
+    expect(state.seats.red.banked).toBe(-1000);
     expect(state.seats.red.homeward).toBe(false);
   });
 });

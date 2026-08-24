@@ -89,7 +89,9 @@ describe('the $0 neighbours', () => {
       log = play(log, move('red', [nodeForCity(from), nodeForCity(to)], true), 'red');
 
       const state = replay(log);
-      expect(state.seats.red.banked).toBe(0);
+      // The trip banks its real $0 — and the twin spur is a real edge, so
+      // since phase 2 the turn bills its $1,000 bank fee at close.
+      expect(state.seats.red.banked).toBe(-1000);
       expect(state.seats.red.homeward).toBe(false);
       expect(state.winner).toBeNull();
     });

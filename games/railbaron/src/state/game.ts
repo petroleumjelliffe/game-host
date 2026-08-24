@@ -3,6 +3,7 @@ import {
   type CityId, type NodeId, type RailroadId, type RegionId, type TrainType, type TurnRoll
 } from '../../engine/index.js';
 import { SEATS, type GameEvent, type SeatId } from './events.js';
+import { turnBill } from './money.js';
 import { PUBLISHED_RULES, type GameRules } from './rules.js';
 import { addSections, rotate } from './turns.js';
 
@@ -105,6 +106,8 @@ interface OpenTurn {
   seat: SeatId;
   roll: TurnRoll;
   legs: number;
+  /** This turn's walked legs, for the fee bill. */
+  paths: NodeId[][];
   /**
    * A turn whose `turnRolled` already carried a bonus face — a log written
    * before the Bonus Roll moved to after the white movement. Those turns keep
@@ -157,6 +160,21 @@ export function replay(events: readonly GameEvent[]): GameState {
   };
   const cashOf = (sid: SeatId): number =>
     state.seats[sid].earned - (inFlight.get(sid) ?? 0) + (adjust.get(sid) ?? 0);
+
+  const settleFees = (turn: OpenTurn): void => {
+    // "He must pay all the fines and penalties each turn" — settled here,
+    // as the turn closes, from the paths it walked (spec Decision 2). The
+    // balance may cross zero: negative is the moment between the bill
+    // landing and the liquidation covering it, and legal.ts is what blocks
+    // play until it does.
+    const bill = turnBill(turn.paths, turn.seat, owners, owners.size === RAILROADS.size);
+    let total = bill.toBank;
+    for (const [owner, fee] of bill.toOwners) {
+      total += fee;
+      credit(owner, fee);
+    }
+    if (total > 0) credit(turn.seat, -total);
+  };
 
   for (const event of events) {
     if (event.type === 'started') {
@@ -212,6 +230,7 @@ export function replay(events: readonly GameEvent[]): GameState {
           seat: event.seat,
           roll: { white: event.white, bonus: event.bonus },
           legs: 0,
+          paths: [],
           legacy: event.bonus !== null
         };
         break;
@@ -243,6 +262,7 @@ export function replay(events: readonly GameEvent[]): GameState {
         };
         state.lastMove = { seat: event.seat, path: event.path, arrived: event.arrived };
         if (open !== null) {
+          open.paths.push(event.path);
           open.legs += 1;
           // "A player can get no more than one Bonus Roll per turn" caps every
           // turn at two legs. What decides the *first* leg is the staging:
@@ -256,7 +276,10 @@ export function replay(events: readonly GameEvent[]): GameState {
           const owed = open.legacy
             ? bonusLegOwed(open.roll, pathCost(event.path), event.arrived)
             : earnsBonus(state.rules.startingTrain, open.roll.white);
-          if (open.legs >= 2 || !owed) { taken += 1; open = null; }
+          if (open.legs >= 2 || !owed) {
+            settleFees(open);
+            taken += 1; open = null;
+          }
         }
         if (event.arrived) inFlight.set(event.seat, 0);
         {
