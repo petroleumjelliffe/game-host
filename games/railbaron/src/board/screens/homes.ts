@@ -48,7 +48,7 @@ export function homes(
         showDollar: true,
         right: home ? 'Home' : '',
         chip: SEAT_COLORS[seat.id],
-        tone: home ? 'normal' : (seat.id === owed ? 'normal' : 'dim'),
+        tone: home ? 'normal' : (seat.id === owed ? 'active' : 'dim'),
         action: seat.id === owed && pending === null ? { kind: 'act', seat: seat.id } : null
       };
     });

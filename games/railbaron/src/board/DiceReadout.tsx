@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TurnRoll } from '../../engine';
 import { BONUS_FACES, COLORS, DICE_MS, DIE, WHITE_FACES, dieTurn, pipCells } from './dice';
+import { TOKENS } from '../game/tokens';
 
 /**
  * One drum: the face showing, the face still falling away, and ticks left to
@@ -28,6 +29,13 @@ export interface DiceReadoutProps {
   roll: TurnRoll | null;
   /** Whether tapping does anything — only the baron whose turn it is may roll. */
   live: boolean;
+  /**
+   * The amber your-move ring. Deliberately not derived from `live` here:
+   * `live` is shared state (true on every device when the actor may roll),
+   * and the ring must light only the seated actor's own device — the caller
+   * passes `dice.live && dice.mine`.
+   */
+  highlight?: boolean;
   onRoll?: () => void;
   /** Fires once, when every drum has stopped. The gate for committing a roll. */
   onLanded?: () => void;
@@ -53,7 +61,7 @@ export interface DiceReadoutProps {
  * value only once settled, which is the same rule the region panel follows.
  * A caller waiting on `onLanded` therefore cannot learn the roll early.
  */
-export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) {
+export function DiceReadout({ roll, live, highlight = false, onRoll, onLanded }: DiceReadoutProps) {
   const [drums, setDrums] = useState<[Drum, Drum, Drum]>(
     () => [rest(WHITE_FACES), rest(WHITE_FACES), rest(BONUS_FACES)]
   );
@@ -183,7 +191,11 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
       style={{
         position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
         display: 'flex', alignItems: 'center', gap: DIE.gap,
-        cursor: live ? 'pointer' : 'default'
+        cursor: live ? 'pointer' : 'default',
+        padding: 6, borderRadius: 10,
+        boxShadow: highlight
+          ? `0 0 0 2px ${TOKENS.amber}, 0 0 18px rgba(245, 196, 81, 0.35)`
+          : 'none'
       }}
     >
       {drums.map((drum, index) => {

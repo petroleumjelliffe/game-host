@@ -103,9 +103,26 @@ describe('strict turn order', () => {
     expect(rows[1]!.action).toEqual({ kind: 'act', seat: 'green' });
   });
 
-  it('dims every baron who is not up', () => {
+  it('dims every baron who is not up, and marks the one owed a destination active', () => {
     const rows = play(replay(playing)).rows;
     expect(rows[0]!.tone).toBe('dim');
+    // Green is up and owes a destination roll: this row is the tap, and the
+    // board says so in amber rather than leaving "normal" to carry it.
+    expect(rows[1]!.tone).toBe('active');
+  });
+
+  it('says whose turn it is in the header, per viewer', () => {
+    // Online, on the actor's own device: shout it. Anywhere else — another
+    // player's phone, the shared tablet — name the baron; a device six
+    // people look at should never say "you".
+    expect(play(replay(playing), {}, null, null, null, 'green').sub).toBe('YOUR TURN');
+    expect(play(replay(playing), {}, null, null, null, 'red').sub).toBe('GRACE IS UP');
+    expect(play(replay(playing)).sub).toBe('GRACE IS UP');
+  });
+
+  it('drops the active tone once the destination is rolled', () => {
+    const rows = play(replay([...playing,
+      { type: 'arrived', seat: 'green', city: 43, region: 'PL', payout: 0 }])).rows;
     expect(rows[1]!.tone).toBe('normal');
   });
 
@@ -187,12 +204,20 @@ describe('the dice the board and the map both show', () => {
     diceFor(replay(events), pendingDice, pendingBonus);
 
   it('is live for the white pair when the baron up has somewhere to go and no dice', () => {
-    expect(dice(upNext)).toEqual({ roll: null, live: true });
+    expect(dice(upNext)).toEqual({ roll: null, live: true, mine: true });
   });
 
   it('goes dead while a rolled pair is waiting on the drums', () => {
     const pending = { white: [6, 6] as [number, number], bonus: null };
-    expect(diceFor(replay(upNext), pending)).toEqual({ roll: pending, live: false });
+    expect(diceFor(replay(upNext), pending)).toEqual({ roll: pending, live: false, mine: true });
+  });
+
+  it('is mine only on the seated actor\'s own device', () => {
+    // red is up. The shared tablet ('all') always owns the dice; online, only
+    // the actor's device does — the glow must not light a spectator's phone.
+    expect(diceFor(replay(upNext), null, null, 'all').mine).toBe(true);
+    expect(diceFor(replay(upNext), null, null, 'red').mine).toBe(true);
+    expect(diceFor(replay(upNext), null, null, 'green').mine).toBe(false);
   });
 
   it('goes dead once the whites are in the log and the leg is being walked', () => {
@@ -219,7 +244,7 @@ describe('the dice the board and the map both show', () => {
     // from the log, the bonus from the hand that has not told it yet.
     const owed: GameEvent[] = [...doubleSix,
       { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }];
-    expect(dice(owed, null, 4)).toEqual({ roll: { white: [6, 6], bonus: 4 }, live: false });
+    expect(dice(owed, null, 4)).toEqual({ roll: { white: [6, 6], bonus: 4 }, live: false, mine: true });
   });
 
   it('goes dead for everyone once no baron is up', () => {
