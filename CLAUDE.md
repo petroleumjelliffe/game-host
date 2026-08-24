@@ -91,7 +91,7 @@ anywhere.
 
 ```bash
 npm install     # links packages/{lobby,host,room-store}, games/{marcopolo,railbaron,acquire}, apps/host
-npm test        # every package's suite, one command: 1705 tests / 168 files
+npm test        # every package's suite, one command: 1760 tests / 177 files
 
 DATA_DIR=$(mktemp -d) npm run start:host   # all three games, one process, port 4000
 npm run typecheck

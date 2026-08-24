@@ -18,10 +18,13 @@ wearing the same clothes.
 2. **Roll animation on the map** — destination and payout rolls animated; the design
    already exists in the design project. A small, shovel-ready win before the big
    design effort. Phase 5.
-3. **The money spec, second half** — ownership, the bill per turn, the auction,
-   trains, and the rover play (rule to be transcribed first). The first half — cash,
-   banked-vs-earned, the win condition, house rules, seeded dice — landed 2026-08-22;
-   see the game-host repo's `specs/2026-08-22-money-phase-1.md`.
+3. ~~**The money spec, second half**~~ — landed 2026-08-23: ownership at the
+   transcribed prices, user fees as a derivation (three tiers, settled at turn
+   close), the declared endgame with the rover play, and the forced-sale stub.
+   See the game-host repo's `specs/2026-08-23-money-phase-2.md`; its still-owed
+   list (forced-sale/elimination text, starting cash, train purchase timing,
+   two fee confirms) is what remains of the economy. The first half — cash,
+   banked-vs-earned, house rules, seeded dice — landed 2026-08-22.
 4. **Auto-zoom to the current player** — gated on a design-project pass first, so it
    trails the money work. Phase 5.
 
@@ -163,19 +166,21 @@ tab watches play back. The movement rules are stored as data rather than prose i
 cross-checked against the event log's own replay. The Bonus Roll, the once-per-trip
 section rule, twin cities and stranding are all in there.
 
-**The money is not — it is the next design.** One spec covers it, in dependency
-order:
+**The money landed in two phases** (2026-08-22 and 2026-08-23 — the game-host
+repo's `specs/2026-08-22-money-phase-1.md` and `2026-08-23-money-phase-2.md`):
 
-1. **Cash, ownership, and the bill per turn** — the core loop. Track each baron's
-   money and railroads, and compute what a turn's movement owes from the edges the
-   route crossed — every edge already names its railroads, so the data is waiting.
-2. **The auction** — needs ownership and cash to exist first.
-3. **Train upgrades, shown on the board** — paid for in cash, and displayed as the
-   train column on the departures board. Landing this retires the two
-   delete-me-when-trains-land guards: the golden cross-check's Freight-only
-   turn-state assertions, and `useGame.rollDice`'s hardcoded `'freight'`. The design
-   file's train list includes "Fast Freight", which this rulebook does not have —
-   do not copy it.
+1. **Cash, ownership, and the bill per turn** — done. Each baron's money and
+   railroads fold from the log, and a turn's fee derives from the edges the
+   recorded paths crossed — every edge names its railroads, exactly as this
+   file predicted. The declared endgame and the rover play came with it.
+2. **The auction** — still stubbed by decision: a forced sale to the bank at
+   half price, an ordinary log event, until the auction gets its own design
+   pass against the still-owed forced-sale text.
+3. **Train upgrades, shown on the board** — still gated on the rulebook's
+   purchase-timing text. `startingTrain` is a house rule and the fold reads
+   it; the upgrade event is designed in the phase-2 spec and not built. The
+   design file's train list includes "Fast Freight", which this rulebook does
+   not have — do not copy it.
 
 The rulebook's forced-sale rule rides along: a baron who cannot pay must sell rail
 lines until they can, and is out of the game if still short. Model it; don't guard

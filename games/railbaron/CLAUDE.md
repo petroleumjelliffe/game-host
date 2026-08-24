@@ -9,20 +9,26 @@ it. Players use the physical board; the app rolls each baron's next destination 
 then city — looks up the payout for the journey, and since Phase 4 walks the pawn: strict
 turn order, the movement dice, and a route tapped out dot by dot on the map. Since 2026-08-22 the money's
 first half is modelled: `banked` per baron (completed trips only — `earned` still
-includes the trip in flight), a win rule (reach the target, then reach home; see the
-game-host repo's `specs/2026-08-22-money-phase-1.md`), house rules from
+includes the trip in flight), house rules from
 `DATA_DIR/railbaron/rules.json` stamped into the log at Begin, and optional seeded
-dice that `legal.ts` verifies. Still not modelled — phase 2 — are ownership,
-purchases, user fees, auctions, train upgrades, and the rover play (whose rule must be
-transcribed from the table before designing anything).
+dice that `legal.ts` verifies. Since 2026-08-23 the second half is too
+(`specs/2026-08-23-money-phase-2.md` in the game-host repo): railroad ownership at
+the transcribed prices (`engine/railroads.ts`, digest-pinned), user fees as a pure
+derivation settled at turn close (negative balances are legal and, while the short
+seat holds something to sell, blocking), and the rulebook's real endgame — winning
+is an announced `declared` event, the rover play is a $50,000 derivation on `moved`
+paths, and a cancelled run continues to its rolled alternate. Still not modelled,
+each gated on rulebook text not yet transcribed: the auction (a half-price forced
+sale to the bank stands in), elimination, starting cash, and train upgrades.
 
 The repo holds the React port. The original 2013 jQuery app was deleted once the port
 was complete and tested — it remains in git history, but there is only one Rail Baron in
 this repo now. [ROADMAP.md](ROADMAP.md) has the phases and the reasoning; Phases 1 and 2
 (the roller, the pass-and-play front door) are done, and so is Phase 4's first half —
 turns and movement, with the map as the play surface and the movement rules stored as
-data under [`engine/golden/`](engine/golden/). The money spec's first half (cash, the win condition, house rules, seeded dice)
-landed 2026-08-22; its second half (ownership, fees, trains, the rover) is ahead.
+data under [`engine/golden/`](engine/golden/). The money landed in two phases: cash,
+house rules and seeded dice on 2026-08-22; ownership, fees, the declared endgame and
+the rover on 2026-08-23. Trains and the auction remain gated on rulebook text.
 
 ## Commands
 

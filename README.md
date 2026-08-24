@@ -17,7 +17,7 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 
 ```bash
 npm install       # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
-npm test          # every package's suite in one command: 1705 tests / 168 files
+npm test          # every package's suite in one command: 1760 tests / 177 files
 npm run typecheck
 npm run lint      # one type-aware eslint across all seven workspaces, ~5s
 ```
@@ -126,6 +126,18 @@ in-house play over the wifi, and Render for online play. Neither is staging —
 they differ in audience, not in tier. The client is origin-relative, so the
 same build serves both: it talks to whoever served it, and **no build in this
 repo names an origin**. Do not reintroduce one.
+
+**Rail Baron money phase 2 (2026-08-23) changes what existing Rail Baron
+logs replay to** — read this before the pull that ships it. Winning now
+requires an announced `declared` event, so a game *finished* under the old
+rule replays as unfinished, and an in-flight leader who had silently gone
+homeward is now merely eligible to declare. The fee derivation also applies
+to old logs: every past turn that rode track now bills its $1,000 bank fee,
+so in-flight balances drop on replay. Both are accepted by the phase-2
+spec's Compatibility section — these are game-night saves, not archives,
+and dual win rules keyed on log era would be permanent complexity for a
+handful of rooms. No save is corrupted; the events all replay — they just
+score under the rulebook's real rules now.
 
 ### What a deploy builds, and what a player sees
 

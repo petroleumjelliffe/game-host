@@ -143,9 +143,32 @@ a game night mid-game.
 
 ---
 
-## Phase 2 — the money spec, part two: the economy
+## ~~Phase 2 — the money spec, part two: the economy~~ — done 2026-08-23
 
-**Size: large.** Everything money touches once it can be earned.
+**Done 2026-08-23** — [spec](../specs/2026-08-23-money-phase-2.md),
+[plan](plans/2026-08-23-money-phase-2.md), built from the three rulebook
+transcriptions in `games/railbaron/docs/rules/`. What landed: the 28
+railroad prices pinned by digest, `bought`/`declared`/`sold` events, user
+fees as a pure derivation (three tiers, one fee per owner, settled at turn
+close, negative balances legal), the endgame the rulebook actually has —
+an announced **declare** with a rolled alternate, the **rover** as a
+$50,000 derivation, un-declaring by poverty, the immediate win at home —
+and the liquidation stub (forced sale to the bank at half price). Phase
+1's silent-homeward win was retired; its three goldens were deleted, not
+patched, per the fixture policy. **The win-condition question this phase
+was assigned answered itself in the transcription: there is no ownership
+clause.** Winning is declare + home + the target after fees.
+
+Still owed, each a marked assumption or an unbuilt gate: the forced-sale
+and elimination text (half price is a placeholder; a short seat with
+nothing to sell just rides negative and the table resolves it), **starting
+cash** (discovered during implementation — the published game must grant
+some, or the first trips dip negative on bank fees alone; the fold allows
+that dip deliberately until the figure is transcribed), train purchase
+timing (`trainBought` designed, not built), the own-track and mixed-turn
+fee confirms, and the shared-trackage attribution confirm (cheapest-legal
+is an assumption the log preserves enough to revisit). The original slice
+text follows for the record.
 
 - **Buying railroads** — 28 of them, at published prices, from the bank.
 - **Rent** for running on track you do not own, which is what finally makes
@@ -153,11 +176,9 @@ a game night mid-game.
 - **Train upgrades** — Express and Superchief, retiring both hardcoded
   `'freight'` constants and turning them into the lookup their comments
   promise. `earnsBonus()` already implements the payoff, so the upgrade is
-  mostly commerce and UI.
+  mostly commerce and UI. *(Gated on the still-owed timing rule; not built.)*
 - **The ownership clause** of the win condition, if phase 1 deferred it.
-
-Depends on phase 1 entirely. Nothing here is worth designing before a balance
-exists to spend.
+  *(Retired: the rulebook has no such clause.)*
 
 ---
 
@@ -279,7 +300,9 @@ today; that branch adds the entry.
 Recorded so they are not silently made by whoever implements first.
 
 1. ~~**Phase 1's win condition**~~ — decided 2026-08-22: cash **plus** return
-   home; phase 2 adds the ownership clause without changing the rule's shape.
+   home; phase 2 was expected to add the ownership clause. The transcription
+   (2026-08-23) showed there is no such clause: the published rule is an
+   announced declare + home + the target after fees, and phase 2 built that.
 2. ~~**Where the rules config lives**~~ — decided 2026-08-22: `DATA_DIR`.
    See house rules.
 3. **Marco Polo's turbo meter** — carries a question mark in the backlog.

@@ -1,11 +1,13 @@
 # Rail Baron money, phase 2 — the economy, and the endgame the rulebook actually has
 
-**Status:** designed 2026-08-23, not implemented. The design's inputs are the
-three rulebook transcriptions in
+**Status:** implemented 2026-08-23 —
+[plan](../docs/plans/2026-08-23-money-phase-2.md), deviations in *As built*
+at the end. The design's inputs are the three rulebook transcriptions in
 [`games/railbaron/docs/rules/`](../games/railbaron/docs/rules/) — declaring
 and the rover, the railroad prices, the user fees — plus the table's
-decisions recorded there. Four debts remain open and are carried as named
-holes, not blockers: see *Still owed* at the end.
+decisions recorded there. The four debts below remain open and are carried
+as named holes, not blockers — and implementation surfaced a fifth,
+**starting cash**: see *Still owed* at the end.
 
 **What phase 1 left:** a game that can be won, by a simplification this
 phase retires. Money is earned (`banked`, derived at replay), the win was
@@ -213,8 +215,50 @@ phase-1 fixture retirements named in their deletion commit.
 | Debt | Gates |
 | --- | --- |
 | Forced sale / elimination text | The stub's price (half is a placeholder); elimination existing at all |
+| **Starting cash** *(found at implementation)* | Whether early turns dip negative on bank fees alone, and how the liquidation gate reads a penniless seat |
 | Train purchase timing | `trainBought` legality clause |
 | Own-track / mixed-turn fee confirms | Two lines of the fee derivation |
 | Shared-trackage attribution confirm | Whether cheapest-legal stands or the mover chooses |
 
 None blocks the plan; each is a marked line the plan quotes as assumption.
+
+## As built (2026-08-23)
+
+Implemented task-for-task from [the plan](../docs/plans/2026-08-23-money-phase-2.md);
+1760 tests across the repo after, 693 in Rail Baron. Deviations from the
+design above, each forced by something the code knew and the spec did not:
+
+- **Starting cash is a hole this spec did not name.** The wire goldens —
+  a lone baron whose first trips span several turns — went negative on
+  bank fees alone before any payout landed, and the liquidation gate as
+  specified then froze the game with nothing to sell. The published game
+  must grant starting cash; nobody has transcribed the figure. Until it
+  is: the gate engages only while the short seat **holds a railroad to
+  sell** (`shortSeat` in `turns.ts`), and a penniless seat's negative
+  balance rides — which is this spec's own answer for the
+  nothing-left-to-sell case, applied one rung earlier. When starting cash
+  is transcribed it becomes a `GameRules` field stamped into `started`,
+  and early play stops dipping at all.
+- **The purchase window also closes when a region ballot is open** —
+  `bought` is refused while `awaiting` is set. The window is "before
+  rolling the next destination", and a ballot means the roll has begun;
+  the spec's fold-shaped phrasing (`needsDestination` true) would have
+  left a mid-ballot purchase legal by accident.
+- **The bought/declare rows follow the Undo precedent literally**: pinned
+  board indices (office at row 3, declare at row 4), present only while a
+  slot is free, dropped before any baron's row would be. The office is a
+  paged takeover screen (five railroads a page, 28 don't fit seven rows);
+  the forced sale is a takeover on the regionBallot precedent. A declare
+  whose alternate roll names the declarer's own region hands the board to
+  the ballot immediately rather than announcing the region first — one
+  hold fewer than an ordinary roll, accepted for simplicity.
+- **The $0-neighbour fixtures now bill.** Minneapolis–St. Paul is a real
+  edge, so the phase-1 tests that walked it gained the $1,000 bank fee in
+  their expectations — the two goldens were adjusted, not retired, because
+  the rule they pin ($0 is a real payout) is untouched.
+- **Three phase-1 goldens retired as predicted** (the homeward run, the
+  win, the overtaken leader), deleted in their own commit before the new
+  rule landed. The event-count line in the fold's win check needed the
+  turn to close at home — a declared arrival forfeits any Bonus Roll still
+  owed, so fees settle before the win is judged; the spec implied this
+  ("after that turn's fees") without saying the bonus leg dies.
