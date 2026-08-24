@@ -1,6 +1,7 @@
 export { CITIES, cityById, citiesIn } from './cities.js';
 export { REGIONS, regionById } from './regions.js';
 export { payoutBetween } from './payouts.js';
+export { RAILROAD_PRICES, bankSalePrice, railroadPrice } from './railroads.js';
 export { destinationInRegion, rollDestination } from './roll.js';
 export type { Arrival, RollOutcome } from './roll.js';
 export type { City, CityId, Region, RegionId, Rng } from './types.js';
