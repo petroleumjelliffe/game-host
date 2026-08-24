@@ -1,24 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
-import type { TurnRoll } from '../../engine';
-import { COLORS, DICE_MS, PIPS } from '../board/dice';
-import { TOKENS } from '../game/tokens';
-
 /**
- * The chip: one overlay riding above the baron's engine, changing costume as
- * the turn goes — the dice sit there waiting to be thrown, tumble there when
- * they are, the moves left count down there as the route is tapped out, and
- * END TURN lands there when the leg is spent. Geometry and colours are copied
- * from variant 5b of `Train Movement Style.dc.html` in the Rail Baron Game
- * Board Design project; change them there first.
+ * The chip: one overlay riding above the baron's engine, carrying the turn's
+ * arithmetic — the moves left count down there as the route is tapped out,
+ * and END TURN lands there when the leg is spent. Geometry and colours are
+ * copied from variant 5b of `Train Movement Style.dc.html` in the Rail Baron
+ * Game Board Design project; change them there first.
+ *
+ * The dice are deliberately NOT here. They ride the readout at the top of
+ * the map, where the roll stays on show for the whole turn — a counter that
+ * spends down is no use without the roll it is spending, and the chip has
+ * nowhere to keep both.
  *
  * It is drawn in map coordinates inside the map's own SVG, which is what lets
  * it ride the pan, the zoom and the pawn's own glide without a screen-space
- * projection of its own. Everything here is scenery all the same: the chip's
- * two actions — throwing the dice, ending the turn — are taken through a
- * matching target the interaction layer draws over it, so its guarantee that
- * every hit target paints above every painted shape holds without an
- * exception. The waiting dice and the END TURN pill are therefore
- * aria-hidden: the target riding them carries the name.
+ * projection of its own. Everything here is scenery all the same: the one
+ * action it shows — END TURN — is taken through a matching target the
+ * interaction layer draws over it, so its guarantee that every hit target
+ * paints above every painted shape holds without an exception. The pill is
+ * therefore aria-hidden: the target riding it carries the name.
  */
 
 /**
@@ -27,38 +25,15 @@ import { TOKENS } from '../game/tokens';
  */
 export const GLIDE = 'transform 380ms cubic-bezier(.35,.7,.3,1)';
 
-/** Ticks of tumble before the thrown faces land. */
-const TUMBLE_TICKS = 8;
-/** How long the landed dice lie on the table before the counter takes over. */
-const SETTLE_MS = 780;
-
-const DIE = { size: 26, radius: 4, pip: 2.5 } as const;
-const TRAY = { pad: 8, gap: 6, radius: 8, height: 38, lift: 34 } as const;
 const COUNT = { height: 24, lift: 26 } as const;
 const END = { width: 86, height: 26, lift: 30 } as const;
 
-/** Whether a seat's colour is too dark to carry dark text or read on the tray. */
+/** Whether a seat's colour is too dark to carry dark text or read as ink. */
 const dark = (hex: string): boolean => {
   const v = parseInt(hex.slice(1), 16);
   const r = (v >> 16) & 0xff, g = (v >> 8) & 0xff, b = v & 0xff;
   return 0.299 * r + 0.587 * g + 0.114 * b < 100;
 };
-
-function Die({ x, y, value, red }: { x: number; y: number; value: number; red: boolean }) {
-  const on = PIPS[value] ?? [];
-  return (
-    <g aria-hidden="true">
-      <rect x={x} y={y} width={DIE.size} height={DIE.size} rx={DIE.radius}
-            fill={red ? COLORS.bonusLeaf : COLORS.whiteTop} pointerEvents="none" />
-      {on.map(cell => (
-        <circle key={cell}
-                cx={x + 6 + (cell % 3) * 7} cy={y + 6 + Math.floor(cell / 3) * 7}
-                r={DIE.pip} fill={red ? COLORS.bonusPip : COLORS.whitePip}
-                pointerEvents="none" />
-      ))}
-    </g>
-  );
-}
 
 export interface EngineChipProps {
   /** Where the engine stands, in map coordinates. */
@@ -66,134 +41,17 @@ export interface EngineChipProps {
   y: number;
   /** The baron up's seat colour. */
   color: string;
-  /** The dice as this device knows them — pending rolls included. */
-  roll: TurnRoll | null;
   /** Moves this leg still has to spend. */
   remaining: number;
   /** The leg is finished — arrived, or every move spent — and may commit. */
   done: boolean;
-  /**
-   * It is time to roll, and these dice are this device's to throw. The chip
-   * shows them at rest above the engine — the white pair before the turn's
-   * roll, the red die alone when the Bonus Roll is owed — under the amber
-   * your-move ring, and the interaction layer's target over them is the tap.
-   */
-  live?: boolean;
-  /** Fires once per roll, when the tumble has landed. The announce gate. */
-  onLanded?: () => void;
 }
 
-export function EngineChip({
-  x, y, color, roll, remaining, done, live = false, onLanded
-}: EngineChipProps) {
-  const [phase, setPhase] = useState<'idle' | 'tumbling' | 'settled'>('idle');
-  const [tick, setTick] = useState(0);
-  /** Only the red die turns for a Bonus Roll — the whites were already told. */
-  const [redOnly, setRedOnly] = useState(false);
-
-  const landed = useRef<(() => void) | undefined>(onLanded);
-  landed.current = onLanded;
-  /** The roll last set tumbling; `undefined` until the first effect runs. */
-  const started = useRef<string | undefined>(undefined);
-  /** The last roll whose landing has been reported. Fires once per roll. */
-  const reported = useRef<string | undefined>(undefined);
-  /** The white faces already shown, for telling a Bonus Roll from a new pair. */
-  const prevWhites = useRef('');
-
-  const whiteKey = roll === null ? '' : `${roll.white[0]}-${roll.white[1]}`;
-  const key = roll === null ? '' : `${whiteKey}-${roll.bonus ?? 0}`;
-
-  useEffect(() => {
-    if (started.current === key) return;
-    const first = started.current === undefined;
-    started.current = key;
-    const heldWhites = prevWhites.current !== '' && prevWhites.current === whiteKey;
-    prevWhites.current = whiteKey;
-    if (roll === null) { setPhase('idle'); return; }
-    if (first) {
-      /**
-       * Mounted with the roll already known — a reload, or arriving from the
-       * board mid-turn. These dice are old news: tumbling them would read as a
-       * throw nobody made, so the chip goes straight to the counter. The
-       * landing is still reported, because a pending roll can genuinely be in
-       * this state — the player rolled on the other screen and navigated here
-       * before the drums finished — and unannounced dice would strand the
-       * turn. With nothing pending the report is a no-op.
-       */
-      setPhase('idle');
-      if (reported.current !== key) { reported.current = key; landed.current?.(); }
-      return;
-    }
-    setRedOnly(heldWhites && roll.bonus !== null);
-    setTick(0);
-    setPhase('tumbling');
-  }, [key, whiteKey, roll]);
-
-  useEffect(() => {
-    if (phase !== 'tumbling') return;
-    const timer = setInterval(() => { setTick(current => current + 1); }, DICE_MS);
-    return () => clearInterval(timer);
-  }, [phase]);
-
-  useEffect(() => {
-    if (phase !== 'tumbling' || tick < TUMBLE_TICKS) return;
-    setPhase('settled');
-    if (reported.current !== key) { reported.current = key; landed.current?.(); }
-  }, [phase, tick, key]);
-
-  useEffect(() => {
-    if (phase !== 'settled') return;
-    const timer = setTimeout(() => { setPhase('idle'); }, SETTLE_MS);
-    return () => clearTimeout(timer);
-  }, [phase]);
-
+export function EngineChip({ x, y, color, remaining, done }: EngineChipProps) {
   const lightInk = dark(color);
 
   let costume = null;
-  if ((phase === 'tumbling' || phase === 'settled') && roll !== null) {
-    const turning = phase === 'tumbling';
-    // The tumble cycles the faces deterministically — no random draw sits in
-    // the render path, and the thrown faces land exactly on the last tick.
-    const faces = redOnly
-      ? [{ value: turning ? ((tick * 2) % 6) + 1 : roll.bonus ?? 1, red: true }]
-      : roll.white.map((value, i) =>
-          ({ value: turning ? ((tick + i * 2) % 6) + 1 : value, red: false }));
-    const width = TRAY.pad * 2 + faces.length * DIE.size + (faces.length - 1) * TRAY.gap;
-    const top = -TRAY.lift - TRAY.height;
-    const label = turning
-      ? (redOnly ? 'Bonus die, turning' : 'White dice, turning')
-      : redOnly
-        ? `Bonus die, ${roll.bonus ?? 0}`
-        : `White dice, ${roll.white[0]} and ${roll.white[1]}`;
-    costume = (
-      <g role="img" aria-label={label}>
-        <rect x={-width / 2} y={top} width={width} height={TRAY.height} rx={TRAY.radius}
-              fill="rgba(20,15,10,0.78)" pointerEvents="none" />
-        {faces.map((face, i) => (
-          <Die key={i} x={-width / 2 + TRAY.pad + i * (DIE.size + TRAY.gap)}
-               y={top + (TRAY.height - DIE.size) / 2} value={face.value} red={face.red} />
-        ))}
-      </g>
-    );
-  } else if (live && !done) {
-    // The dice at rest, waiting to be thrown — blank faces, because showing
-    // numbers nobody rolled would read as a roll already made. The amber ring
-    // is the board readout's own your-move mark, worn here instead.
-    const faces = roll === null ? [false, false] : [true];
-    const width = TRAY.pad * 2 + faces.length * DIE.size + (faces.length - 1) * TRAY.gap;
-    const top = -TRAY.lift - TRAY.height;
-    costume = (
-      <g aria-hidden="true">
-        <rect x={-width / 2} y={top} width={width} height={TRAY.height} rx={TRAY.radius}
-              fill="rgba(20,15,10,0.78)" stroke={TOKENS.amber} strokeWidth={1.6}
-              pointerEvents="none" />
-        {faces.map((red, i) => (
-          <Die key={i} x={-width / 2 + TRAY.pad + i * (DIE.size + TRAY.gap)}
-               y={top + (TRAY.height - DIE.size) / 2} value={0} red={red} />
-        ))}
-      </g>
-    );
-  } else if (done) {
+  if (done) {
     costume = (
       <g aria-hidden="true">
         <rect x={-END.width / 2} y={-END.lift - END.height} width={END.width}

@@ -3,6 +3,7 @@ import {
   cityById, nodeForCity, path as pathOf, sectionKey, usedAfter,
   type NodeId, type RegionId, type TurnRoll
 } from '../../engine';
+import { DiceReadout } from '../board/DiceReadout';
 import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
@@ -369,14 +370,14 @@ export interface MapViewProps {
 }
 
 /**
- * Why the dice can be rolled on both surfaces. The readout lives on the board
- * and is shared; on one tablet that would mean tapping the dice there and
- * then navigating here to move — an extra trip every turn, on the view that
- * is *not* where the turn happens. The map goes through the same
- * `onRollDice`/`onDiceLanded` gate, so there is one gate on two surfaces —
- * but it wears the map's own costume: the dice wait, are tapped, and tumble
- * on the chip above the engine (`EngineChip`, plus the interaction layer's
- * target riding it), which is also what reports the landing here.
+ * Why the dice appear on both surfaces. The readout lives on the board and is
+ * shared; on one tablet that would mean tapping the dice there and then
+ * navigating here to move — an extra trip every turn, on the view that is
+ * *not* where the turn happens. The same component renders here, through the
+ * same `onRollDice`/`onDiceLanded` gate, so there is one implementation and
+ * one gate on two surfaces — and the roll stays on show at the top for the
+ * whole turn, which is what makes the chip's counter under it legible: a
+ * count spending down means little without the roll it is spending.
  */
 export function MapView({
   state, onBack, onMove, dice, onRollDice, onDiceLanded, viewer = 'all'
@@ -569,22 +570,15 @@ export function MapView({
     && baron !== undefined;
 
   /**
-   * The one tap the chip offers, drawn as a target in the interaction layer
-   * (see its `action` prop for why it lives there). Time to roll wins: dice
-   * waiting to be thrown and a committable leg cannot both be true, since
-   * `live` means the white pair is unthrown or the Bonus Roll is owed, and
-   * either way there is no finished leg to commit. A pan begun on the chip
-   * must not also take its tap — the same rule every lamp follows.
+   * The one tap the chip offers — END TURN, the commit — drawn as a target in
+   * the interaction layer (see its `action` prop for why it lives there). A
+   * pan begun on the chip must not also take its tap — the same rule every
+   * lamp follows.
    */
-  const chipAction = !chipShowing || baron === undefined
+  const chipAction = !chipShowing || baron === undefined || !route.canCommit
     ? null
-    : dice.live && dice.mine
-      ? { label: 'Roll the dice', x: baron.x, y: baron.y,
-          onTap: () => { if (!viewport.wasDrag()) onRollDice(); } }
-      : route.canCommit
-        ? { label: 'End turn', x: baron.x, y: baron.y,
-            onTap: () => { if (!viewport.wasDrag()) route.commit(); } }
-        : null;
+    : { label: 'End turn', x: baron.x, y: baron.y,
+        onTap: () => { if (!viewport.wasDrag()) route.commit(); } };
 
   return (
     <div style={{
@@ -756,21 +750,17 @@ export function MapView({
             })}
           </g>
 
-          {/* The chip riding above the baron up's engine — dice, then the
-              count, then END TURN. Hidden while a destination is owed (there
-              is nothing to walk) and while a committed move is playing back
-              (the walk on show is the log's, not a draft's). It stays mounted
-              through a Bonus Roll being owed: the red die tumbles there when
-              thrown, and with nothing to say it draws nothing. */}
+          {/* The chip riding above the baron up's engine — the count, then
+              END TURN. Hidden while a destination is owed (there is nothing
+              to walk) and while a committed move is playing back (the walk on
+              show is the log's, not a draft's); with nothing to say — a Bonus
+              Roll owed, the whites unthrown — it draws nothing. */}
           {chipShowing && state.turn !== null && baron !== undefined && (
             <EngineChip
               x={baron.x} y={baron.y}
               color={SEAT_COLORS[state.turn]}
-              roll={dice.roll}
               remaining={route.remaining}
               done={route.canCommit}
-              live={dice.live && dice.mine}
-              onLanded={onDiceLanded}
             />
           )}
 
@@ -803,6 +793,23 @@ export function MapView({
             onTap={id => { if (!viewport.wasDrag()) route.tap(id); }}
           />
         </svg>
+
+        {/* The roll, on show at the top for the whole turn — the persistent
+            record the chip's counter is spending down. Tapping it is also how
+            the dice are thrown here, white pair and Bonus Roll alike, through
+            the same gate the board uses. */}
+        <div style={{
+          position: 'absolute', top: 68, left: '50%', transform: 'translateX(-50%)',
+          width: 184, height: 56, zIndex: 4
+        }}>
+          <DiceReadout
+            roll={dice.roll}
+            live={dice.live}
+            highlight={dice.live && dice.mine}
+            onRoll={onRollDice}
+            onLanded={onDiceLanded}
+          />
+        </div>
 
         {/* The top rail: BACK, the name of the game, and whatever the turn is
             asking for, in one flow.
@@ -885,9 +892,8 @@ export function MapView({
               flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
               pointerEvents: 'auto'
             }}>
-              {/* A notice, not the control: the red die itself sits above the
-                  engine, and the tap that throws it is there — the same place
-                  the pair was thrown from at the top of the turn. */}
+              {/* A notice, not the control: the roll that clears it is the
+                  readout this screen already shows, three inches away. */}
               <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
                 BONUS ROLL — TAKE THE RED DIE
               </span>

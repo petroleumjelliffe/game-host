@@ -409,10 +409,10 @@ describe('playing a turn on the map', () => {
       expect(screen.queryByText(/roll a new destination/i)).not.toBeInTheDocument();
     });
 
-    it('leaves the red die on this screen to take it, above the engine', async () => {
+    it('leaves the dice on this screen to take it', async () => {
       const onRollDice = vi.fn();
       const user = userEvent.setup();
-      const { container } = render(
+      render(
         <MapView
           state={replay(bonusOwed)}
           onBack={vi.fn()}
@@ -422,9 +422,6 @@ describe('playing a turn on the map', () => {
           onDiceLanded={() => {}}
         />
       );
-      // The chip — and the tap riding it — waits for the white leg's
-      // playback to finish, exactly as the lamps do.
-      await user.click(container.querySelector('svg')!.parentElement!);
       await user.click(screen.getByRole('button', { name: /roll the dice/i }));
       expect(onRollDice).toHaveBeenCalledOnce();
     });
@@ -672,7 +669,7 @@ describe('playing a turn on the map', () => {
       expect(screen.queryByLabelText(/\d+ left/)).not.toBeInTheDocument();
     });
 
-    it('shows the dice above the engine when it is time to roll, and a tap throws them', async () => {
+    it('offers the roll at the top of the map, and keeps the chip quiet until it lands', async () => {
       const user = userEvent.setup();
       const onRollDice = vi.fn();
       const { container } = render(
@@ -682,86 +679,29 @@ describe('playing a turn on the map', () => {
           onRollDice={onRollDice} onDiceLanded={() => {}}
         />
       );
-      // The invitation is the chip's: the resting pair drawn above the piece,
-      // with the tap target the interaction layer draws over it.
-      expect(container.querySelectorAll('[data-chip] rect').length).toBeGreaterThan(0);
+      // Nothing rides the engine before the throw — the counter would have
+      // nothing to count.
+      expect(container.querySelector('[data-chip] *')).toBeNull();
       await user.click(screen.getByRole('button', { name: /roll the dice/i }));
       expect(onRollDice).toHaveBeenCalledOnce();
     });
 
-    it('tumbles the thrown pair above the engine, and reports the landing once', () => {
+    it('keeps the roll on show at the top while the counter spends it down', () => {
+      // The whole point of the readout staying: the count over the engine is
+      // spending a roll, and the roll it is spending stays readable above.
       vi.useFakeTimers();
       try {
-        const onDiceLanded = vi.fn();
-        const state = replay(midTurn.slice(0, -1)); // up, no dice thrown yet
-        const at = (roll: { white: [number, number]; bonus: number | null } | null,
-                    live: boolean) => (
+        render(
           <MapView
-            state={state} onBack={() => {}} onMove={vi.fn()}
-            dice={{ roll, live, mine: true }}
-            onRollDice={() => {}} onDiceLanded={onDiceLanded}
+            state={replay(midTurn)} onBack={() => {}} onMove={vi.fn()}
+            dice={{ roll: { white: [1, 1], bonus: null }, live: false, mine: true }}
+            onRollDice={() => {}} onDiceLanded={() => {}}
           />
         );
-        const { rerender } = render(at(null, true));
-        // Before the throw, the resting dice above the engine are the offer.
-        expect(screen.getByRole('button', { name: /roll the dice/i })).toBeInTheDocument();
-        expect(screen.queryByLabelText(/\d+ left/)).not.toBeInTheDocument();
-
-        rerender(at({ white: [3, 4], bonus: null }, false));
-        // Turning, so the faces are unreadable — and the landing untold.
-        expect(screen.getByRole('img', { name: 'White dice, turning' })).toBeInTheDocument();
-        expect(onDiceLanded).not.toHaveBeenCalled();
-
-        act(() => { vi.advanceTimersByTime(8 * 78); });
-        expect(screen.getByRole('img', { name: 'White dice, 3 and 4' })).toBeInTheDocument();
-        expect(onDiceLanded).toHaveBeenCalledOnce();
-
-        // The landed dice lie on the table for a beat, then clear away.
-        act(() => { vi.advanceTimersByTime(800); });
-        expect(screen.queryByRole('img', { name: /White dice/ })).not.toBeInTheDocument();
-        expect(onDiceLanded).toHaveBeenCalledOnce();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('throws the red die alone for the Bonus Roll', () => {
-      vi.useFakeTimers();
-      try {
-        /** Double six walked without arriving: the red die is owed. */
-        const owed: GameEvent[] = [
-          { type: 'joined', seat: 'red', name: 'ADA' },
-          { type: 'started' },
-          { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
-          { type: 'orderRolled', seat: 'red', first: 'red' },
-          { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
-          { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
-          { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), 'd66'], arrived: false }
-        ];
-        const onDiceLanded = vi.fn();
-        const at = (bonus: number | null) => (
-          <MapView
-            state={replay(owed)} onBack={() => {}} onMove={vi.fn()}
-            dice={{ roll: { white: [6, 6], bonus }, live: bonus === null, mine: true }}
-            onRollDice={() => {}} onDiceLanded={onDiceLanded}
-          />
-        );
-        const { container, rerender } = render(at(null));
-        // Finish the white leg's playback so the chip is on duty.
-        fireEvent.click(container.querySelector('svg')!.parentElement!);
-        // Mounted with the pair already told: no tumble, but the landing is
-        // still reported in case a roll was left pending mid-navigation.
-        expect(screen.queryByRole('img', { name: /White dice/ })).not.toBeInTheDocument();
-        expect(onDiceLanded).toHaveBeenCalledOnce();
-
-        rerender(at(3));
-        // The whites are lying on the table — only the red die turns.
-        expect(screen.getByRole('img', { name: 'Bonus die, turning' })).toBeInTheDocument();
-        expect(screen.queryByRole('img', { name: /White dice/ })).not.toBeInTheDocument();
-
-        act(() => { vi.advanceTimersByTime(8 * 78); });
-        expect(screen.getByRole('img', { name: 'Bonus die, 3' })).toBeInTheDocument();
-        expect(onDiceLanded).toHaveBeenCalledTimes(2);
+        // Let the drums land, so the faces are readable.
+        act(() => { vi.advanceTimersByTime(4000); });
+        expect(screen.getAllByRole('img', { name: 'White die, 1' })).toHaveLength(2);
+        expect(screen.getByLabelText('2 left')).toBeInTheDocument();
       } finally {
         vi.useRealTimers();
       }
