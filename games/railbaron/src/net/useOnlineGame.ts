@@ -55,8 +55,8 @@ export function useOnlineGame(
     if (seat !== mySeat) return null;
     const current = state.seats[seat];
     if (current.awaiting !== null || current.name === null) return null;
-    // A homeward baron rolls no destinations — home is the destination.
-    if (current.homeward) return null;
+    // A declared baron rolls no destinations — the trip is already set.
+    if (current.run !== null) return null;
     if (!needsDestination(current, nodeForCity)) return null;
     if (actor !== seat) return null;
     return rollDestination(currentCity(current), liveRng, homesTaken(state));
@@ -97,7 +97,7 @@ export function useOnlineGame(
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (state.rolled !== null) return null;
     const rollingSeat = state.seats[seat];
-    if (!rollingSeat.homeward && needsDestination(rollingSeat, nodeForCity)) return null;
+    if (rollingSeat.run === null && needsDestination(rollingSeat, nodeForCity)) return null;
     // The money spec kept its promise: the train is the rules' to name.
     const train: TrainType = state.rules.startingTrain;
     return rollTurn(train, liveRng);
@@ -115,7 +115,7 @@ export function useOnlineGame(
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (!state.bonusOwed) return null;
     const bonusSeat = state.seats[seat];
-    if (!bonusSeat.homeward && needsDestination(bonusSeat, nodeForCity)) return null;
+    if (bonusSeat.run === null && needsDestination(bonusSeat, nodeForCity)) return null;
     return d6(liveRng);
   }, [state, liveRng, mySeat]);
 

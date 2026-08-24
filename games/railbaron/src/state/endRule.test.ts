@@ -1,4 +1,4 @@
-// The end rule as a fold: banked vs earned, homeward, and the winning move.
+// The end rule as a fold: banked vs earned, declaring, and the winning move.
 // Events are built by helpers so payouts are computed, never hardcoded —
 // a fixture that hardcodes a payout is wrong the day the table is retyped.
 import { describe, expect, it } from 'vitest';
@@ -7,6 +7,7 @@ import type { CityId } from '../../engine/index.js';
 import { replay } from './game.js';
 import type { GameEvent, SeatId } from './events.js';
 import { PUBLISHED_RULES } from './rules.js';
+import { destinationOf, mayDeclare } from './turns.js';
 
 const id = (name: string): CityId => {
   const city = CITIES.find((c) => c.name === name);
@@ -31,6 +32,11 @@ const walk = (seat: SeatId, from: CityId, to: CityId): GameEvent[] => [
   { type: 'moved', seat, path: [nodeForCity(from), nodeForCity(to)], arrived: true },
 ];
 
+const declare = (seat: SeatId, from: CityId, alt: CityId): GameEvent =>
+  ({ type: 'declared', seat,
+     alternate: { city: alt, region: cityById(alt).region,
+                  payout: payoutBetween(from, alt) } });
+
 const CHICAGO = id('Chicago');
 const NEW_YORK = id('New York');
 const LOS_ANGELES = id('Los Angeles');
@@ -44,6 +50,13 @@ const opening = (aHome: CityId, bHome: CityId): GameEvent[] => [
   { type: 'orderRolled', seat: 'red', first: 'red' },
 ];
 
+/** Red completes a paying trip: banked past winTarget 1000, at New York. */
+const brink = (): GameEvent[] => [
+  ...opening(CHICAGO, MIAMI),
+  assign('red', CHICAGO, NEW_YORK),
+  ...walk('red', CHICAGO, NEW_YORK),
+];
+
 describe('banked vs earned', () => {
   it('banks a trip only once it is walked', () => {
     const log: GameEvent[] = [
@@ -54,67 +67,83 @@ describe('banked vs earned', () => {
     const pay = payoutBetween(CHICAGO, NEW_YORK);
     expect(mid.seats.red.earned).toBe(pay);   // assignment-time, as today
     expect(mid.seats.red.banked).toBe(0);      // the trip is not walked
-    expect(mid.seats.red.homeward).toBe(false);
+    expect(mayDeclare(mid, 'red')).toBe(false);
 
     const done = replay([...log, ...walk('red', CHICAGO, NEW_YORK)]);
     expect(done.seats.red.banked).toBe(pay);
-    // winTarget 1000: any real payout crosses it, so completing goes homeward.
-    expect(done.seats.red.homeward).toBe(true);
+    // winTarget 1000: any real payout crosses it — but crossing only makes
+    // declaring *eligible*; nothing changes by itself (spec Decision 3).
+    expect(mayDeclare(done, 'red')).toBe(true);
+    expect(done.seats.red.run).toBeNull();
   });
 
-  it('keeps a completed trip banked while walking home', () => {
-    // The trap bankedOf-by-position falls into: a homeward baron who leaves
+  it('keeps a completed trip banked while running home', () => {
+    // The trap banked-by-position falls into: a declared baron who leaves
     // their last stop must not have that trip silently un-banked.
     const log: GameEvent[] = [
-      ...opening(CHICAGO, MIAMI),
-      assign('red', CHICAGO, NEW_YORK),
-      ...walk('red', CHICAGO, NEW_YORK),
+      ...brink(),
+      declare('red', NEW_YORK, LOS_ANGELES),
       { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
       { type: 'moved', seat: 'red',
         path: [nodeForCity(NEW_YORK), 'd100'], arrived: false },
     ];
     const state = replay(log);
     expect(state.seats.red.banked).toBe(payoutBetween(CHICAGO, NEW_YORK));
-    expect(state.seats.red.homeward).toBe(true);
+    expect(state.seats.red.run?.toHome).toBe(true);
     expect(state.winner).toBeNull();
   });
 });
 
-describe('the win', () => {
-  const toTheBrink = (): GameEvent[] => [
-    ...opening(CHICAGO, MIAMI),
-    assign('red', CHICAGO, NEW_YORK),
-    ...walk('red', CHICAGO, NEW_YORK),       // red banked past 1000, homeward
-  ];
-
-  it('derives the winner from the moved that ends at home', () => {
-    const won = replay([
-      ...toTheBrink(),
-      { type: 'turnRolled', seat: 'red', white: [2, 5], bonus: null },
-      { type: 'moved', seat: 'red',
-        path: [nodeForCity(NEW_YORK), nodeForCity(CHICAGO)], arrived: true },
-    ]);
-    expect(won.winner).toBe('red');
-    expect(won.phase).toBe('over');
+describe('the declared run', () => {
+  it('crossing the target no longer changes anything by itself', () => {
+    const state = replay(brink());
+    expect(state.seats.red.run).toBeNull();
+    expect(state.winner).toBeNull();
+    expect(mayDeclare(state, 'red')).toBe(true);
+    expect(mayDeclare(state, 'blue')).toBe(false);
   });
 
-  it('does not end on cash alone: a homeward seat mid-run has no winner', () => {
-    const state = replay(toTheBrink());
-    expect(state.seats.red.homeward).toBe(true);
+  it('declaring sets the run and aims the baron home', () => {
+    const state = replay([...brink(), declare('red', NEW_YORK, LOS_ANGELES)]);
+    expect(state.seats.red.run).toEqual({
+      alternate: { city: LOS_ANGELES, region: cityById(LOS_ANGELES).region,
+                   payout: payoutBetween(NEW_YORK, LOS_ANGELES) },
+      toHome: true,
+    });
+    expect(destinationOf(state.seats.red)).toBe(CHICAGO);
     expect(state.winner).toBeNull();
     expect(state.phase).toBe('playing');
   });
 
-  it('lets a second seat overtake a leader who has not reached home', () => {
-    const log: GameEvent[] = [
-      ...toTheBrink(),                          // red homeward, away from home
-      assign('blue', MIAMI, LOS_ANGELES),
-      ...walk('blue', MIAMI, LOS_ANGELES),      // blue banked past 1000 too
-      { type: 'turnRolled', seat: 'blue', white: [1, 2], bonus: null },
-      { type: 'moved', seat: 'blue',
-        path: [nodeForCity(LOS_ANGELES), nodeForCity(MIAMI)], arrived: true },
+  it('a declared moved ending at home wins — undeclared, the same move does not', () => {
+    const winning: GameEvent[] = [
+      { type: 'turnRolled', seat: 'red', white: [2, 5], bonus: null },
+      { type: 'moved', seat: 'red',
+        path: [nodeForCity(NEW_YORK), nodeForCity(CHICAGO)], arrived: true },
     ];
-    expect(replay(log).winner).toBe('blue');
+    const declaredWin = replay([
+      ...brink(), declare('red', NEW_YORK, LOS_ANGELES), ...winning,
+    ]);
+    expect(declaredWin.winner).toBe('red');
+    expect(declaredWin.phase).toBe('over');
+
+    // "A player cannot win just by moving into his home city during a
+    // normal trip" — the same log without the declare has no winner.
+    const silent = replay([...brink(), ...winning]);
+    expect(silent.winner).toBeNull();
+    expect(silent.phase).toBe('playing');
+  });
+
+  it('declaring while standing at home wins immediately', () => {
+    // Red's latest destination IS Chicago, their home — a legal trip.
+    const log: GameEvent[] = [
+      ...brink(),
+      assign('red', NEW_YORK, CHICAGO), ...walk('red', NEW_YORK, CHICAGO),
+      declare('red', CHICAGO, MIAMI),
+    ];
+    const state = replay(log);
+    expect(state.winner).toBe('red');
+    expect(state.phase).toBe('over');
   });
 });
 
@@ -128,7 +157,7 @@ describe('rules in the fold', () => {
     expect(state.winner).toBeNull();
   });
 
-  it('a $0 trip banks nothing and changes nothing homeward', () => {
+  it('a $0 trip banks nothing and lights nothing', () => {
     const MPLS = id('Minneapolis');
     const STP = id('St. Paul');
     const log: GameEvent[] = [
@@ -141,6 +170,6 @@ describe('rules in the fold', () => {
     // The trip banks nothing — but Minneapolis–St. Paul is a real edge, so
     // since phase 2 the turn itself bills its $1,000 bank fee at close.
     expect(state.seats.red.banked).toBe(-1000);
-    expect(state.seats.red.homeward).toBe(false);
+    expect(mayDeclare(state, 'red')).toBe(false);
   });
 });

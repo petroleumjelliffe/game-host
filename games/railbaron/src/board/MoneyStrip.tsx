@@ -1,7 +1,7 @@
 // The Departures Board's Total tile, finally built — the turns plan left it
 // "with the money spec" by name. Deliberately plain: one row per seated
 // baron, the banked total (never `earned`: the in-flight trip is not money
-// yet), the homeward race when one is on, and the winner when it is over.
+// yet), the declared run when one is on, and the winner when it is over.
 // The design mock's "Fast Freight" train column stays unbuilt until phase 2
 // — that train does not exist in this rulebook.
 import { cityById } from '../../engine';
@@ -39,8 +39,10 @@ export function MoneyStrip({ state }: { state: GameState }) {
             <li key={id}>
               <span style={{ color: SEAT_COLORS[id] }}>●</span>{' '}
               <span>{seat.name}</span> <strong>{dollars(seat.banked)}</strong>
-              {seat.homeward && seat.home !== null && state.winner === null && (
-                <em> racing home to {cityById(seat.home).name}</em>
+              {seat.run !== null && state.winner === null && (
+                <em>{seat.run.toHome
+                  ? ` declared — racing home to ${seat.home === null ? '?' : cityById(seat.home).name}`
+                  : ` caught — bound for ${cityById(seat.run.alternate.city).name}`}</em>
               )}
             </li>
           );

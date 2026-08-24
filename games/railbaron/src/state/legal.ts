@@ -63,8 +63,8 @@ export function appendLegality(
 
   switch (event.type) {
     case 'arrived': {
-      if (seat.homeward) {
-        return not('notNow', 'homeward barons roll no destinations — home is the destination');
+      if (seat.run !== null) {
+        return not('notNow', 'a declared baron rolls no destinations — the trip is already set');
       }
       // The payout is the table's, not the sender's. The first stop is the
       // home pick and pays null; every later one pays exactly payoutBetween —
@@ -82,8 +82,8 @@ export function appendLegality(
     }
 
     case 'regionRequested':
-      if (seat.homeward) {
-        return not('notNow', 'homeward barons roll no destinations — home is the destination');
+      if (seat.run !== null) {
+        return not('notNow', 'a declared baron rolls no destinations — the trip is already set');
       }
       return seat.awaiting === null && needsDestination(seat, nodeForCity)
         ? null : not('notNow', 'no destination roll is owed');
@@ -91,7 +91,7 @@ export function appendLegality(
     case 'turnRolled':
       if (state.phase !== 'playing') return not('notNow', 'the game has not begun');
       if (state.rolled !== null) return not('notNow', 'this turn already has its roll');
-      if (!seat.homeward && needsDestination(seat, nodeForCity)) {
+      if (seat.run === null && needsDestination(seat, nodeForCity)) {
         return not('notNow', 'roll a destination first');
       }
       return null;
@@ -102,7 +102,7 @@ export function appendLegality(
       // re-deriving entitlement is what stops the server accepting a roll
       // replay would then silently discard.
       return state.phase === 'playing' && state.bonusOwed
-        && (seat.homeward || !needsDestination(seat, nodeForCity))
+        && (seat.run !== null || !needsDestination(seat, nodeForCity))
         ? null : not('notNow', 'no Bonus Roll is owed');
 
     case 'moved':

@@ -14,6 +14,13 @@ export interface Stop {
   payout: number | null;
 }
 
+export interface DeclaredRun {
+  /** Rolled at declaration; paid only if reached after cancellation. */
+  alternate: { city: CityId; region: RegionId; payout: number };
+  /** true: bound for home. false: caught or impoverished, bound for the alternate. */
+  toHome: boolean;
+}
+
 export interface Seat {
   id: SeatId;
   name: string | null;
@@ -29,11 +36,16 @@ export interface Seat {
    * right for a running total, one trip early for a threshold. The end rule
    * reads this, never `earned`. Tracked as an explicit in-flight amount that
    * the arriving `moved` clears, NOT inferred from the pawn's position: a
-   * homeward baron who leaves their last stop has not un-earned that trip.
+   * declared baron who leaves their last stop has not un-earned that trip.
    */
   banked: number;
-  /** banked >= rules.winTarget: no more destinations, racing for home. */
-  homeward: boolean;
+  /**
+   * The declared run, while one is on — or the cancelled run still owed
+   * its alternate. Null is the ordinary state. Set by the `declared`
+   * event; `toHome` is cleared by the rover derivation or by poverty, and
+   * the whole run clears when the alternate is reached.
+   */
+  run: DeclaredRun | null;
   /** Railroads this baron owns, in purchase order. */
   holdings: readonly RailroadId[];
   /**
@@ -80,7 +92,7 @@ export interface GameState {
   lastMove: { seat: SeatId; path: readonly NodeId[]; arrived: boolean } | null;
   /** From started.rules; PUBLISHED_RULES when the log predates rules. */
   rules: GameRules;
-  /** The seat whose moved ended at home while homeward. Ends the game. */
+  /** The seat whose declared run reached home with the target in hand. Ends the game. */
   winner: SeatId | null;
   /** Who owns what. Empty for every pre-phase-2 log. */
   owners: ReadonlyMap<RailroadId, SeatId>;
@@ -91,7 +103,7 @@ function emptyState(): GameState {
   for (const id of SEATS) {
     seats[id] = {
       id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map(),
-      home: null, banked: 0, homeward: false, holdings: []
+      home: null, banked: 0, run: null, holdings: []
     };
   }
   return {
@@ -225,6 +237,22 @@ export function replay(events: readonly GameEvent[]): GameState {
           ...seat, holdings: seat.holdings.filter((line) => line !== event.railroad),
         };
         break;
+      case 'declared': {
+        // The alternate is rolled at declaration and carried here; it
+        // banks nothing unless the run is cancelled and the baron reaches
+        // it. Eligibility was legal.ts's question; the fold folds what the
+        // log says.
+        const runner: Seat = { ...seat, run: { alternate: event.alternate, toHome: true } };
+        state.seats[event.seat] = runner;
+        // "If a player is in his home city when he declares he wins
+        // immediately" — the rulebook's own clause.
+        const homeCity = runner.stops[0]?.city ?? null;
+        if (state.winner === null && homeCity !== null
+            && runner.at === nodeForCity(homeCity)) {
+          state.winner = event.seat;
+        }
+        break;
+      }
       case 'turnRolled':
         open = {
           seat: event.seat,
@@ -260,6 +288,10 @@ export function replay(events: readonly GameEvent[]): GameState {
           // not just this leg's.
           used: event.arrived ? new Map() : addSections(seat.used, event.path)
         };
+        // Cleared before the turn settles: fees are billed against cash
+        // *after* the arriving trip is paid — the window is "on arrival,
+        // after being paid", and the poverty sweep reads the same cash.
+        if (event.arrived) inFlight.set(event.seat, 0);
         state.lastMove = { seat: event.seat, path: event.path, arrived: event.arrived };
         if (open !== null) {
           open.paths.push(event.path);
@@ -276,22 +308,37 @@ export function replay(events: readonly GameEvent[]): GameState {
           const owed = open.legacy
             ? bonusLegOwed(open.roll, pathCost(event.path), event.arrived)
             : earnsBonus(state.rules.startingTrain, open.roll.white);
-          if (open.legs >= 2 || !owed) {
+          // A declared pawn "stops immediately when it reaches its home
+          // city" — any Bonus Roll still owed is forfeit: there is no trip
+          // left to spend it on, and the turn must close so its fees settle
+          // before the win is judged.
+          const mover = state.seats[event.seat];
+          const homeRun = mover.run?.toHome === true
+            && mover.stops[0] !== undefined
+            && mover.at === nodeForCity(mover.stops[0].city);
+          if (homeRun || open.legs >= 2 || !owed) {
             settleFees(open);
             taken += 1; open = null;
           }
         }
-        if (event.arrived) inFlight.set(event.seat, 0);
         {
-          // Settle the mover's money. Banked before tested, so a leg that
-          // both completes the crossing trip and ends at home wins here.
+          // Refresh the mover's money and home on the event itself, so a
+          // hostile log with trailing junk still lands `winner` on the
+          // right event; the post-loop pass makes every seat uniform.
           const mover = state.seats[event.seat];
-          const banked = cashOf(event.seat);
-          const homeCity = mover.stops[0]?.city ?? null;
-          const homeward = homeCity !== null && banked >= state.rules.winTarget;
-          state.seats[event.seat] = { ...mover, banked, homeward, home: homeCity };
-          if (state.winner === null && homeward
-              && mover.at === nodeForCity(homeCity!)) {
+          state.seats[event.seat] = {
+            ...mover, banked: cashOf(event.seat), home: mover.stops[0]?.city ?? null,
+          };
+        }
+        {
+          // The win: a declared run's moved ending at the home node, with
+          // the target still in hand after this turn's fees — settleFees
+          // has already run, and its poverty sweep clears toHome when the
+          // bill broke the target, so `toHome` here means "still able to
+          // win".
+          const mover = state.seats[event.seat];
+          if (state.winner === null && mover.run?.toHome === true
+              && mover.home !== null && mover.at === nodeForCity(mover.home)) {
             state.winner = event.seat;
           }
         }
@@ -314,12 +361,7 @@ export function replay(events: readonly GameEvent[]): GameState {
   // touched seats as they moved, and they agree with this by construction.
   for (const sid of SEATS) {
     const seat = state.seats[sid];
-    const homeCity = seat.stops[0]?.city ?? null;
-    const banked = cashOf(sid);
-    state.seats[sid] = {
-      ...seat, home: homeCity, banked,
-      homeward: homeCity !== null && banked >= state.rules.winTarget,
-    };
+    state.seats[sid] = { ...seat, home: seat.stops[0]?.city ?? null, banked: cashOf(sid) };
   }
   state.owners = owners;
   if (state.winner !== null) state.phase = 'over';

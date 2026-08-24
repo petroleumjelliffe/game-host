@@ -1,5 +1,5 @@
 // What legal.ts refuses once money means something: appends into a finished
-// game, destination rolls from homeward barons, and payouts the table never
+// game, destination rolls from declared barons, and payouts the table never
 // said. Refusals are asserted by *reason* — a turn-order mistake in a builder
 // must not impersonate a pass.
 import { describe, expect, it } from 'vitest';
@@ -42,7 +42,8 @@ const opening = (): GameEvent[] => [
 ];
 
 /**
- * Red completes a trip (homeward at NEW_YORK), then blue completes one too,
+ * Red completes a trip (eligible to declare at NEW_YORK), then blue completes
+ * one too,
  * which hands the turn back to red — the trap the plan warns about: without
  * blue's intervening turn, every red append would be refused `not your turn`
  * and these tests would pass for the wrong reason.
@@ -55,8 +56,14 @@ const brink = (): GameEvent[] => [
   ...walk('blue', MIAMI, LOS_ANGELES),
 ];
 
+const declare = (seat: SeatId, from: CityId, alt: CityId): GameEvent =>
+  ({ type: 'declared', seat,
+     alternate: { city: alt, region: cityById(alt).region,
+                  payout: payoutBetween(from, alt) } });
+
 const wonLog = (): GameEvent[] => [
   ...brink(),
+  declare('red', NEW_YORK, LOS_ANGELES),
   { type: 'turnRolled', seat: 'red', white: [2, 5], bonus: null },
   { type: 'moved', seat: 'red',
     path: [nodeForCity(NEW_YORK), nodeForCity(CHICAGO)], arrived: true },
@@ -72,21 +79,21 @@ describe('a finished game is closed', () => {
   });
 });
 
-describe('homeward seats', () => {
+describe('declared seats', () => {
   it('may not roll destinations', () => {
-    const log = brink(); // red's turn, red homeward at NEW_YORK
+    const log = [...brink(), declare('red', NEW_YORK, LOS_ANGELES)];
     const region = appendLegality(log,
       { type: 'regionRequested', seat: 'red', rolled: cityById(CHICAGO).region }, 'red');
     expect(region).not.toBeNull();
-    expect(region!.message).toMatch(/homeward/);
+    expect(region!.message).toMatch(/declared baron/);
 
     const dest = appendLegality(log, assign('red', NEW_YORK, MIAMI), 'red');
     expect(dest).not.toBeNull();
-    expect(dest!.message).toMatch(/homeward/);
+    expect(dest!.message).toMatch(/declared baron/);
   });
 
   it('may roll the turn dice without a destination owed', () => {
-    expect(appendLegality(brink(),
+    expect(appendLegality([...brink(), declare('red', NEW_YORK, LOS_ANGELES)],
       { type: 'turnRolled', seat: 'red', white: [2, 3], bonus: null }, 'red')).toBeNull();
   });
 });

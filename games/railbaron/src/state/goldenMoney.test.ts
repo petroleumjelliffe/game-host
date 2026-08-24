@@ -53,7 +53,7 @@ const opening = (redHome: CityId, blueHome: CityId, rules: object = {}): GameEve
 
 describe('the standard cycle', () => {
   it('destination assigned, walked, paid on completion, next one legal', () => {
-    let log = opening(CHICAGO, MIAMI); // published target: nobody goes homeward
+    let log = opening(CHICAGO, MIAMI); // published target: nobody nears it
     const pay = payoutBetween(CHICAGO, NEW_YORK);
 
     log = play(log, assign('red', CHICAGO, NEW_YORK), 'red');
@@ -92,7 +92,7 @@ describe('the $0 neighbours', () => {
       // The trip banks its real $0 — and the twin spur is a real edge, so
       // since phase 2 the turn bills its $1,000 bank fee at close.
       expect(state.seats.red.banked).toBe(-1000);
-      expect(state.seats.red.homeward).toBe(false);
+      expect(state.seats.red.run).toBeNull();
       expect(state.winner).toBeNull();
     });
   }

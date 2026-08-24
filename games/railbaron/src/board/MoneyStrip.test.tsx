@@ -47,9 +47,15 @@ describe('MoneyStrip', () => {
     expect(screen.getByText('$0')).toBeInTheDocument(); // Ben, no trips yet
   });
 
-  it('marks a homeward baron with their home city', () => {
-    render(<MoneyStrip state={replay(trip({ winTarget: 1000 }))} />);
-    expect(screen.getByText(/racing home to Chicago/i)).toBeInTheDocument();
+  it('marks a declared baron with their home city', () => {
+    const declared = [
+      ...trip({ winTarget: 1000 }),
+      { type: 'declared', seat: 'red',
+        alternate: { city: MIAMI, region: cityById(MIAMI).region,
+                     payout: payoutBetween(NEW_YORK, MIAMI) } },
+    ] as GameEvent[];
+    render(<MoneyStrip state={replay(declared)} />);
+    expect(screen.getByText(/declared — racing home to Chicago/i)).toBeInTheDocument();
   });
 
   it('marks a seeded game', () => {
@@ -60,6 +66,9 @@ describe('MoneyStrip', () => {
   it('announces the winner when the game is over', () => {
     const won = [
       ...trip({ winTarget: 1000 }),
+      { type: 'declared', seat: 'red',
+        alternate: { city: MIAMI, region: cityById(MIAMI).region,
+                     payout: payoutBetween(NEW_YORK, MIAMI) } },
       { type: 'turnRolled', seat: 'red', white: [2, 5], bonus: null },
       { type: 'moved', seat: 'red',
         path: [nodeForCity(NEW_YORK), nodeForCity(CHICAGO)], arrived: true },

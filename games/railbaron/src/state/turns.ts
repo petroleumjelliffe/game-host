@@ -1,4 +1,4 @@
-import { sectionKey, type CityId, type NodeId } from '../../engine/index.js';
+import { nodeForCity, sectionKey, type CityId, type NodeId } from '../../engine/index.js';
 import { SEATS, type SeatId } from './events.js';
 // Types only. game.ts imports rotate and addSections from here at runtime, so
 // a value import in this direction would close a real cycle.
@@ -35,11 +35,14 @@ export const homeOf = (seat: Seat): CityId | null => seat.stops[0]?.city ?? null
  * home town is a stop but never a destination, so one stop means none.
  */
 export const destinationOf = (seat: Seat): CityId | null =>
-  // A homeward baron's destination IS home — one seam serving both surfaces:
-  // the map's route draft walks toward it, and needsDestination() below goes
-  // structurally false for a homeward baron mid-run (they are never owed a
-  // destination roll; legal.ts refuses one anyway, in the same words).
-  seat.homeward ? seat.home
+  // A declared baron's destination IS home; a caught or impoverished one's
+  // is the alternate the declare carried. One seam serving both surfaces,
+  // exactly as it served phase-1 homeward: the map's route draft walks
+  // toward it, and needsDestination() below goes structurally false
+  // mid-run (they are never owed a destination roll; legal.ts refuses one
+  // anyway, in the same words).
+  seat.run !== null
+    ? (seat.run.toHome ? seat.home : seat.run.alternate.city)
     : seat.stops.length >= 2 ? seat.stops[seat.stops.length - 1]!.city : null;
 
 /**
@@ -71,3 +74,22 @@ export const nextHomeSeat = (state: GameState): SeatId | null =>
   SEATS.find(id => state.seats[id].name !== null && state.seats[id].at === null) ?? null;
 
 export const homesDone = (state: GameState): boolean => nextHomeSeat(state) === null;
+
+/**
+ * The rulebook's three conditions, verbatim: "1) have $200,000 or more in
+ * cash, 2) be in his latest destination city, and 3) be about to roll for
+ * a new destination". Cash is banked — fees already netted. Lights the
+ * choice for the UI and gates the event for legal.ts; changes nothing by
+ * itself (spec Decision 3).
+ */
+export function mayDeclare(state: GameState, id: SeatId): boolean {
+  const seat = state.seats[id];
+  if (state.phase !== 'playing' || seat.run !== null) return false;
+  if (seat.stops.length < 2) return false;   // home is a stop, never a destination
+  const latest = seat.stops[seat.stops.length - 1]!.city;
+  return seat.at === nodeForCity(latest) && seat.banked >= state.rules.winTarget;
+}
+
+/** The seat a fee bill has put under zero, if any — the liquidation gate. */
+export const shortSeat = (state: GameState): SeatId | null =>
+  SEATS.find((id) => state.seats[id].banked < 0) ?? null;
