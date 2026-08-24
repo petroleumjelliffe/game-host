@@ -110,6 +110,13 @@ export function appendLegality(
         return not('notNow', 'no roll to move on');
       }
       return state.leg < 2 ? null : not('notNow', 'this turn has walked both its legs');
+
+    case 'bought':
+    case 'declared':
+    case 'sold':
+      // Placeholders until the phase-2 legality task lands; refusing is
+      // the safe default for an event no rule yet admits.
+      return not('notNow', 'not yet in play');
   }
 }
 
