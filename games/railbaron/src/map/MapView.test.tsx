@@ -214,13 +214,7 @@ describe('playing a turn on the map', () => {
    * arrives at d432 twice. 33 edges permit that, and the network has around
    * 161 independent cycles, so a route that revisits a node is ordinary play.
    */
-  it('draws every segment of a route that doubles back on itself', async () => {
-    // React only *warns* about duplicate keys and may still render both
-    // children, so counting segments does not on its own catch this — the
-    // damage is to reconciliation on later updates, which is undefined
-    // behaviour rather than a reliable symptom. The warning is the signal
-    // that discriminates, so it is asserted alongside what the player sees.
-    const complaints = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('lights every section of a route that doubles back on itself', async () => {
     const user = userEvent.setup();
     const { container } = render(
       <MapView
@@ -240,53 +234,70 @@ describe('playing a turn on the map', () => {
       />
     );
 
-    // One group per traveled segment — each holds the two-weight pair.
-    const segments = () => container.querySelectorAll('[data-route="draft"] > g');
     await user.click(screen.getByRole('button', { name: 'Dot d432' }));
     await user.click(screen.getByRole('button', { name: 'Dot d393' }));
     await user.click(screen.getByRole('button', { name: 'Dot d432' }));
 
-    // Three steps walked, so three segments drawn...
-    expect(segments()).toHaveLength(3);
-    // ...each of them its own child. Keying by node id collides on the
-    // repeated d432, and React is explicit that two children sharing a key
-    // no longer keep their identity across updates.
-    const keyed = complaints.mock.calls
-      .map(call => String(call[0]))
-      .filter(message => message.includes('same key'));
-    expect(keyed).toEqual([]);
-    complaints.mockRestore();
+    // The there-and-back crossed its two-line section once on each company,
+    // so it draws fully spent: lit, at the bright line's full strength.
+    const doubled = container.querySelector('[data-edge="d393|d432"]')!;
+    expect(doubled.getAttribute('data-spent')).toBe('true');
+    const lit = doubled.querySelector('[data-motion]')!;
+    const lines = lit.querySelectorAll('line');
+    expect(lines).toHaveLength(2);
+    expect(lines[1]!.getAttribute('opacity')).toBe('0.95');
   });
 
-  it('will not take a tap while the last move is still playing back', () => {
-    const onMove = vi.fn();
-    // A Bonus Roll turn: the primary leg lands within the white dice with a
-    // bonus die still owed, so the turn stays open — a new destination is
-    // rolled, and the bonus leg (Minneapolis, one hop away) becomes a real,
-    // tappable candidate. Without the guard, `route.legal` genuinely holds
-    // it; this is the scenario the guard exists for, not one where there is
-    // nothing to tap regardless.
-    const played: GameEvent[] = [
-      { type: 'joined', seat: 'red', name: 'ADA' },
-      { type: 'started' },
-      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
-      { type: 'orderRolled', seat: 'red', first: 'red' },
-      { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
-      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 },
-      { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true },
-      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: 3000 }
-    ];
+  /**
+   * A Bonus Roll turn: the primary leg lands within the white dice with a
+   * bonus die still owed, so the turn stays open — a new destination is
+   * rolled, and the bonus leg (Minneapolis, one hop away) becomes a real,
+   * tappable candidate. Without the guard, `route.legal` genuinely holds
+   * it; this is the scenario the guard exists for, not one where there is
+   * nothing to tap regardless.
+   */
+  const played: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'started' },
+    { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+    { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 },
+    { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true },
+    { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: 3000 }
+  ];
+
+  const playedAs = (viewer: 'red' | 'blue' | 'all') =>
     render(
       <MapView
         state={replay(played)}
         onBack={() => {}}
-        onMove={onMove}
+        onMove={vi.fn()}
         dice={{ roll: null, live: false, mine: false }}
         onRollDice={() => {}}
         onDiceLanded={() => {}}
+        viewer={viewer}
       />
     );
+
+  it('will not take a tap while a broadcast move is still playing back', () => {
+    // Blue's device is being told about red's move, so the walk animates
+    // there — and nothing is tappable over the animation.
+    playedAs('blue');
     expect(screen.queryByRole('button', { name: /Minneapolis/ })).not.toBeInTheDocument();
+  });
+
+  it('does not replay the move on the device that made it', () => {
+    // Red tapped this route out and watched it happen; replaying it at them
+    // would double the move. The playback lands complete, so nothing gated
+    // on it — here, the bonus leg's candidate lamp — ever closes.
+    playedAs('red');
+    expect(screen.getByRole('button', { name: /Minneapolis/ })).toBeInTheDocument();
+  });
+
+  it('never replays on the shared tablet, where every move is made in person', () => {
+    playedAs('all');
+    expect(screen.getByRole('button', { name: /Minneapolis/ })).toBeInTheDocument();
   });
 
   /**
@@ -797,23 +808,30 @@ describe('playing a turn on the map', () => {
 
   /**
    * Traveled track lights in the mover's own colour: a wide soft underlay
-   * with a bright line over it, fading in as each segment is taken — the same
-   * treatment for the route being tapped and the committed leg playing back,
-   * so they cannot read as two different things.
+   * with a bright line over it, fading in as each section is taken — drawn by
+   * the spent-track map itself, so what lights up is exactly what the engine
+   * will refuse to cross again. The old burn-out (colour draining to 12%) is
+   * gone: where the trip has been is the thing the player is reading, and a
+   * lit line is legible where a darkened one never was.
    */
   describe('the traveled track', () => {
-    it("draws a tapped segment in the mover's colour, wide under bright", async () => {
+    it("lights a tapped section in the mover's colour, wide under bright", async () => {
       const user = userEvent.setup();
       const { container } = show(midTurn);
+      const section = () => container.querySelector('[data-edge="c13|c95"]')!;
+      expect(section().querySelector('[data-motion]')).toBeNull();
       await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
-      const segments = container.querySelectorAll('[data-route="draft"] > g');
-      expect(segments).toHaveLength(1);
-      expect(segments[0]!.getAttribute('style')).toContain('rb-fade');
-      const lines = segments[0]!.querySelectorAll('line');
+      // Four companies share Minneapolis–St. Paul, so one crossing is 'part':
+      // lit, with the bright line held back below a fully spent section's.
+      expect(section().getAttribute('data-spent')).toBe('part');
+      const lit = section().querySelector('[data-motion]')!;
+      expect(lit.getAttribute('style')).toContain('rb-fade');
+      const lines = lit.querySelectorAll('line');
       expect(lines).toHaveLength(2);
       for (const line of lines) expect(line.getAttribute('stroke')).toBe('#e02b1d');
       expect(lines[0]!.getAttribute('stroke-width')).toBe('9');
       expect(lines[1]!.getAttribute('stroke-width')).toBe('3');
+      expect(lines[1]!.getAttribute('opacity')).toBe('0.5');
     });
 
     it('draws the committed trail the same way', () => {

@@ -9,11 +9,13 @@ import { shortSeat } from '../../state/turns';
 import { liquidation } from './liquidation';
 
 /** Red buys beyond their means (scripted — the fold is tolerant), so the
- *  balance sits below zero with railroads still held. */
+ *  balance sits below zero with railroads still held. Starting cash zeroed:
+ *  this test's subject is the ledger going short, and the published $20,000
+ *  cushion would hide it. */
 const shortLog: GameEvent[] = [
   { type: 'joined', seat: 'red', name: 'ADA' },
   { type: 'joined', seat: 'green', name: 'GRACE' },
-  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000, startingCash: 0 } },
   { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
   { type: 'arrived', seat: 'green', city: 47, region: 'PL', payout: null },
   { type: 'orderRolled', seat: 'red', first: 'red' },

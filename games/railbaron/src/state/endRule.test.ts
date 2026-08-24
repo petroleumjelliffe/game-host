@@ -42,10 +42,10 @@ const NEW_YORK = id('New York');
 const LOS_ANGELES = id('Los Angeles');
 const MIAMI = id('Miami');
 
-const opening = (aHome: CityId, bHome: CityId): GameEvent[] => [
+const opening = (aHome: CityId, bHome: CityId, rules: object = {}): GameEvent[] => [
   { type: 'joined', seat: 'red', name: 'A' },
   { type: 'joined', seat: 'blue', name: 'B' },
-  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+  { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000, ...rules } },
   home('red', aHome), home('blue', bHome),
   { type: 'orderRolled', seat: 'red', first: 'red' },
 ];
@@ -66,11 +66,12 @@ describe('banked vs earned', () => {
     const mid = replay(log);
     const pay = payoutBetween(CHICAGO, NEW_YORK);
     expect(mid.seats.red.earned).toBe(pay);   // assignment-time, as today
-    expect(mid.seats.red.banked).toBe(0);      // the trip is not walked
+    // The trip is not walked: only the rulebook's starting cash is banked.
+    expect(mid.seats.red.banked).toBe(PUBLISHED_RULES.startingCash);
     expect(mayDeclare(mid, 'red')).toBe(false);
 
     const done = replay([...log, ...walk('red', CHICAGO, NEW_YORK)]);
-    expect(done.seats.red.banked).toBe(pay);
+    expect(done.seats.red.banked).toBe(PUBLISHED_RULES.startingCash + pay);
     // winTarget 1000: any real payout crosses it — but crossing only makes
     // declaring *eligible*; nothing changes by itself (spec Decision 3).
     expect(mayDeclare(done, 'red')).toBe(true);
@@ -88,7 +89,8 @@ describe('banked vs earned', () => {
         path: [nodeForCity(NEW_YORK), 'd100'], arrived: false },
     ];
     const state = replay(log);
-    expect(state.seats.red.banked).toBe(payoutBetween(CHICAGO, NEW_YORK));
+    expect(state.seats.red.banked)
+      .toBe(PUBLISHED_RULES.startingCash + payoutBetween(CHICAGO, NEW_YORK));
     expect(state.seats.red.run?.toHome).toBe(true);
     expect(state.winner).toBeNull();
   });
@@ -161,7 +163,9 @@ describe('rules in the fold', () => {
     const MPLS = id('Minneapolis');
     const STP = id('St. Paul');
     const log: GameEvent[] = [
-      ...opening(MPLS, MIAMI),
+      // Starting cash zeroed: this test's subject is a trip that lights
+      // nothing, and the published $20,000 already clears winTarget 1000.
+      ...opening(MPLS, MIAMI, { startingCash: 0 }),
       assign('red', MPLS, STP),
       ...walk('red', MPLS, STP),
     ];

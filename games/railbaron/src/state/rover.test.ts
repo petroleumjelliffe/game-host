@@ -88,11 +88,12 @@ describe('the rover play', () => {
       { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null },
       { type: 'moved', seat: 'blue', path: ['c13', 'c95'], arrived: false },
     ]);
-    // Red's whole ledger, folded from the events: both trips' payouts, the
-    // alternate's $0, one rover payment, and the $1,000 their own
-    // real-edge turn to the alternate billed.
+    // Red's whole ledger, folded from the events: the starting cash, both
+    // trips' payouts, the alternate's $0, one rover payment, and the $1,000
+    // their own real-edge turn to the alternate billed.
     expect(through.seats.red.banked).toBe(
-      payoutBetween(CHICAGO, NEW_YORK) + payoutBetween(NEW_YORK, STP)
+      PUBLISHED_RULES.startingCash
+      + payoutBetween(CHICAGO, NEW_YORK) + payoutBetween(NEW_YORK, STP)
       - 50000 - 1000);
   });
 
@@ -134,12 +135,14 @@ describe('the road to the alternate', () => {
 describe('un-declaring by poverty', () => {
   it('a fee that breaks the target clears the declaration', () => {
     // Target pinned exactly at the banked total, so one $1,000 bank fee
-    // breaks the line.
+    // breaks the line. Starting cash zeroed: this test's subject is a fee
+    // breaking the target, and the published $20,000 cushion would keep
+    // the declaration standing.
     const target = payoutBetween(CHICAGO, NEW_YORK);
     const tight: GameEvent[] = [
       { type: 'joined', seat: 'red', name: 'A' },
       { type: 'joined', seat: 'blue', name: 'B' },
-      { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: target } },
+      { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: target, startingCash: 0 } },
       home('red', CHICAGO), home('blue', MIAMI),
       { type: 'orderRolled', seat: 'red', first: 'red' },
       assign('red', CHICAGO, NEW_YORK), ...walk('red', CHICAGO, NEW_YORK),

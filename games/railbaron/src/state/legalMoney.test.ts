@@ -197,7 +197,9 @@ describe('the liquidation gate', () => {
    * itself proof the flow is reachable in legal play.
    */
   const shortLog = (): GameEvent[] => {
-    let log = brink();
+    // Starting cash zeroed: this test's subject is the ledger going short,
+    // and the published $20,000 cushion would hide it.
+    let log = brinkAt({ winTarget: 1000, startingCash: 0 });
     log = play(log, buy('red', 'WP'), 'red');
     log = play(log, assign('red', NEW_YORK, STP), 'red');
     log = play(log, { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null }, 'red');

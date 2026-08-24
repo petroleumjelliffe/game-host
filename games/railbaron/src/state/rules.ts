@@ -8,12 +8,15 @@ import type { TrainType } from '../../engine/index.js';
 export interface GameRules {
   /** Dollars. payoutBetween() already returns dollars (thousands * 1000). */
   winTarget: number;
+  /** Dollars each baron holds before their first trip pays anything. */
+  startingCash: number;
   startingTrain: TrainType;
   /** Present = deterministic dice, verified by legal.ts. Absent = Math.random. */
   seed?: string;
 }
 
-export const PUBLISHED_RULES: GameRules = { winTarget: 200000, startingTrain: 'freight' };
+export const PUBLISHED_RULES: GameRules =
+  { winTarget: 200000, startingCash: 20000, startingTrain: 'freight' };
 
 const TRAINS: ReadonlySet<string> = new Set(['freight', 'express', 'superchief']);
 
@@ -31,6 +34,13 @@ export function parseRules(value: unknown): ParsedRules {
       return { ok: false, field: 'winTarget' };
     }
     rules.winTarget = raw.winTarget;
+  }
+  if (raw.startingCash !== undefined) {
+    if (typeof raw.startingCash !== 'number' || !Number.isFinite(raw.startingCash)
+        || raw.startingCash < 0) {
+      return { ok: false, field: 'startingCash' };
+    }
+    rules.startingCash = raw.startingCash;
   }
   if (raw.startingTrain !== undefined) {
     if (typeof raw.startingTrain !== 'string' || !TRAINS.has(raw.startingTrain)) {

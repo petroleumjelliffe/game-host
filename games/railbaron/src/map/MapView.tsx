@@ -63,10 +63,12 @@ type Spent = 'true' | 'part' | null;
 const spentState = (crossings: number, lines: number): Spent =>
   crossings <= 0 ? null : crossings >= lines ? 'true' : 'part';
 
-function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'> & {
+function Track({ nodes, edges, spent, spentColor }: Pick<ReturnType<typeof layout>, 'edges'> & {
   nodes: Map<string, Placed>;
   /** Crossings this trip, by section — the very map the engine refuses steps with. */
   spent: ReadonlyMap<string, number>;
+  /** The baron up's colour — spent track is theirs alone, and lights in it. */
+  spentColor: string;
 }) {
   // Geometry depends on the projection alone, so tapping out a route — which
   // changes `spent` on every step — does not recompute any of it.
@@ -112,15 +114,20 @@ function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'>
                     x1={s.a.x + s.nx * k} y1={s.a.y + s.ny * k}
                     x2={s.b.x + s.nx * k} y2={s.b.y + s.ny * k}
                     stroke={RAILROADS.get(id)?.color ?? '#8b6a42'}
-                    strokeWidth={1.5} strokeLinecap="round"
-                    // Spent track burns out: the colour drops away and the
-                    // dark bed beneath shows through. Part-spent track is
-                    // dashed — still there, and only on another line.
-                    opacity={state === 'true' ? 0.12 : 0.85}
-                    {...(state === 'part' ? { strokeDasharray: '3 3' } : {})}
+                    strokeWidth={1.5} strokeLinecap="round" opacity={0.85}
                   />
                 );
               })}
+              {/* Spent track lights up in the baron's colour instead of the
+                  old burn-out: where the trip has been is the thing the
+                  player is actually reading, and a lit line is legible where
+                  colour draining to 12% never was. `usedAfter` counts the
+                  draft's own steps, so this is also the tapped route drawing
+                  itself — one vocabulary for "traveled", live and committed. */}
+              {state !== null && (
+                <TraveledSegment a={s.a} b={s.b} color={spentColor}
+                                 partial={state === 'part'} />
+              )}
             </g>
           );
         })}
@@ -130,21 +137,28 @@ function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'>
 }
 
 /**
- * One segment of track the turn has traveled, in the mover's own colour: a
+ * One segment of track the trip has traveled, in the mover's own colour: a
  * wide soft underlay and a bright line over it, so the route reads as lit
  * from beneath rather than merely drawn on. Each segment fades in as the
  * pawn takes it — the animation runs once on mount, which is exactly when
- * the step was walked. Both the committed trail and the draft draw through
- * this, so the route being tapped and the route playing back cannot look
- * like two different things.
+ * the step was walked. The spent track and the committed trail both draw
+ * through this, so the route being tapped out and the route playing back
+ * cannot look like two different things.
+ *
+ * `partial` is the shared-trackage case: one line across the section is
+ * crossed, another still free. The section is lit — it has been traveled —
+ * but the bright line holds back, so a fully spent section still reads
+ * brighter than one the pawn may cross again.
  */
-function TraveledSegment({ a, b, color }: { a: Placed; b: Placed; color: string }) {
+function TraveledSegment({ a, b, color, partial = false }: {
+  a: Placed; b: Placed; color: string; partial?: boolean;
+}) {
   return (
     <g data-motion="" style={{ animation: 'rb-fade 260ms linear both' }}>
       <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
             strokeWidth={9} strokeLinecap="round" opacity={0.16} />
       <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color}
-            strokeWidth={3} strokeLinecap="round" opacity={0.95} />
+            strokeWidth={3} strokeLinecap="round" opacity={partial ? 0.5 : 0.95} />
     </g>
   );
 }
@@ -415,12 +429,23 @@ export function MapView({
   const owesBonus = state.turn !== null && !owesDestination && state.bonusOwed;
 
   // The path comes from the log, not from the draft: this is what makes the
-  // walk visible in the tab that played it *and* any tab just watching along.
+  // walk visible in any tab just watching along.
   const lastMove = state.lastMove;
+  /**
+   * Whether this device is the one that made the move. The animation is for
+   * players the move is *broadcast* to — whoever tapped it out has already
+   * watched it happen, and replaying it at them doubles the move. The shared
+   * tablet is every seat's own device, so it never watches a replay; online,
+   * only the mover's phone skips it. The path still lands complete (the trail
+   * draws in full at once), only the walk itself is skipped.
+   */
+  const ownMove = lastMove !== null
+    && (viewer === 'all' || viewer === lastMove.seat);
   // The mover is part of the key: two barons can commit the same dots one
   // after the other, and the path alone would make the second walk look like
   // the first still showing.
-  const replaying = usePlayback(lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null);
+  const replaying = usePlayback(
+    lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null, !ownMove);
 
   /**
    * Where the baron up has walked to so far this leg.
@@ -628,7 +653,8 @@ export function MapView({
           <path d={board.landPath} fill="rgba(255,240,214,0.045)" stroke="#d6ab6d" strokeWidth={1.5}
                 strokeLinejoin="round" />
 
-          <Track edges={board.edges} nodes={board.byId} spent={spentTrack} />
+          <Track edges={board.edges} nodes={board.byId} spent={spentTrack}
+                 spentColor={state.turn === null ? '#fff6e2' : SEAT_COLORS[state.turn]} />
 
           {/* The portion of the last committed move walked so far — the same
               path everyone watching this log sees, drawn in the mover's own
@@ -647,28 +673,11 @@ export function MapView({
             </g>
           )}
 
-          {/* The route as tapped out so far, drawn over the track so it reads
-              as the line the pawn is about to walk. */}
-          {drafted && (
-            <g data-route="draft">
-              {/* Keyed by position, deliberately. A route may pass through the
-                  same node twice — an edge carrying two railroads may be
-                  crossed once on each — so keying by node id would collide and
-                  React would reconcile two segments into one, dropping a leg
-                  of the drawn route. The list is positional and never
-                  reordered, which is exactly when an index key is right. */}
-              {drafted.slice(1).map((id, i) => {
-                const a = board.byId.get(drafted[i]!);
-                const b = board.byId.get(id);
-                if (!a || !b) return null;
-                return (
-                  <TraveledSegment key={i} a={a} b={b}
-                                   color={state.turn === null
-                                     ? '#fff6e2' : SEAT_COLORS[state.turn]} />
-                );
-              })}
-            </g>
-          )}
+          {/* There is no separate drawing of the draft any more. The route as
+              tapped out IS the spent track: `usedAfter` counts the draft's
+              steps section by section, so the lit treatment inside Track
+              draws each one as it is taken — and what is drawn lit is exactly
+              what `section-used` will refuse, one map for both. */}
 
           <g>
             {board.nodes.filter(n => n.kind === 'dot').map(node => {
