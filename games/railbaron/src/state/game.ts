@@ -1,8 +1,9 @@
 import {
-  bonusLegOwed, earnsBonus, nodeForCity, pathCost,
-  type CityId, type NodeId, type RegionId, type TrainType, type TurnRoll
+  RAILROADS, bonusLegOwed, earnsBonus, nodeForCity, pathCost,
+  type CityId, type NodeId, type RailroadId, type RegionId, type TrainType, type TurnRoll
 } from '../../engine/index.js';
 import { SEATS, type GameEvent, type SeatId } from './events.js';
+import { ROVER_PRIZE, turnBill } from './money.js';
 import { PUBLISHED_RULES, type GameRules } from './rules.js';
 import { addSections, rotate } from './turns.js';
 
@@ -11,6 +12,13 @@ export interface Stop {
   region: RegionId;
   /** null for a home town. 0 is a real, zero-paying journey. */
   payout: number | null;
+}
+
+export interface DeclaredRun {
+  /** Rolled at declaration; paid only if reached after cancellation. */
+  alternate: { city: CityId; region: RegionId; payout: number };
+  /** true: bound for home. false: caught or impoverished, bound for the alternate. */
+  toHome: boolean;
 }
 
 export interface Seat {
@@ -28,11 +36,18 @@ export interface Seat {
    * right for a running total, one trip early for a threshold. The end rule
    * reads this, never `earned`. Tracked as an explicit in-flight amount that
    * the arriving `moved` clears, NOT inferred from the pawn's position: a
-   * homeward baron who leaves their last stop has not un-earned that trip.
+   * declared baron who leaves their last stop has not un-earned that trip.
    */
   banked: number;
-  /** banked >= rules.winTarget: no more destinations, racing for home. */
-  homeward: boolean;
+  /**
+   * The declared run, while one is on — or the cancelled run still owed
+   * its alternate. Null is the ordinary state. Set by the `declared`
+   * event; `toHome` is cleared by the rover derivation or by poverty, and
+   * the whole run clears when the alternate is reached.
+   */
+  run: DeclaredRun | null;
+  /** Railroads this baron owns, in purchase order. */
+  holdings: readonly RailroadId[];
   /**
    * Where this baron's pawn stands, as a node — not a city. A baron between
    * two cities is the normal case, and the companion could get away with
@@ -77,8 +92,10 @@ export interface GameState {
   lastMove: { seat: SeatId; path: readonly NodeId[]; arrived: boolean } | null;
   /** From started.rules; PUBLISHED_RULES when the log predates rules. */
   rules: GameRules;
-  /** The seat whose moved ended at home while homeward. Ends the game. */
+  /** The seat whose declared run reached home with the target in hand. Ends the game. */
   winner: SeatId | null;
+  /** Who owns what. Empty for every pre-phase-2 log. */
+  owners: ReadonlyMap<RailroadId, SeatId>;
 }
 
 function emptyState(): GameState {
@@ -86,12 +103,13 @@ function emptyState(): GameState {
   for (const id of SEATS) {
     seats[id] = {
       id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map(),
-      home: null, banked: 0, homeward: false
+      home: null, banked: 0, run: null, holdings: []
     };
   }
   return {
     seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0,
-    bonusOwed: false, lastMove: null, rules: PUBLISHED_RULES, winner: null
+    bonusOwed: false, lastMove: null, rules: PUBLISHED_RULES, winner: null,
+    owners: new Map()
   };
 }
 
@@ -100,6 +118,8 @@ interface OpenTurn {
   seat: SeatId;
   roll: TurnRoll;
   legs: number;
+  /** This turn's walked legs, for the fee bill. */
+  paths: NodeId[][];
   /**
    * A turn whose `turnRolled` already carried a bonus face — a log written
    * before the Bonus Roll moved to after the white movement. Those turns keep
@@ -138,6 +158,45 @@ export function replay(events: readonly GameEvent[]): GameState {
    * banked = earned - inFlight, always.
    */
   const inFlight = new Map<SeatId, number>();
+  /** Who owns what, folded as purchases and sales land. */
+  const owners = new Map<RailroadId, SeatId>();
+  /**
+   * Every dollar that is not a stop's payout: purchases and sales now,
+   * fees and the rover when their derivations land. banked =
+   * earned − inFlight + adjust, always — one ledger, so no money flow
+   * needs its own bookkeeping field on Seat.
+   */
+  const adjust = new Map<SeatId, number>();
+  const credit = (sid: SeatId, amount: number): void => {
+    adjust.set(sid, (adjust.get(sid) ?? 0) + amount);
+  };
+  const cashOf = (sid: SeatId): number =>
+    state.seats[sid].earned - (inFlight.get(sid) ?? 0) + (adjust.get(sid) ?? 0);
+
+  const settleFees = (turn: OpenTurn): void => {
+    // "He must pay all the fines and penalties each turn" — settled here,
+    // as the turn closes, from the paths it walked (spec Decision 2). The
+    // balance may cross zero: negative is the moment between the bill
+    // landing and the liquidation covering it, and legal.ts is what blocks
+    // play until it does.
+    const bill = turnBill(turn.paths, turn.seat, owners, owners.size === RAILROADS.size);
+    let total = bill.toBank;
+    for (const [owner, fee] of bill.toOwners) {
+      total += fee;
+      credit(owner, fee);
+    }
+    if (total > 0) credit(turn.seat, -total);
+    // Un-declaring by poverty: "as soon as a declared player falls below
+    // $200,000 … he is no longer declared." Below the target is below the
+    // target, whichever bill did it — this sweep and the rover's own clear
+    // are the only two ways a declaration ends short of winning.
+    for (const sid of SEATS) {
+      const runner = state.seats[sid];
+      if (runner.run?.toHome === true && cashOf(sid) < state.rules.winTarget) {
+        state.seats[sid] = { ...runner, run: { ...runner.run, toHome: false } };
+      }
+    }
+  };
 
   for (const event of events) {
     if (event.type === 'started') {
@@ -173,11 +232,43 @@ export function replay(events: readonly GameEvent[]): GameState {
         first = event.first;
         state.phase = 'playing';
         break;
+      case 'bought':
+        owners.set(event.railroad, event.seat);
+        credit(event.seat, -event.price);
+        state.seats[event.seat] = { ...seat, holdings: [...seat.holdings, event.railroad] };
+        break;
+      case 'sold':
+        // The Decision 4 stub: a forced sale to the bank. The event is
+        // ordinary log history, so a future auction replaces the mechanism
+        // without touching how this replays.
+        owners.delete(event.railroad);
+        credit(event.seat, event.price);
+        state.seats[event.seat] = {
+          ...seat, holdings: seat.holdings.filter((line) => line !== event.railroad),
+        };
+        break;
+      case 'declared': {
+        // The alternate is rolled at declaration and carried here; it
+        // banks nothing unless the run is cancelled and the baron reaches
+        // it. Eligibility was legal.ts's question; the fold folds what the
+        // log says.
+        const runner: Seat = { ...seat, run: { alternate: event.alternate, toHome: true } };
+        state.seats[event.seat] = runner;
+        // "If a player is in his home city when he declares he wins
+        // immediately" — the rulebook's own clause.
+        const homeCity = runner.stops[0]?.city ?? null;
+        if (state.winner === null && homeCity !== null
+            && runner.at === nodeForCity(homeCity)) {
+          state.winner = event.seat;
+        }
+        break;
+      }
       case 'turnRolled':
         open = {
           seat: event.seat,
           roll: { white: event.white, bonus: event.bonus },
           legs: 0,
+          paths: [],
           legacy: event.bonus !== null
         };
         break;
@@ -207,8 +298,61 @@ export function replay(events: readonly GameEvent[]): GameState {
           // not just this leg's.
           used: event.arrived ? new Map() : addSections(seat.used, event.path)
         };
+        // Cleared before the turn settles: fees are billed against cash
+        // *after* the arriving trip is paid — the window is "on arrival,
+        // after being paid", and the poverty sweep reads the same cash.
+        if (event.arrived) inFlight.set(event.seat, 0);
         state.lastMove = { seat: event.seat, path: event.path, arrived: event.arrived };
+        // The Rover Play, as a derivation (spec Decision 3): the paths are
+        // in the log and so is every pawn's position, so no new message can
+        // disagree with the movement that caused a catch. "The first player
+        // to move onto or through a dot occupied by the declared pawn
+        // collects $50,000" — path[0] is where the mover already stood, so
+        // it does not count as moving onto anyone.
+        for (const sid of SEATS) {
+          if (sid === event.seat) continue;
+          const runner = state.seats[sid];
+          if (runner.run?.toHome !== true || runner.at === null) continue;
+          if (event.path.slice(1).includes(runner.at)) {
+            credit(sid, -ROVER_PRIZE);
+            credit(event.seat, ROVER_PRIZE);
+            // "He pays only the first pawn that catches him — after that he
+            // is no longer declared": clearing toHome here is both the
+            // payment cap and the cancellation.
+            state.seats[sid] = { ...runner, run: { ...runner.run, toHome: false } };
+          }
+        }
+        {
+          // A cancelled run ends where the declare said it would: arrival
+          // at the alternate appends the stop the trip was owed, pays the
+          // carried payout, and hands back the ordinary rules — including
+          // re-declaring next trip. Nothing reset `used` at cancellation,
+          // deliberately: "the interrupted trip to his home city and the
+          // following trip to his alternate destination count as parts of
+          // the same trip" — the sections carry over precisely because no
+          // code touches them. (The rulebook's reuse mercy — "no more than
+          // is absolutely necessary" when stranded — is NOT implemented:
+          // the draft UI keeps refusing reused sections, and a genuinely
+          // stranded runner is resolved at the table, the honor level the
+          // spec assigns it.)
+          const mover = state.seats[event.seat];
+          if (mover.run !== null && !mover.run.toHome
+              && mover.at === nodeForCity(mover.run.alternate.city)) {
+            const { alternate } = mover.run;
+            state.seats[event.seat] = {
+              ...mover,
+              run: null,
+              earned: mover.earned + alternate.payout,
+              stops: [...mover.stops,
+                      { city: alternate.city, region: alternate.region,
+                        payout: alternate.payout }],
+            };
+            // No inFlight entry: this payout banks now, on arrival — the
+            // one stop that is never assigned ahead of being walked.
+          }
+        }
         if (open !== null) {
+          open.paths.push(event.path);
           open.legs += 1;
           // "A player can get no more than one Bonus Roll per turn" caps every
           // turn at two legs. What decides the *first* leg is the staging:
@@ -222,19 +366,37 @@ export function replay(events: readonly GameEvent[]): GameState {
           const owed = open.legacy
             ? bonusLegOwed(open.roll, pathCost(event.path), event.arrived)
             : earnsBonus(state.rules.startingTrain, open.roll.white);
-          if (open.legs >= 2 || !owed) { taken += 1; open = null; }
-        }
-        if (event.arrived) inFlight.set(event.seat, 0);
-        {
-          // Settle the mover's money. Banked before tested, so a leg that
-          // both completes the crossing trip and ends at home wins here.
+          // A declared pawn "stops immediately when it reaches its home
+          // city" — any Bonus Roll still owed is forfeit: there is no trip
+          // left to spend it on, and the turn must close so its fees settle
+          // before the win is judged.
           const mover = state.seats[event.seat];
-          const banked = mover.earned - (inFlight.get(event.seat) ?? 0);
-          const homeCity = mover.stops[0]?.city ?? null;
-          const homeward = homeCity !== null && banked >= state.rules.winTarget;
-          state.seats[event.seat] = { ...mover, banked, homeward, home: homeCity };
-          if (state.winner === null && homeward
-              && mover.at === nodeForCity(homeCity!)) {
+          const homeRun = mover.run?.toHome === true
+            && mover.stops[0] !== undefined
+            && mover.at === nodeForCity(mover.stops[0].city);
+          if (homeRun || open.legs >= 2 || !owed) {
+            settleFees(open);
+            taken += 1; open = null;
+          }
+        }
+        {
+          // Refresh the mover's money and home on the event itself, so a
+          // hostile log with trailing junk still lands `winner` on the
+          // right event; the post-loop pass makes every seat uniform.
+          const mover = state.seats[event.seat];
+          state.seats[event.seat] = {
+            ...mover, banked: cashOf(event.seat), home: mover.stops[0]?.city ?? null,
+          };
+        }
+        {
+          // The win: a declared run's moved ending at the home node, with
+          // the target still in hand after this turn's fees — settleFees
+          // has already run, and its poverty sweep clears toHome when the
+          // bill broke the target, so `toHome` here means "still able to
+          // win".
+          const mover = state.seats[event.seat];
+          if (state.winner === null && mover.run?.toHome === true
+              && mover.home !== null && mover.at === nodeForCity(mover.home)) {
             state.winner = event.seat;
           }
         }
@@ -257,13 +419,9 @@ export function replay(events: readonly GameEvent[]): GameState {
   // touched seats as they moved, and they agree with this by construction.
   for (const sid of SEATS) {
     const seat = state.seats[sid];
-    const homeCity = seat.stops[0]?.city ?? null;
-    const banked = seat.earned - (inFlight.get(sid) ?? 0);
-    state.seats[sid] = {
-      ...seat, home: homeCity, banked,
-      homeward: homeCity !== null && banked >= state.rules.winTarget,
-    };
+    state.seats[sid] = { ...seat, home: seat.stops[0]?.city ?? null, banked: cashOf(sid) };
   }
+  state.owners = owners;
   if (state.winner !== null) state.phase = 'over';
   return state;
 }

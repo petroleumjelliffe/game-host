@@ -1,4 +1,7 @@
-import { CITIES, NODES, REGIONS, cityById, type CityId, type RegionId } from '../../engine/index.js';
+import {
+  CITIES, NODES, RAILROADS, REGIONS, cityById,
+  type CityId, type RailroadId, type RegionId,
+} from '../../engine/index.js';
 import { isRulesShape, type GameRules } from './rules.js';
 
 export type SeatId = 'red' | 'green' | 'blue' | 'yellow' | 'black' | 'white';
@@ -53,7 +56,26 @@ export type GameEvent =
   /** One leg of movement: the path as node ids, and whether it ended on the
    *  destination. Two of these in a turn means a Bonus Roll leg followed the
    *  white one. */
-  | { type: 'moved'; seat: SeatId; path: NodeId[]; arrived: boolean };
+  | { type: 'moved'; seat: SeatId; path: NodeId[]; arrived: boolean }
+  /**
+   * A railroad purchase, in the arrival window. The price travels in the
+   * event for the same reason `payout` does — the log is self-contained —
+   * and legal.ts audits it against the price list.
+   */
+  | { type: 'bought'; seat: SeatId; railroad: RailroadId; price: number }
+  /**
+   * The announced run home (docs/rules/declaring-and-the-rover.md). The
+   * alternate destination is rolled at declaration and carried here; it
+   * banks nothing unless the run is cancelled and the baron reaches it.
+   */
+  | { type: 'declared'; seat: SeatId;
+      alternate: { city: CityId; region: RegionId; payout: number } }
+  /**
+   * The liquidation stub: a forced sale to the bank at half the purchase
+   * price, legal only while short. An ordinary log event by design, so a
+   * future auction replaces the mechanism without rewriting history.
+   */
+  | { type: 'sold'; seat: SeatId; railroad: RailroadId; price: number };
 
 // Derived from the engine rather than copied as literals, so a table change
 // can't silently drift away from what a loaded log is allowed to contain.
@@ -61,6 +83,7 @@ const VALID_SEATS: ReadonlySet<string> = new Set(SEATS);
 const VALID_REGIONS: ReadonlySet<RegionId> = new Set(REGIONS.map(region => region.id));
 const VALID_CITIES: ReadonlySet<CityId> = new Set(CITIES.map(city => city.id));
 const VALID_NODES: ReadonlySet<string> = new Set(NODES.map(node => node.id));
+const VALID_RAILROADS: ReadonlySet<string> = new Set(RAILROADS.keys());
 
 const isDie = (value: unknown): boolean =>
   typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6;
@@ -133,6 +156,30 @@ export function isGameEvent(value: unknown): value is GameEvent {
         event.path.every(id => typeof id === 'string' && VALID_NODES.has(id)) &&
         typeof event.arrived === 'boolean'
       );
+    case 'bought':
+    case 'sold':
+      // Price travels in the event so the log is self-contained, like
+      // arrived.payout; legal.ts audits it against the table, this only
+      // checks shape.
+      return (
+        VALID_SEATS.has(event.seat as string) &&
+        VALID_RAILROADS.has(event.railroad as string) &&
+        typeof event.price === 'number' && Number.isFinite(event.price) &&
+        event.price > 0
+      );
+    case 'declared': {
+      if (!VALID_SEATS.has(event.seat as string)) return false;
+      const alt = event.alternate as Record<string, unknown> | null;
+      // Same short-circuit discipline as `arrived`: VALID_CITIES gates
+      // cityById, which throws on ids it does not know.
+      return (
+        typeof alt === 'object' && alt !== null &&
+        VALID_CITIES.has(alt.city as CityId) &&
+        VALID_REGIONS.has(alt.region as RegionId) &&
+        cityById(alt.city as CityId).region === alt.region &&
+        typeof alt.payout === 'number' && Number.isFinite(alt.payout)
+      );
+    }
     default:
       return false;
   }

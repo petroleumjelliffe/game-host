@@ -6,12 +6,12 @@
 // needsDestination, replay), which is the point: the client's "may I?" and the
 // server's "you may not" are made of one set of rules and cannot drift into
 // disagreeing about the same board.
-import { nodeForCity, payoutBetween } from '../../engine/index.js';
+import { bankSalePrice, nodeForCity, payoutBetween, railroadPrice } from '../../engine/index.js';
 import type { GameRejection, GameRejectionCode } from '../../session/protocol.js';
 import type { GameEvent, SeatId } from './events.js';
 import { currentCity, replay } from './game.js';
 import { seedConformance } from './seeded.js';
-import { homesDone, needsDestination, nextHomeSeat } from './turns.js';
+import { homesDone, mayDeclare, needsDestination, nextHomeSeat, shortSeat } from './turns.js';
 
 const not = (code: GameRejectionCode, message: string): GameRejection =>
   ({ code, message });
@@ -35,6 +35,13 @@ export function appendLegality(
   const nonconforming = seedConformance(log, event, state);
   if (nonconforming !== null) return nonconforming;
 
+  // Negative at settlement blocks everything: the forced, ordered flow is
+  // fee assessed → short → sell until covered → play continues
+  // (docs/rules/user-fees.md). Only the sale that raises money passes.
+  if (shortSeat(state) !== null && event.type !== 'sold') {
+    return not('notNow', 'a fee bill is unmet — railroads must be sold to the bank first');
+  }
+
   // Seating and starting belong to the lobby and to Begin. A client that
   // sends one is either confused or hostile, and the answer is the same.
   if (event.type === 'joined' || event.type === 'renamed' || event.type === 'started') {
@@ -55,6 +62,18 @@ export function appendLegality(
 
   if (event.seat !== sender) return not('notYourSeat', `that seat is ${event.seat}'s`);
 
+  if (event.type === 'sold') {
+    // Not turn-gated, deliberately: fees settle as the turn closes, so the
+    // short seat is usually not the actor by the time the bill lands.
+    const seller = state.seats[sender];
+    if (seller.banked >= 0) return not('notNow', 'selling is only for meeting a bill');
+    if (state.owners.get(event.railroad) !== sender) {
+      return not('notNow', 'that railroad is not yours to sell');
+    }
+    return event.price === bankSalePrice(event.railroad)
+      ? null : not('notNow', 'the bank pays half the purchase price, exactly');
+  }
+
   // Who the log says is acting: during `homes` the barons take their home
   // cities in seat order, and after that it is simply whose turn it is.
   const actor = state.phase === 'homes' ? nextHomeSeat(state) : state.turn;
@@ -63,8 +82,8 @@ export function appendLegality(
 
   switch (event.type) {
     case 'arrived': {
-      if (seat.homeward) {
-        return not('notNow', 'homeward barons roll no destinations — home is the destination');
+      if (seat.run !== null) {
+        return not('notNow', 'a declared baron rolls no destinations — the trip is already set');
       }
       // The payout is the table's, not the sender's. The first stop is the
       // home pick and pays null; every later one pays exactly payoutBetween —
@@ -82,8 +101,8 @@ export function appendLegality(
     }
 
     case 'regionRequested':
-      if (seat.homeward) {
-        return not('notNow', 'homeward barons roll no destinations — home is the destination');
+      if (seat.run !== null) {
+        return not('notNow', 'a declared baron rolls no destinations — the trip is already set');
       }
       return seat.awaiting === null && needsDestination(seat, nodeForCity)
         ? null : not('notNow', 'no destination roll is owed');
@@ -91,7 +110,7 @@ export function appendLegality(
     case 'turnRolled':
       if (state.phase !== 'playing') return not('notNow', 'the game has not begun');
       if (state.rolled !== null) return not('notNow', 'this turn already has its roll');
-      if (!seat.homeward && needsDestination(seat, nodeForCity)) {
+      if (seat.run === null && needsDestination(seat, nodeForCity)) {
         return not('notNow', 'roll a destination first');
       }
       return null;
@@ -102,7 +121,7 @@ export function appendLegality(
       // re-deriving entitlement is what stops the server accepting a roll
       // replay would then silently discard.
       return state.phase === 'playing' && state.bonusOwed
-        && (seat.homeward || !needsDestination(seat, nodeForCity))
+        && (seat.run !== null || !needsDestination(seat, nodeForCity))
         ? null : not('notNow', 'no Bonus Roll is owed');
 
     case 'moved':
@@ -110,6 +129,47 @@ export function appendLegality(
         return not('notNow', 'no roll to move on');
       }
       return state.leg < 2 ? null : not('notNow', 'this turn has walked both its legs');
+
+    case 'bought': {
+      // The window (table's decision, 2026-08-23): on arrival, after being
+      // paid, before rolling the next destination — the same
+      // standing-at-your-stop state that gates the destination roll. It
+      // never blocks rolling: skipping is simply rolling.
+      if (state.phase !== 'playing') return not('notNow', 'the game has not begun');
+      if (seat.run !== null) {
+        return not('notNow', 'a declared baron\'s buying window closed at the declare');
+      }
+      if (seat.awaiting !== null) {
+        return not('notNow', 'the destination roll has begun — the window is closed');
+      }
+      if (!needsDestination(seat, nodeForCity)) {
+        return not('notNow', 'railroads are bought on arrival, before the next destination');
+      }
+      if (state.owners.has(event.railroad)) return not('notNow', 'already owned');
+      if (event.price !== railroadPrice(event.railroad)) {
+        return not('notNow', 'that is not what the price list says');
+      }
+      // Nothing limits the count but the balance (spec Decision 1).
+      return event.price <= seat.banked
+        ? null : not('notNow', 'the balance does not cover it');
+    }
+
+    case 'declared': {
+      if (!mayDeclare(state, sender)) {
+        return not('notNow',
+          'declaring needs the target in hand, at your latest destination, before the roll');
+      }
+      const from = currentCity(seat)!;
+      const { city, payout } = event.alternate;
+      if (city === from) return not('notNow', 'already there');
+      // The payout is the table's, exactly as arrived's is — it banks
+      // nothing today, but a cancelled run will pay it, so it is audited
+      // on the way in, not on the way out.
+      return payout === payoutBetween(from, city)
+        ? null : not('notNow', 'that is not what the payout table says');
+    }
+    // No 'sold' case: handled above the actor gate, and the early return
+    // narrows it out of the union — the switch stays exhaustive without it.
   }
 }
 

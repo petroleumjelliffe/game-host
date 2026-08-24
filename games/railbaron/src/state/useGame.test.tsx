@@ -1,8 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { nodeForCity } from '../../engine';
+import { bankSalePrice, nodeForCity, payoutBetween, railroadPrice } from '../../engine';
 import { STORAGE_KEY, saveLog } from './storage';
 import type { GameEvent } from './events';
+import { PUBLISHED_RULES } from './rules';
 import { useGame } from './useGame';
 import { needsDestination } from './turns';
 
@@ -254,3 +255,96 @@ describe('a second tab', () => {
     expect(result.current.state.turn).toBe('red');
   });
 });
+
+describe('phase 2 money actions', () => {
+  /**
+   * Red banks one real payout (Minneapolis 43 to New York 4), green takes
+   * an intervening turn, and it is red's window: standing paid at their
+   * latest destination, owing the next roll. winTarget 1000 so a single
+   * payout also makes red eligible to declare.
+   */
+  const funded: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'joined', seat: 'green', name: 'GRACE' },
+    { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+    { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+    { type: 'arrived', seat: 'green', city: 47, region: 'PL', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: 4, region: 'NE', payout: payoutBetween(43, 4) },
+    { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+    { type: 'moved', seat: 'red', path: [MINNEAPOLIS, nodeForCity(4)], arrived: true },
+    { type: 'arrived', seat: 'green', city: 43, region: 'PL', payout: 0 },
+    { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null },
+    { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true },
+  ];
+
+  it('buys in the window: the holding lands and the price debits', () => {
+    saveLog(funded);
+    const { result } = renderHook(() => useGame());
+    const before = result.current.state.seats.red.banked;
+    act(() => result.current.buy('red', 'B&M'));
+    expect(result.current.state.owners.get('B&M')).toBe('red');
+    expect(result.current.state.seats.red.holdings).toEqual(['B&M']);
+    expect(result.current.state.seats.red.banked).toBe(before - railroadPrice('B&M'));
+  });
+
+  it('appends nothing outside the window', () => {
+    saveLog([...funded,
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: payoutBetween(4, 47) },
+    ]);
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.buy('red', 'B&M'));
+    expect(result.current.state.owners.size).toBe(0);
+  });
+
+  it('declares: the roll is offered when eligible, the commit folds to a run', () => {
+    saveLog(funded);
+    const { result } = renderHook(() => useGame());
+    let outcome: ReturnType<typeof result.current.rollDeclare> = null;
+    act(() => { outcome = result.current.rollDeclare('red'); });
+    expect(outcome).not.toBeNull();
+    act(() => result.current.commitDeclare('red',
+      { city: 47, region: 'PL', payout: payoutBetween(4, 47) }));
+    const red = result.current.state.seats.red;
+    expect(red.run).toEqual({
+      alternate: { city: 47, region: 'PL', payout: payoutBetween(4, 47) },
+      toHome: true,
+    });
+  });
+
+  it('offers no declare roll below the target', () => {
+    saveLog(funded.map((e) => e.type === 'started'
+      ? { type: 'started', rules: PUBLISHED_RULES } as GameEvent : e));
+    const { result } = renderHook(() => useGame());
+    let outcome: ReturnType<typeof result.current.rollDeclare> = null;
+    act(() => { outcome = result.current.rollDeclare('red'); });
+    expect(outcome).toBeNull();
+  });
+
+  it('sells while short, and only while short', () => {
+    // Scripted straight into the log — the fold is tolerant — so red holds
+    // three cheap railroads and sits below zero.
+    const shortLog: GameEvent[] = [...funded,
+      { type: 'bought', seat: 'red', railroad: 'B&M', price: railroadPrice('B&M') },
+      { type: 'bought', seat: 'red', railroad: 'RF&P', price: railroadPrice('RF&P') },
+      { type: 'bought', seat: 'red', railroad: 'NYNH&H', price: railroadPrice('NYNH&H') },
+      { type: 'bought', seat: 'red', railroad: 'D&RGW', price: railroadPrice('D&RGW') },
+    ];
+    expect(payoutBetween(43, 4) - 3 * 4000 - 6000).toBeLessThan(0);
+    saveLog(shortLog);
+    const { result } = renderHook(() => useGame());
+    const before = result.current.state.seats.red.banked;
+    act(() => result.current.sell('red', 'B&M'));
+    expect(result.current.state.seats.red.banked).toBe(before + bankSalePrice('B&M'));
+    expect(result.current.state.seats.red.holdings).toEqual(['RF&P', 'NYNH&H', 'D&RGW']);
+  });
+
+  it('refuses to sell from a solvent seat', () => {
+    saveLog([...funded,
+      { type: 'bought', seat: 'red', railroad: 'B&M', price: railroadPrice('B&M') }]);
+    const { result } = renderHook(() => useGame());
+    act(() => result.current.sell('red', 'B&M'));
+    expect(result.current.state.seats.red.holdings).toEqual(['B&M']);
+  });
+});
+

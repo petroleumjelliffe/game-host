@@ -420,7 +420,10 @@ is about whether it comes back at all.
 
 ### Rail baron
 
-- earn money from deliveries, pay money to track owners, buy lines
+- ~~earn money from deliveries, pay money to track owners, buy lines~~ —
+  done across money phases 1 (2026-08-22) and 2 (2026-08-23); what remains
+  of the economy is the still-owed list in the phase-2 spec (forced-sale
+  text, starting cash, train purchase timing, two fee confirms)
 - map animation for desination rolls and region picking
 - auto pan/zoom when moving
 - better controls to select next node

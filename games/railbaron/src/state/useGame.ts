@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  d6, destinationInRegion, nodeForCity, rollDestination, rollTurn,
-  type NodeId, type RegionId, type Rng, type RollOutcome, type TrainType, type TurnRoll
+  bankSalePrice, d6, destinationInRegion, nodeForCity, railroadPrice,
+  rollDestination, rollTurn,
+  type Arrival, type NodeId, type RailroadId, type RegionId, type Rng,
+  type RollOutcome, type TrainType, type TurnRoll
 } from '../../engine';
 import { SEATS, type GameEvent, type SeatId } from './events';
 import { currentCity, replay, undo } from './game';
 import { nextRng } from './seeded';
-import { homesTaken, needsDestination, nextHomeSeat } from './turns';
+import { homesTaken, mayDeclare, needsDestination, nextHomeSeat } from './turns';
 import { STORAGE_KEY, clearLog, loadLog, saveLog } from './storage';
 
 export function useGame(rng: Rng = Math.random) {
@@ -98,8 +100,8 @@ export function useGame(rng: Rng = Math.random) {
   const roll = useCallback((seat: SeatId): RollOutcome | null => {
     const current = state.seats[seat];
     if (current.awaiting !== null || current.name === null) return null;
-    // A homeward baron rolls no destinations — home is the destination.
-    if (current.homeward) return null;
+    // A declared baron rolls no destinations — the trip is already set.
+    if (current.run !== null) return null;
     // A destination is rolled once per trip, at its start. The guard is here
     // rather than on the screen so that no future screen can route round it.
     if (!needsDestination(current, nodeForCity)) return null;
@@ -145,7 +147,7 @@ export function useGame(rng: Rng = Math.random) {
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (state.rolled !== null) return null;             // one roll per turn
     const rollingSeat = state.seats[seat];
-    if (!rollingSeat.homeward && needsDestination(rollingSeat, nodeForCity)) return null;
+    if (rollingSeat.run === null && needsDestination(rollingSeat, nodeForCity)) return null;
     // The money spec kept its promise: the train is the rules' to name.
     const train: TrainType = state.rules.startingTrain;
     return rollTurn(train, liveRng);
@@ -174,7 +176,7 @@ export function useGame(rng: Rng = Math.random) {
     if (state.phase !== 'playing' || state.turn !== seat) return null;
     if (!state.bonusOwed) return null;
     const bonusSeat = state.seats[seat];
-    if (!bonusSeat.homeward && needsDestination(bonusSeat, nodeForCity)) return null;
+    if (bonusSeat.run === null && needsDestination(bonusSeat, nodeForCity)) return null;
     return d6(liveRng);
   }, [state, liveRng]);
 
@@ -186,6 +188,57 @@ export function useGame(rng: Rng = Math.random) {
   const commitMove = useCallback((seat: SeatId, path: readonly NodeId[], arrived: boolean) => {
     setEvents(log => [...log, { type: 'moved', seat, path: [...path], arrived }]);
   }, []);
+
+  // Each guard below is legal.ts's clause in the same words — that symmetry
+  // is what keeps the board from offering an action the authority refuses.
+  const buy = useCallback((seat: SeatId, railroad: RailroadId) => {
+    const buyer = state.seats[seat];
+    if (state.phase !== 'playing' || state.turn !== seat) return;
+    if (buyer.run !== null) return;                       // window closed at declare
+    if (buyer.awaiting !== null) return;                  // the destination roll has begun
+    if (!needsDestination(buyer, nodeForCity)) return;    // bought on arrival only
+    if (state.owners.has(railroad)) return;
+    const price = railroadPrice(railroad);
+    if (price > buyer.banked) return;
+    setEvents(log => [...log, { type: 'bought', seat, railroad, price }]);
+  }, [state]);
+
+  /**
+   * The alternate is an ordinary destination roll, made at declaration.
+   * Same gate discipline as `roll`: this offers and appends nothing;
+   * `commitDeclare` is the only way in.
+   */
+  const rollDeclare = useCallback((seat: SeatId): RollOutcome | null => {
+    if (!mayDeclare(state, seat) || state.turn !== seat) return null;
+    return rollDestination(currentCity(state.seats[seat]), liveRng, homesTaken(state));
+  }, [state, liveRng]);
+
+  const commitDeclare = useCallback((seat: SeatId, alternate: Arrival) => {
+    setEvents(log => [...log, { type: 'declared', seat,
+      alternate: { city: alternate.city, region: alternate.region, payout: alternate.payout } }]);
+  }, []);
+
+  const declareChooseRegion = useCallback((seat: SeatId, region: RegionId) => {
+    const from = currentCity(state.seats[seat]);
+    if (from === null) return;
+    // One roll event, one stream: in a seeded game liveRng is a fresh
+    // stream for this event, so re-drawing the region roll (whose outcome
+    // was chooseRegion) reproduces it exactly and the city continues the
+    // same stream — precisely what seedConformance regenerates. Unseeded,
+    // the re-draw is just two spent random numbers.
+    rollDestination(from, liveRng, homesTaken(state));
+    const arrival = destinationInRegion(from, region, liveRng);
+    setEvents(log => [...log, { type: 'declared', seat,
+      alternate: { city: arrival.city, region, payout: arrival.payout } }]);
+  }, [state, liveRng]);
+
+  const sell = useCallback((seat: SeatId, railroad: RailroadId) => {
+    const seller = state.seats[seat];
+    if (seller.banked >= 0) return;                       // selling is only for meeting a bill
+    if (state.owners.get(railroad) !== seat) return;
+    setEvents(log => [...log,
+      { type: 'sold', seat, railroad, price: bankSalePrice(railroad) }]);
+  }, [state]);
 
   /**
    * "The players roll to see who goes first, the high roll." Rolled once and
@@ -240,6 +293,7 @@ export function useGame(rng: Rng = Math.random) {
   return {
     state, savedAt, roll, commitRoll, chooseRegion,
     rollDice, commitDice, rollBonus, commitBonus, commitMove, rollOrder,
+    buy, rollDeclare, commitDeclare, declareChooseRegion, sell,
     rename, start, undoLast, reset
   };
 }

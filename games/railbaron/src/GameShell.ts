@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   REGIONS,
-  type NodeId, type RegionId, type RollOutcome, type TurnRoll,
+  type Arrival, type NodeId, type RailroadId, type RegionId, type RollOutcome, type TurnRoll,
 } from '../engine';
 import { diceFor, play } from './board/screens/play';
 import { homes } from './board/screens/homes';
+import { liquidation } from './board/screens/liquidation';
+import { office } from './board/screens/office';
 import { regionBallot } from './board/screens/regionBallot';
 import type { Row, ScreenDef } from './board/types';
 import { SEATS, type SeatId } from './state/events';
 import type { GameState } from './state/game';
+import { shortSeat } from './state/turns';
 
 /**
  * The board-driving glue: the announcement holds, the screens record, and the
@@ -39,6 +42,11 @@ export interface GameSurface {
   commitMove(seat: SeatId, path: readonly NodeId[], arrived: boolean): void;
   rollOrder(): void;
   undoLast(): void;
+  buy(seat: SeatId, railroad: RailroadId): void;
+  rollDeclare(seat: SeatId): RollOutcome | null;
+  commitDeclare(seat: SeatId, alternate: Arrival): void;
+  declareChooseRegion(seat: SeatId, region: RegionId): void;
+  sell(seat: SeatId, railroad: RailroadId): void;
 }
 
 /**
@@ -94,6 +102,20 @@ export function useGameShell(game: GameSurface, actAs: ActAs): GameShell {
    * roll finally reaches the log.
    */
   const [turns, setTurns] = useState<Partial<Record<SeatId, number>>>({});
+  /**
+   * A declare's alternate roll, made but not yet told — the same hold and
+   * the same reason as `rolling`. An 'arrived' outcome announces through
+   * the region panel and commits on landing; a 'chooseRegion' outcome
+   * hands the board to the ballot instead, and the choice commits at once,
+   * exactly as chooseRegion does for an ordinary roll.
+   */
+  const [declaring, setDeclaring] = useState<{ seat: SeatId; outcome: RollOutcome } | null>(null);
+  /** The railroad office, open at a page — or closed. */
+  const [officePage, setOfficePage] = useState<number | null>(null);
+
+  // The office is the actor's window; it must not survive into the next
+  // baron's turn, or a stale page would offer someone else's purchases.
+  useEffect(() => { setOfficePage(null); }, [state.turn]);
 
   // One tap, two rolls: which one the readout is offering depends on where the
   // turn stands. Before the whites it is the white pair; once they have been
@@ -127,24 +149,69 @@ export function useGameShell(game: GameSurface, actAs: ActAs): GameShell {
   const awaiting = SEATS.map(id => state.seats[id]).find(seat => seat.awaiting !== null);
 
   // The ballot cannot appear early: `awaiting` comes from the log, and a roll
-  // only reaches the log once its region has landed.
+  // only reaches the log once its region has landed. The forced sale
+  // outranks everything below it, exactly as legal.ts's gate does.
+  const short = shortSeat(state);
+  const announcing = rolling ?? declaring;
   const gameScreen: ScreenDef = state.phase === 'homes'
     ? homes(state, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
-    : awaiting
-      ? regionBallot(awaiting)
-      : play(state, turns,
-             rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) },
-             rollingDice?.roll ?? null,
-             rollingBonus?.face ?? null,
-             actAs);
+    : short !== null
+      ? liquidation(state, state.seats[short])
+      : awaiting
+        ? regionBallot(awaiting)
+        : declaring?.outcome.kind === 'chooseRegion'
+          ? regionBallot({ ...state.seats[declaring.seat], awaiting: declaring.outcome.rolled })
+          : officePage !== null
+            ? office(state, officePage)
+            : play(state, turns,
+                   announcing && { seat: announcing.seat, region: regionOf(announcing.outcome) },
+                   rollingDice?.roll ?? null,
+                   rollingBonus?.face ?? null,
+                   actAs);
 
   const actOnRow = (row: Row, index: number): boolean => {
     if (row.action === null) return false;
+
+    if (row.action.kind === 'office') {
+      // A paged action turns the page; a bare one toggles the office.
+      const { page } = row.action;
+      setOfficePage(page !== undefined ? page : officePage === null ? 0 : null);
+      return true;
+    }
+    if (row.action.kind === 'buy') {
+      if (state.turn !== null && (actAs === 'all' || state.turn === actAs)) {
+        game.buy(state.turn, row.action.railroad);
+      }
+      return true;
+    }
+    if (row.action.kind === 'declare') {
+      const seat = row.action.seat;
+      if (actAs !== 'all' && seat !== actAs) return true;
+      if (rolling !== null || declaring !== null) return true;
+      const outcome = game.rollDeclare(seat);
+      if (outcome === null) return true;
+      setTurns(counted => ({ ...counted, [seat]: (counted[seat] ?? 0) + 1 }));
+      setDeclaring({ seat, outcome });
+      return true;
+    }
+    if (row.action.kind === 'sell') {
+      const seller = shortSeat(state);
+      if (seller !== null && (actAs === 'all' || seller === actAs)) {
+        game.sell(seller, row.action.railroad);
+      }
+      return true;
+    }
 
     if (row.action.kind === 'act') {
       // The ballot's choice is its row position: RowAction carries no region,
       // and widening it for one screen would cost every other screen a field
       // it never sets.
+      if (declaring?.outcome.kind === 'chooseRegion') {
+        if (actAs !== 'all' && declaring.seat !== actAs) return true;
+        game.declareChooseRegion(declaring.seat, REGIONS[index]!.id);
+        setDeclaring(null);
+        return true;
+      }
       if (awaiting) {
         if (actAs !== 'all' && awaiting.id !== actAs) return true;
         game.chooseRegion(awaiting.id, REGIONS[index]!.id);
@@ -172,12 +239,26 @@ export function useGameShell(game: GameSurface, actAs: ActAs): GameShell {
     return false;
   };
 
+  const seatedIndexOf = (seat: SeatId): number =>
+    SEATS.filter(id => state.seats[id].name !== null).indexOf(seat);
+
   return {
     gameScreen,
-    awaitRegion: rolling && {
-      row: SEATS.filter(id => state.seats[id].name !== null).indexOf(rolling.seat),
-      onLanded: () => { game.commitRoll(rolling.seat, rolling.outcome); setRolling(null); },
-    },
+    awaitRegion: rolling
+      ? {
+          row: seatedIndexOf(rolling.seat),
+          onLanded: () => { game.commitRoll(rolling.seat, rolling.outcome); setRolling(null); },
+        }
+      : declaring !== null && declaring.outcome.kind === 'arrived'
+        ? {
+            row: seatedIndexOf(declaring.seat),
+            onLanded: () => {
+              // The narrowing above makes this an Arrival in all but name.
+              game.commitDeclare(declaring.seat, declaring.outcome as Arrival);
+              setDeclaring(null);
+            },
+          }
+        : null,
     awaitDice: (rollingDice || rollingBonus) && { onLanded: onDiceLanded },
     onRollDice,
     onDiceLanded,

@@ -16,7 +16,7 @@ import { currentCity, type GameState } from './game.js';
 import { homesTaken } from './turns.js';
 
 const ROLL_TYPES: ReadonlySet<GameEvent['type']> =
-  new Set(['turnRolled', 'bonusRolled', 'regionRequested', 'arrived']);
+  new Set(['turnRolled', 'bonusRolled', 'regionRequested', 'arrived', 'declared']);
 
 export const countRollEvents = (log: readonly GameEvent[]): number =>
   log.reduce((n, e) => n + (ROLL_TYPES.has(e.type) ? 1 : 0), 0);
@@ -63,6 +63,25 @@ export function seedConformance(
       const outcome = rollDestination(from, rng, homesTaken(state));
       return (outcome.kind === 'home' || outcome.kind === 'arrived')
         && outcome.city === event.city ? null : refused;
+    }
+    case 'declared': {
+      // The alternate is an ordinary destination roll made at declaration
+      // — one event, one stream, choice and all.
+      const seat = state.seats[event.seat];
+      const from = currentCity(seat);
+      if (from === null) return refused;
+      const outcome = rollDestination(from, rng, homesTaken(state));
+      const alt = event.alternate;
+      if (outcome.kind === 'arrived') {
+        return outcome.city === alt.city ? null : refused;
+      }
+      if (outcome.kind === 'chooseRegion') {
+        // The region was the player's free choice; the city must be the
+        // seed's roll within it, drawn from the same stream.
+        return destinationInRegion(from, alt.region, rng).city === alt.city
+          ? null : refused;
+      }
+      return refused;   // 'home' needs from === null, unreachable here
     }
     default:
       return null;

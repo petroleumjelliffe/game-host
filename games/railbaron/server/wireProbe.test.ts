@@ -146,7 +146,8 @@ it('repro: the table flow, tap for tap — can red reroll a destination?', async
     const state = replay(log);
     const me = state.seats.red;
     report.push(`before tap ${i}: at=${me.at} lastStop=${me.stops[me.stops.length - 1]?.city} `
-      + `needsDestination=${needsDestination(me, nodeForCity)} homeward=${me.homeward}`);
+      + `needsDestination=${needsDestination(me, nodeForCity)} `
+      + `run=${me.run === null ? 'none' : me.run.toHome ? 'home' : 'alternate'}`);
     const again = clientDestinationEvent(log, 'red');
     r = await tryAppend(host, again);
     report.push(`destination ${i} (${JSON.stringify(again)}): ${r.kind}`

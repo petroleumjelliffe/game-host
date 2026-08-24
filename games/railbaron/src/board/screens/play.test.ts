@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { REGIONS, nodeForCity } from '../../../engine';
+import { REGIONS, nodeForCity, payoutBetween } from '../../../engine';
+import { PUBLISHED_RULES } from '../../state/rules';
 import { diceFor, play } from './play';
 import { replay } from '../../state/game';
 import { SEATS, type GameEvent } from '../../state/events';
@@ -251,3 +252,55 @@ describe('the dice the board and the map both show', () => {
     expect(dice(log).live).toBe(false);
   });
 });
+
+describe('the phase-2 rows', () => {
+  /** Red banks one real payout and stands in the purchase window, eligible
+   *  to declare under winTarget 1000, as the actor. */
+  const windowLog: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'joined', seat: 'blue', name: 'MARGO' },
+    { type: 'started', rules: { ...PUBLISHED_RULES, winTarget: 1000 } },
+    { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+    { type: 'arrived', seat: 'blue', city: 47, region: 'PL', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: 4, region: 'NE', payout: payoutBetween(43, 4) },
+    { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+    { type: 'moved', seat: 'red', path: [nodeForCity(43), nodeForCity(4)], arrived: true },
+    { type: 'arrived', seat: 'blue', city: 43, region: 'PL', payout: 0 },
+    { type: 'turnRolled', seat: 'blue', white: [3, 4], bonus: null },
+    { type: 'moved', seat: 'blue', path: [nodeForCity(47), 'd131'], arrived: false },
+  ];
+
+  it('offers the office and the declare row in the window', () => {
+    const board = rows(windowLog);
+    const office = board.find((row) => row.action?.kind === 'office');
+    expect(office).toBeDefined();
+    const declare = board.find((row) => row.action?.kind === 'declare');
+    expect(declare).toBeDefined();
+    expect(declare!.action).toEqual({ kind: 'declare', seat: 'red' });
+  });
+
+  it('offers neither once the destination is rolled, nor below the target', () => {
+    const rolled = rows([...windowLog,
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: payoutBetween(4, 47) }]);
+    expect(rolled.find((row) => row.action?.kind === 'office')).toBeUndefined();
+    expect(rolled.find((row) => row.action?.kind === 'declare')).toBeUndefined();
+
+    const poor = rows(windowLog.map((e) => e.type === 'started'
+      ? { type: 'started', rules: PUBLISHED_RULES } as GameEvent : e));
+    expect(poor.find((row) => row.action?.kind === 'declare')).toBeUndefined();
+    expect(poor.find((row) => row.action?.kind === 'office')).toBeDefined();
+  });
+
+  it('drops the extras before it drops a baron', () => {
+    const full: GameEvent[] = [
+      ...SEATS.map((seat, i) => ({ type: 'joined' as const, seat, name: `B${i}` })),
+      { type: 'started' },
+    ];
+    const board = rows(full);
+    expect(board.filter((row) => row.label.startsWith('B'))).toHaveLength(6);
+    expect(board.find((row) => row.action?.kind === 'office')).toBeUndefined();
+    expect(board.find((row) => row.action?.kind === 'declare')).toBeUndefined();
+  });
+});
+
