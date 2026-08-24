@@ -1,12 +1,14 @@
 import { useCallback } from 'react';
 import {
-  d6, destinationInRegion, nodeForCity, rollDestination, rollTurn,
-  type NodeId, type RegionId, type Rng, type RollOutcome, type TrainType, type TurnRoll,
+  bankSalePrice, d6, destinationInRegion, nodeForCity, railroadPrice,
+  rollDestination, rollTurn,
+  type Arrival, type NodeId, type RailroadId, type RegionId, type Rng,
+  type RollOutcome, type TrainType, type TurnRoll,
 } from '../../engine';
 import { SEATS, type GameEvent, type SeatId } from '../state/events';
 import { currentCity, replay } from '../state/game';
 import { nextRng } from '../state/seeded';
-import { homesTaken, needsDestination, nextHomeSeat } from '../state/turns';
+import { homesTaken, mayDeclare, needsDestination, nextHomeSeat } from '../state/turns';
 import type { GameTransport } from './transport';
 
 /**
@@ -128,6 +130,60 @@ export function useOnlineGame(
       transport.append({ type: 'moved', seat, path: [...path], arrived });
     }, [transport]);
 
+  // Each guard below is legal.ts's clause in the same words — that symmetry
+  // is what keeps the board from offering an action the server refuses.
+  const buy = useCallback((seat: SeatId, railroad: RailroadId) => {
+    if (seat !== mySeat) return;
+    const buyer = state.seats[seat];
+    if (state.phase !== 'playing' || state.turn !== seat) return;
+    if (buyer.run !== null) return;                       // window closed at declare
+    if (buyer.awaiting !== null) return;                  // the destination roll has begun
+    if (!needsDestination(buyer, nodeForCity)) return;    // bought on arrival only
+    if (state.owners.has(railroad)) return;
+    const price = railroadPrice(railroad);
+    if (price > buyer.banked) return;
+    transport.append({ type: 'bought', seat, railroad, price });
+  }, [state, transport, mySeat]);
+
+  /**
+   * The alternate is an ordinary destination roll, made at declaration.
+   * Same gate discipline as `roll`: this offers and appends nothing;
+   * `commitDeclare` is the only way in.
+   */
+  const rollDeclare = useCallback((seat: SeatId): RollOutcome | null => {
+    if (seat !== mySeat) return null;
+    if (!mayDeclare(state, seat) || state.turn !== seat) return null;
+    return rollDestination(currentCity(state.seats[seat]), liveRng, homesTaken(state));
+  }, [state, liveRng, mySeat]);
+
+  const commitDeclare = useCallback((seat: SeatId, alternate: Arrival) => {
+    transport.append({ type: 'declared', seat,
+      alternate: { city: alternate.city, region: alternate.region, payout: alternate.payout } });
+  }, [transport]);
+
+  const declareChooseRegion = useCallback((seat: SeatId, region: RegionId) => {
+    if (seat !== mySeat) return;
+    const from = currentCity(state.seats[seat]);
+    if (from === null) return;
+    // One roll event, one stream: in a seeded game liveRng is a fresh
+    // stream for this event, so re-drawing the region roll (whose outcome
+    // was chooseRegion) reproduces it exactly and the city continues the
+    // same stream — precisely what seedConformance regenerates. Unseeded,
+    // the re-draw is just two spent random numbers.
+    rollDestination(from, liveRng, homesTaken(state));
+    const arrival = destinationInRegion(from, region, liveRng);
+    transport.append({ type: 'declared', seat,
+      alternate: { city: arrival.city, region, payout: arrival.payout } });
+  }, [state, liveRng, transport, mySeat]);
+
+  const sell = useCallback((seat: SeatId, railroad: RailroadId) => {
+    if (seat !== mySeat) return;
+    const seller = state.seats[seat];
+    if (seller.banked >= 0) return;                       // selling is only for meeting a bill
+    if (state.owners.get(railroad) !== seat) return;
+    transport.append({ type: 'sold', seat, railroad, price: bankSalePrice(railroad) });
+  }, [state, transport, mySeat]);
+
   /**
    * The roll for first player is a shared ceremony (owner ruling), so the gate
    * is being seated rather than being the actor — any baron at the table may
@@ -163,5 +219,6 @@ export function useOnlineGame(
   return {
     state, roll, commitRoll, chooseRegion,
     rollDice, commitDice, rollBonus, commitBonus, commitMove, rollOrder, undoLast,
+    buy, rollDeclare, commitDeclare, declareChooseRegion, sell,
   };
 }

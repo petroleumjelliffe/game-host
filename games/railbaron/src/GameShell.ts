@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   REGIONS,
-  type NodeId, type RegionId, type RollOutcome, type TurnRoll,
+  type Arrival, type NodeId, type RailroadId, type RegionId, type RollOutcome, type TurnRoll,
 } from '../engine';
 import { diceFor, play } from './board/screens/play';
 import { homes } from './board/screens/homes';
@@ -39,6 +39,11 @@ export interface GameSurface {
   commitMove(seat: SeatId, path: readonly NodeId[], arrived: boolean): void;
   rollOrder(): void;
   undoLast(): void;
+  buy(seat: SeatId, railroad: RailroadId): void;
+  rollDeclare(seat: SeatId): RollOutcome | null;
+  commitDeclare(seat: SeatId, alternate: Arrival): void;
+  declareChooseRegion(seat: SeatId, region: RegionId): void;
+  sell(seat: SeatId, railroad: RailroadId): void;
 }
 
 /**

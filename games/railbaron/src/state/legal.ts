@@ -168,11 +168,8 @@ export function appendLegality(
       return payout === payoutBetween(from, city)
         ? null : not('notNow', 'that is not what the payout table says');
     }
-
-    case 'sold':
-      // Handled above the actor gate; unreachable here, but the switch
-      // must stay exhaustive.
-      return not('notNow', 'selling is only for meeting a bill');
+    // No 'sold' case: handled above the actor gate, and the early return
+    // narrows it out of the union — the switch stays exhaustive without it.
   }
 }
 
