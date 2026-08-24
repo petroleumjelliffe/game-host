@@ -1082,18 +1082,26 @@ describe('playing a turn on the map', () => {
       expect(screen.getByText(/is up/i)).toBeInTheDocument();
     });
 
-    it('goes to the baron up when asked', async () => {
+    it('frames the whole journey when asked — the baron and their destination together', async () => {
       const user = userEvent.setup();
       const { box } = drawn();
-      const at = replay(midTurn).seats.red.at!;
-      const pawn = layout(1400, 788).byId.get(at)!;
+      const pawn = layout(1400, 788).byId.get(replay(midTurn).seats.red.at!)!;
+      const dest = layout(1400, 788).byId.get(nodeForCity(ST_PAUL))!;
 
       await user.click(screen.getByRole('button', { name: /find the baron/i }));
 
       const [x, y, width, height] = box();
       expect(width).toBeLessThan(1400);
-      expect(x! + width! / 2).toBeCloseTo(pawn.x, 0);
-      expect(y! + height! / 2).toBeCloseTo(pawn.y, 0);
+      // Both ends of the trip inside the frame...
+      for (const p of [pawn, dest]) {
+        expect(p.x).toBeGreaterThan(x!);
+        expect(p.x).toBeLessThan(x! + width!);
+        expect(p.y).toBeGreaterThan(y!);
+        expect(p.y).toBeLessThan(y! + height!);
+      }
+      // ...and centred between them, not on one end.
+      expect(x! + width! / 2).toBeCloseTo((pawn.x + dest.x) / 2, 0);
+      expect(y! + height! / 2).toBeCloseTo((pawn.y + dest.y) / 2, 0);
     });
   });
 

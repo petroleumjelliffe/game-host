@@ -134,6 +134,39 @@ export function panBy(
   }, container, extent);
 }
 
+/** How much air a fitted view keeps around its points, in map units. */
+const FIT_PAD = 60;
+
+/**
+ * The view that shows every given point at once, as close as it can.
+ *
+ * The zoom is the largest `k` whose frame still contains the padded bounding
+ * box of the points, centred on that box — so FIND frames a whole journey,
+ * current position and destination together, rather than one end of it. Two
+ * far-apart endpoints fall back toward extents; two neighbouring ones are
+ * capped at `maxK`, so the view never dives past what a single-point centre
+ * would show. `clamp` resolves the edges as everywhere else.
+ */
+export function fitPoints(
+  points: readonly Point[], maxK: number, container: Size, extent: Size
+): View {
+  if (points.length === 0) return clamp(fit(), container, extent);
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const needW = Math.max(...xs) - Math.min(...xs) + FIT_PAD * 2;
+  const needH = Math.max(...ys) - Math.min(...ys) + FIT_PAD * 2;
+
+  const aspect = container.width / container.height;
+  const whole = Math.max(extent.width, extent.height * aspect);
+  const k = Math.min(maxK, whole / needW, whole / (needH * aspect));
+
+  return clamp({
+    k,
+    cx: (Math.max(...xs) + Math.min(...xs)) / 2,
+    cy: (Math.max(...ys) + Math.min(...ys)) / 2
+  }, container, extent);
+}
+
 /** Puts a point in the middle of the cabinet, at a chosen zoom. */
 export function centreOn(
   view: View, point: Point, k: number, container: Size, extent: Size

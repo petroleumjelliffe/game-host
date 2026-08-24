@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  centreOn, fit, panBy, screenToMap, viewBox as boxFor, zoomAbout,
+  centreOn, fit, fitPoints, panBy, screenToMap, viewBox as boxFor, zoomAbout,
   type Point, type Size, type View
 } from './viewport';
 
@@ -86,6 +86,11 @@ export function useViewport(extent: Size) {
 
   const goTo = useCallback((point: Point, k = FOLLOW_ZOOM) => {
     setView(v => centreOn(v, point, k, sizeRef.current, extent));
+  }, [extent]);
+
+  /** Frames all the given points at once, no closer than FOLLOW_ZOOM. */
+  const fitTo = useCallback((points: readonly Point[]) => {
+    setView(() => fitPoints(points, FOLLOW_ZOOM, sizeRef.current, extent));
   }, [extent]);
 
   // The cabinet's size, measured and then watched. jsdom implements no
@@ -221,6 +226,7 @@ export function useViewport(extent: Size) {
     wasDrag,
     zoomBy,
     fitAll,
-    goTo
+    goTo,
+    fitTo
   };
 }

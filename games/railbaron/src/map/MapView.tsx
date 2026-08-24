@@ -6,7 +6,7 @@ import {
 import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
-import { needsDestination } from '../state/turns';
+import { destinationOf, needsDestination } from '../state/turns';
 import { EngineChip, GLIDE } from './EngineChip';
 import {
   CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, visualRadius, type Placed
@@ -555,6 +555,11 @@ export function MapView({
     ? null
     : walkedTo ?? state.seats[state.turn].at;
   const baron = standingAt === null ? undefined : board.byId.get(standingAt);
+  /** The other end of the journey FIND frames — the destination, once rolled. */
+  const destinationCity = upNext === null ? null : destinationOf(upNext);
+  const destinationNode = destinationCity === null
+    ? undefined
+    : board.byId.get(nodeForCity(destinationCity));
 
   /**
    * Whether the chip is on duty at all: a turn under way with somewhere to
@@ -947,7 +952,11 @@ export function MapView({
           {baron && (
             <button
               aria-label="Find the baron up"
-              onClick={() => viewport.goTo(baron)}
+              /* The whole journey, not one end of it: where the pawn stands
+                 and where it is going, framed together. Mid-trip with no
+                 destination rolled yet, the pawn alone is the journey. */
+              onClick={() => viewport.fitTo(destinationNode !== undefined
+                ? [baron, destinationNode] : [baron])}
               style={{ ...HUD_BUTTON, cursor: 'pointer' }}
             >
               FIND
