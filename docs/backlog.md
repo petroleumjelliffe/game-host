@@ -163,6 +163,7 @@ accepts. It is how production was exonerated the first night.
 ---
 
 ## Marco Polo's build configs are not typechecked
+## ~~Marco Polo's build configs are not typechecked~~ — done 2026-08-21
 
 **Found 2026-08-20**, by the linter, which could not resolve them to any
 project. `games/marcopolo/vite.config.ts` and `vitest.config.ts` belong to no
@@ -182,10 +183,17 @@ Vitest 4 moved a project's `name` under `test`; Marco Polo's two projects
 still declare it at the top level, so the labels are almost certainly being
 dropped. The tests all pass either way, which is why nobody noticed.
 
-**Fix:** move both `name` keys under `test`, confirm the project labels
-appear in `vitest run` output, then add both files to the `include` and drop
-`games/marcopolo/*.config.ts` from `allowDefaultProject` in
-`eslint.config.mjs`. Small, and worth doing while the reason is written down.
+**Fixed 2026-08-21**, exactly that way — and the entry above understated it.
+It called the dropped labels "almost certainly" cosmetic. They were not:
+`vitest run --root games/marcopolo --project=node` failed outright with **"No
+projects matched the filter 'node'"**, so neither project was addressable at
+all, while Rail Baron's identical filter selected 21 files. Both are named now
+(node: 8 files / 55 tests, jsdom: 9 / 57), both config files are in the
+`include`, and `games/marcopolo/*.config.ts` is out of `allowDefaultProject`.
+
+The general lesson is the one worth keeping: a file in no `tsconfig` is a file
+where a type error is a silent behaviour change. This one sat in the open from
+the subtree merge until a linter tripped over it for an unrelated reason.
 
 ---
 

@@ -44,18 +44,15 @@ export default tseslint.config(
       parserOptions: {
         projectService: {
           // TypeScript that belongs to no tsconfig, and so is not typechecked
-          // either. Marco Polo's two config files: Rail Baron and Acquire
-          // both list vite.config.ts in their `include` and Marco Polo lists
-          // neither; adding them surfaces two pre-existing type errors in
-          // vitest.config.ts and is its own change (see docs/backlog.md).
-          // Acquire's generate-manifest.ts: a prebuild step run by tsx, in a
-          // scripts/ directory no `include` covers. Both get the default
-          // project so they are linted at all, rather than being ignored for
-          // the crime of not being in a tsconfig.
-          allowDefaultProject: [
-            'games/marcopolo/*.config.ts',
-            'games/acquire/scripts/*.ts',
-          ],
+          // either. Acquire's generate-manifest.ts is a prebuild step run by
+          // tsx, in a scripts/ directory no `include` covers; it gets the
+          // default project so it is linted at all, rather than being ignored
+          // for the crime of not being in a tsconfig.
+          //
+          // Marco Polo's two config files were here too until 2026-08-21.
+          // They are in its tsconfig now, which is the better fix — being
+          // unchecked was hiding a real error, not just a lint gap.
+          allowDefaultProject: ['games/acquire/scripts/*.ts'],
         },
       },
     },
