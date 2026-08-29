@@ -25,7 +25,8 @@ ephemeral range (49152+, which the OS hands out randomly):
 | Rail Baron, alone | 4001 | 7931 | `/railbaron` |
 | Acquire, alone | 4002 | 7932 | `/acquire` |
 | Marco Polo, alone | 4003 | 7933 | `/marcopolo` |
-| (next title), alone | 4004 | 7934 | — |
+| Word Game, alone | 4004 | 7934 | `/wordgame` |
+| (next title), alone | 4005 | 7935 | — |
 
 4000 sits outside the 4001+ block on purpose: that block is game servers, and
 `apps/host` is not a game — it is the process that contains them. It has no
@@ -77,3 +78,6 @@ Known consumers, kept in agreement by hand:
 - Marco Polo: `server/main.ts` default (4003), `vite.config.ts` `serverPort`
   fallback and socket-proxy target (4003), `vite.config.ts` `server.port`
   (7933). No saves — nothing is persisted server-side.
+- Word Game: `server/index.ts` boot default (4004), `vite.config.ts`
+  `server.port` (7934) and socket-proxy target (4004), `package.json`
+  `predev:server` port guard (4004). Dev-only, like the others.
