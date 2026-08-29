@@ -24,17 +24,20 @@ const packages = [
   ['lobby', 'packages/lobby'],
   ['host', 'packages/host'],
   ['room-store', 'packages/room-store'],
+  ['notify', 'packages/notify'],
   ['marcopolo', 'games/marcopolo'],
   ['railbaron', 'games/railbaron'],
   ['acquire', 'games/acquire'],
+  ['wordgame', 'games/wordgame'],
   ['apps-host', 'apps/host'],
 ];
 
 // Weight is measured in worker-pool contention, not file count. `host` boots
 // a socket.io server per test but holds no DOM and no game state, so it sits
-// with the light pair. `apps-host` will not: it boots three whole games per
-// file, and belongs with the heavy ones when it arrives.
-const LIGHT = new Set(['lobby', 'host', 'room-store', 'marcopolo']);
+// with the light pair — `notify` likewise: timers and temp files, no DOM.
+// `apps-host` does not: it boots every game per file, and `wordgame` carries
+// a jsdom project like the other games, so both run in the heavy lane.
+const LIGHT = new Set(['lobby', 'host', 'room-store', 'notify', 'marcopolo']);
 const light = packages.filter(([name]) => LIGHT.has(name));
 const heavy = packages.filter(([name]) => !LIGHT.has(name));
 

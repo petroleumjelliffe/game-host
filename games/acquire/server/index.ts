@@ -16,7 +16,12 @@ import { fileURLToPath } from 'node:url';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { Server as SocketServer } from 'socket.io';
 import { BASE_PATH } from '../basePath.js';
-import type { HostContext, MountedGame } from '@game-host/host/contract.js';
+import type {
+  GameTurnReporter,
+  HostContext,
+  MountedGame,
+  TurnNotifier,
+} from '@game-host/host/contract.js';
 import { closeSockets } from '@game-host/host/close.js';
 import { guardSocket } from '@game-host/host/guard.js';
 import { project } from './projection.js';
@@ -133,7 +138,7 @@ interface Built {
  */
 export async function mount(ctx: HostContext): Promise<MountedGame> {
   const store = ctx.dataDir === undefined ? createNullStore() : createFileStore(ctx.dataDir);
-  const built = build(ctx.app, ctx.httpServer, store, {});
+  const built = build(ctx.app, ctx.httpServer, store, { notify: ctx.notify });
   try {
     const restored = await built.rooms.restore();
     if (restored > 0) console.log(`✓ Restored ${restored} room(s)`);
@@ -147,7 +152,7 @@ function build(
   app: express.Express,
   httpServer: HttpServer,
   store: RoomStore,
-  options: Pick<ServerOptions, 'distDir' | 'socketPath'>,
+  options: Pick<ServerOptions, 'distDir' | 'socketPath'> & { notify?: TurnNotifier },
 ): Built {
   // Twinned under the base path because that is the only route the game-host
   // front door forwards — a bare `/health` is unreachable through the proxy.
@@ -210,6 +215,22 @@ function build(
   // so composition changes nothing about it.
   const devSeed = process.env.NODE_ENV === 'development';
   if (devSeed) registerDevSeed(app, rooms);
+
+  // Turn notifications, when the host runs the service. Registration hands
+  // it three closures over things this file already holds; the game's only
+  // other duty is the one `turnChanged` call in `deliver`'s commit branch.
+  // `segmentStart` is the turnKey: it moves exactly when a commit happens,
+  // so it is distinct per turn and survives a restart with the room.
+  const notifier: GameTurnReporter | undefined = options.notify?.registerGame({
+    gameId: 'acquire',
+    title: TITLE,
+    roomPath: (roomId) => `${BASE_PATH}/room/${roomId}`,
+    isConnected: (roomId, playerId) => lobby.socketsFor(roomId, playerId).length > 0,
+    verifySeat: (roomId, playerId, token) => {
+      const seat = rooms.get(roomId)?.players.find((p) => p.id === playerId);
+      return seat !== undefined && seat.token === token;
+    },
+  });
 
   const lobby = createLobbyHandlers<GameRoom>(io, rooms, {
     protocolVersion: PROTOCOL_VERSION,
@@ -283,6 +304,10 @@ function build(
       case 'commit':
         for (const p of room.players) sendState(room, p.id, 'commit');
         save(room);
+        // After the sends: the notifier's debounce re-checks presence when it
+        // fires, so a player who hears this commit on a live socket is never
+        // notified at all.
+        notifier?.turnChanged(room.id, room.actorId(), String(room.segmentStart()));
         return;
       case 'correction':
         sendState(room, delivery.to, 'correction');

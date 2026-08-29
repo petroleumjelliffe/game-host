@@ -1,0 +1,26 @@
+{
+  "name": "@game-host/notify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./*.js": "./*.ts",
+    "./*": "./*.ts"
+  },
+  "dependencies": {
+    "@game-host/host": "*",
+    "express": "^5.2.1",
+    "nodemailer": "^9.0.6",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/nodemailer": "^7.0.4",
+    "@types/web-push": "^3.6.4"
+  }
+}
