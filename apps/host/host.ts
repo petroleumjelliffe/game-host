@@ -16,6 +16,7 @@ import type { HostContext, Mount, MountedGame } from '@game-host/host/contract.j
 import { mount as mountAcquire } from '@game-host/acquire/server/index.js';
 import { mount as mountMarcoPolo } from '@game-host/marcopolo/server/app.js';
 import { mount as mountRailBaron } from '@game-host/railbaron/server/index.js';
+import { mount as mountWordGame } from '@game-host/wordgame/server/index.js';
 import { createNotifyServiceFromEnv } from '@game-host/notify/fromEnv.js';
 import { createNotifyRouter } from '@game-host/notify/routes.js';
 import { renderMenu } from './menu.js';
@@ -44,6 +45,7 @@ const GAMES: readonly { mount: Mount; dataDir: string | undefined }[] = [
   { mount: mountRailBaron, dataDir: 'railbaron' },
   { mount: mountAcquire, dataDir: 'acquire' },
   { mount: mountMarcoPolo, dataDir: undefined },
+  { mount: mountWordGame, dataDir: 'wordgame' },
 ];
 
 export interface HostOptions {

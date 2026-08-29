@@ -34,6 +34,7 @@ const PATHS = {
   railbaron: '/railbaron',
   acquire: '/acquire',
   marcopolo: '/marcopolo',
+  wordgame: '/wordgame',
 };
 
 describe('the menu', () => {
@@ -72,7 +73,7 @@ describe('the menu', () => {
 });
 
 describe('health', () => {
-  it('aggregates all three games at the root', async () => {
+  it('aggregates every game at the root', async () => {
     host = await startTestHost();
 
     const body = await (await fetch(`${host.url}/health`)).json() as {
@@ -82,7 +83,7 @@ describe('health', () => {
 
     expect(body.ok).toBe(true);
     expect(Object.keys(body.games).sort()).toEqual(
-      [PATHS.acquire, PATHS.marcopolo, PATHS.railbaron].sort(),
+      [PATHS.acquire, PATHS.marcopolo, PATHS.railbaron, PATHS.wordgame].sort(),
     );
   });
 

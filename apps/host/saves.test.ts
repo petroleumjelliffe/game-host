@@ -49,7 +49,7 @@ describe('the directories the host allocates', () => {
     // service stores is cross-game (a player's email address is nobody's
     // room), so it sits beside the per-game directories rather than in the
     // GAMES table.
-    expect(entries).toEqual(['acquire', 'notifications', 'railbaron']);
+    expect(entries).toEqual(['acquire', 'notifications', 'railbaron', 'wordgame']);
     // Marco Polo persists nothing, so it gets no directory at all rather than
     // an empty one somebody has to ask about later.
     expect(entries).not.toContain('marcopolo');
