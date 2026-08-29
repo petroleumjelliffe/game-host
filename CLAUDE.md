@@ -14,12 +14,13 @@ It is also, as of this migration, where the game code itself lives:
 
 | Path | What it is |
 | --- | --- |
-| `packages/lobby` | `@game-host/lobby` — the shared lobby package (seating, join/rejoin, presence) that Rail Baron and Acquire both depend on as a workspace package, not a git submodule. |
+| `packages/lobby` | `@game-host/lobby` — the shared lobby package (seating, join/rejoin, presence) that every turn-based game depends on as a workspace package, not a git submodule. |
 | `games/marcopolo` | Marco Polo — server (`server/`), client (`client/`), protocol (`protocol/`). |
 | `games/railbaron` | Rail Baron — engine, session, server and a React client. |
 | `games/acquire` | Acquire — engine, session, server and a React client. Served at `/acquire`; its GitHub Pages deploy is retired. |
+| `games/wordgame` | The word game (crossword rules, 2–6 players, deliberately neutral name) — engine, session, server and a React client. Built for multi-day play: state persists on every move, and turns feed the notification service. |
 
-`npm install` at the root links all seven workspaces; `npm test` and
+`npm install` at the root links all nine workspaces; `npm test` and
 `npm run typecheck` at the root cover them all in one command (see Testing,
 below).
 
@@ -48,8 +49,9 @@ arrangements.
 | Path | What it is |
 | --- | --- |
 | `packages/host` | `@game-host/host` — the contract (`HostContext`, `MountedGame`), the error boundary (`guardSocket`, `guardTick`), and `closeSockets`. No game logic. |
-| `packages/room-store` | `@game-host/room-store` — where a room lives between processes: atomic staging, per-room write chains, `settled()`, quarantine. Generic over the payload; Rail Baron and Acquire configure it with their record guards ([plan](docs/plans/2026-08-20-room-store.md)). |
-| `apps/host` | `@game-host/apps-host` — the composed process, and the only package allowed to depend on all three games. |
+| `packages/room-store` | `@game-host/room-store` — where a room lives between processes: atomic staging, per-room write chains, `settled()`, quarantine. Generic over the payload; each persisting game configures it with its record guard ([plan](docs/plans/2026-08-20-room-store.md)). |
+| `packages/notify` | `@game-host/notify` — the turn-notification service: Web Push + double-opt-in email, a debounce that re-checks presence at fire time, once-per-turn markers persisted before any send. Games see only the three contract types in `packages/host/contract.ts`; the composed host owns the service, its `/notify` routes and `DATA_DIR/notifications/`. All channel config is env (see README's Render table); unconfigured means off, not broken. |
+| `apps/host` | `@game-host/apps-host` — the composed process, and the only package allowed to depend on all the games. |
 
 ## Check whether this clone *is* the host machine
 
@@ -95,7 +97,7 @@ npm test        # every package's suite, one command: 1768 tests / 179 files
 
 DATA_DIR=$(mktemp -d) npm run start:host   # all three games, one process, port 4000
 npm run typecheck
-npm run lint    # all seven workspaces, type-aware, one invocation, ~5s
+npm run lint    # all nine workspaces, type-aware, one invocation, ~5s
 ```
 
 `npm test` runs `scripts/test-all.mjs`, which spawns one independent
@@ -141,7 +143,7 @@ per package: pass/fail, exit code, test/file counts, and — distinctly — how
 many of those tests failed when the run wasn't clean) says which one(s).
 
 `npm run lint` is the opposite arrangement and deliberately so: **one**
-`eslint .` at the root covers all seven workspaces, because
+`eslint .` at the root covers all nine workspaces, because
 typescript-eslint's `projectService` resolves each file to its own package's
 `tsconfig.json`. Do not give this a `--workspaces` fan-out; it would be
 slower and buy nothing. Five rules, all errors, all type-aware — the two

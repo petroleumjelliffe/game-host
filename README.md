@@ -1,10 +1,11 @@
 # game-host
 
-An npm workspace monorepo: three games (`games/marcopolo`, `games/railbaron`,
-`games/acquire`) and their shared lobby package (`packages/lobby`), plus the
-front-door configuration for the machine that hosts game night — a Caddy
-reverse proxy that forwards one port, a menu generated from whatever games
-mounted, and the canonical [port registry](PORTS.md).
+An npm workspace monorepo: four games (`games/marcopolo`, `games/railbaron`,
+`games/acquire`, `games/wordgame`) and their shared lobby package
+(`packages/lobby`), plus the front-door configuration for the machine that
+hosts game night — a Caddy reverse proxy that forwards one port, a menu
+generated from whatever games mounted, and the canonical
+[port registry](PORTS.md).
 
 Friends on the wifi see one address:
 
@@ -16,10 +17,10 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 ## Build and test
 
 ```bash
-npm install       # links packages/lobby, games/marcopolo, games/railbaron, games/acquire
-npm test          # every package's suite in one command: 1768 tests / 179 files
+npm install       # links every packages/*, games/*, apps/* workspace
+npm test          # every package's suite in one command
 npm run typecheck
-npm run lint      # one type-aware eslint across all seven workspaces, ~5s
+npm run lint      # one type-aware eslint across all nine workspaces
 ```
 
 `npm run lint` gates pull requests and nothing else: it is a CI job of its
@@ -33,7 +34,7 @@ works on any machine. The rest of this README (Caddy, launchd, the port
 registry, `saves/`) is about the *hosting* side, which is the host machine's
 job.
 
-One process (`apps/host`, port 4000) serves all three games, their sockets
+One process (`apps/host`, port 4000) serves every game, their sockets
 and a menu generated from whatever mounted, so Caddy proxies one port and
 knows no game names. **The same process is what Render runs**, from the same
 `main`, so there is one artifact and two deployments — see
@@ -236,8 +237,25 @@ serves all three games regardless.
 | Build command | `npm install --include=dev && npm run build` |
 | Start command | `npm run start:host:compiled` |
 | Health check path | `/health` |
-| Environment | `DATA_DIR=/var/data`, `NODE_ENV=production` |
-| Disk | `dsk-d9rafvlbedkc73coe2k0` at `/var/data`; the host creates `acquire/` and `railbaron/` beneath it |
+| Environment | `DATA_DIR=/var/data`, `NODE_ENV=production`, plus the notification vars below when notifications are wanted |
+| Disk | `dsk-d9rafvlbedkc73coe2k0` at `/var/data`; the host creates `acquire/`, `railbaron/`, `wordgame/` and its own `notifications/` beneath it |
+
+**Turn notifications** (`packages/notify`) are configured entirely by env and
+are off — not broken — when the vars are absent, so nothing below blocks a
+deploy. All of it lives on the service's environment, none of it in the repo:
+
+| Variable | What it is |
+| --- | --- |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push keys; mint once with `npx web-push generate-vapid-keys` |
+| `VAPID_SUBJECT` | `mailto:` contact URI push services may use |
+| `SMTP_URL` | `smtp(s)://user:pass@host:port` — any provider, none hard-coded |
+| `EMAIL_FROM` | The From header on confirmation and turn emails |
+| `NOTIFY_ORIGIN` | Absolute origin for links in emails (e.g. `https://acquire-multiplayer.onrender.com`); email stays off without it |
+| `NOTIFY_DEBOUNCE_MS` | How long a player must stay away after their turn starts before anything sends (default 60000) |
+
+Push subscriptions, confirmed addresses and once-per-turn markers live under
+`DATA_DIR/notifications/`, so they ride the persistent disk and survive a
+deploy — losing them would mean re-opting-in every player.
 
 Four things there are load-bearing in ways that are not obvious:
 
@@ -271,7 +289,7 @@ Verify a deploy:
 
 ```bash
 B=https://acquire-multiplayer.onrender.com
-curl -s $B/health                                  # three games
+curl -s $B/health                                  # every game
 curl -sI $B/acquire-startups-m1/room/ABCD          # 301 → /acquire/room/ABCD
 ```
 
