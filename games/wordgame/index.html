@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Word Game</title>
+
+    <!-- PWA. Static links, no placeholder machinery — the path is written
+         out, same as manifest.webmanifest's own start_url/scope. (Vite's
+         built-in HTML env replacement was tried first: it resolves the base
+         WITHOUT a trailing slash here, yielding /wordgamemanifest.webmanifest,
+         and substitutes inside comments too.) -->
+    <link rel="manifest" href="/wordgame/manifest.webmanifest" />
+    <meta name="theme-color" content="#1e6b3c" />
+    <link rel="icon" href="/wordgame/icons/icon-192.svg" type="image/svg+xml" />
+    <!-- iOS installs read these, not the manifest. -->
+    <link rel="apple-touch-icon" href="/wordgame/icons/icon-192.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Word Game" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

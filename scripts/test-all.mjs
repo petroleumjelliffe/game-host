@@ -15,9 +15,10 @@
 // railbaron's slowest test (120 fake-timer ticks with full DOM queries per
 // tick) past its default timeout under contention alone, no code change
 // behind it, and CI runners with 2-4 cores feel this worse than a fat dev
-// machine does. Railbaron and acquire (the two heavy suites) run one after
-// the other; lobby and marcopolo (the two light ones) run together — at
-// most three full-machine-sized pools contending at once, never four.
+// machine does. The heavy suites (the games with jsdom projects, and
+// apps-host, which boots every game per file) run one after the other; the
+// light ones run together beside them, so the heavy lane never contends
+// with more than one of its own.
 import { spawn } from 'node:child_process';
 
 const packages = [

@@ -93,7 +93,7 @@ anywhere.
 
 ```bash
 npm install     # links packages/{lobby,host,room-store}, games/{marcopolo,railbaron,acquire}, apps/host
-npm test        # every package's suite, one command: 1768 tests / 179 files
+npm test        # every package's suite, one command: 1996 tests / 205 files
 
 DATA_DIR=$(mktemp -d) npm run start:host   # all three games, one process, port 4000
 npm run typecheck
@@ -127,10 +127,11 @@ process sizes its own worker pool to the whole machine, so several
 full-machine-sized pools contending together oversubscribe badly — enough,
 at four, to push railbaron's slowest test past its timeout on contention
 alone, no code change behind it. The packages are split by weight rather
-than by count: lobby, host, room-store and marcopolo (light) run together, and
-railbaron, acquire and apps-host (heavy) run one after another. `apps/host`
-is in the heavy group despite having five files — it boots three whole
-games per test, so file count is the wrong measure of what a suite costs.
+than by count: lobby, host, room-store, notify and marcopolo (light) run
+together, and railbaron, acquire, wordgame and apps-host (heavy) run one
+after another. `apps/host` is in the heavy group despite having few files —
+it boots every game per test, so file count is the wrong measure of what a
+suite costs.
 Each package's output is buffered and printed as a single block once that
 package finishes, so concurrent suites don't interleave their output but a
 fast package's block still shows up before a slower one still running.
