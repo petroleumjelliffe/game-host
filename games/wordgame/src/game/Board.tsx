@@ -9,33 +9,44 @@ export interface BoardProps {
   board: Square[];
   /** Tiles staged this turn, drawn highlighted on their squares. */
   staged: Placement[];
+  /** The last committed play's squares — drawn with the gold ring. */
+  lastPositions?: number[];
   onCellTap(pos: number): void;
 }
 
 const PREMIUM_CLASS: Record<Premium, string> = {
-  DL: 'bg-sky-200 text-sky-800',
-  TL: 'bg-blue-400 text-blue-900',
-  DW: 'bg-rose-200 text-rose-800',
-  TW: 'bg-red-400 text-red-950',
+  DL: 'bg-prem-2l text-prem-2l-ink',
+  TL: 'bg-prem-3l text-white',
+  DW: 'bg-prem-2w text-prem-2w-ink',
+  TW: 'bg-prem-3w text-white',
 };
 
-const PREMIUM_LABEL: Record<Premium, string> = { DL: 'DL', TL: 'TL', DW: 'DW', TW: 'TW' };
+// The design names premiums by their multiplier, not initials.
+const PREMIUM_LABEL: Record<Premium, string> = { DL: '2L', TL: '3L', DW: '2W', TW: '3W' };
 
 interface TileFaceProps {
   letter: string;
   isBlank: boolean;
   staged?: boolean;
+  /** This tile is part of the last committed play — ringed gold. */
+  last?: boolean;
 }
 
 /** A tile drawn in a cell: letter plus a small point value; blanks are
  * lowercase with a 0, which keeps them visibly distinct at 24px. */
-function TileFace({ letter, isBlank, staged = false }: TileFaceProps) {
+function TileFace({ letter, isBlank, staged = false, last = false }: TileFaceProps) {
   const value = isBlank ? 0 : TILE_VALUES[letter as keyof typeof TILE_VALUES] ?? 0;
+  const ring = staged
+    ? 'inset 0 -2px 0 #d9bf8a, 0 0 0 2px #2563eb, 0 2px 6px rgba(37,99,235,.4)'
+    : last
+      ? 'inset 0 -2px 0 #d9bf8a, 0 1px 1px rgba(0,0,0,.18), 0 0 0 2px #e0a924'
+      : 'inset 0 -2px 0 #d9bf8a, 0 1px 1px rgba(0,0,0,.18)';
   return (
     <span
-      className={`relative flex h-full w-full items-center justify-center rounded-sm font-bold ${
-        staged ? 'bg-yellow-200 ring-2 ring-yellow-500' : 'bg-amber-100'
-      } ${isBlank ? 'text-amber-600' : 'text-amber-950'}`}
+      className={`relative flex h-full w-full items-center justify-center rounded font-tile font-bold bg-tile ${
+        isBlank ? 'text-tile-blank' : 'text-tile-ink'
+      } ${staged ? 'z-10' : ''}`}
+      style={{ boxShadow: ring }}
     >
       <span style={{ fontSize: 'clamp(9px, 3.2vw, 18px)', lineHeight: 1 }}>
         {isBlank ? letter.toLowerCase() : letter}
@@ -50,18 +61,19 @@ function TileFace({ letter, isBlank, staged = false }: TileFaceProps) {
   );
 }
 
-export function Board({ board, staged, onCellTap }: BoardProps) {
+export function Board({ board, staged, lastPositions, onCellTap }: BoardProps) {
   const stagedAt = new Map(staged.map((p) => [p.pos, p]));
 
   return (
     <div
       data-testid="board"
-      className="mx-auto grid w-full max-w-[600px] gap-px rounded bg-emerald-900 p-px"
+      className="mx-auto grid w-full max-w-[600px] gap-0.5 rounded-lg bg-board p-1"
       style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
     >
       {board.map((square, pos) => {
         const premium = PREMIUMS[pos] ?? null;
         const stagedHere = stagedAt.get(pos);
+        const isLast = lastPositions?.includes(pos) ?? false;
         return (
           <button
             key={pos}
@@ -69,14 +81,15 @@ export function Board({ board, staged, onCellTap }: BoardProps) {
             data-testid={`cell-${pos}`}
             data-premium={premium ?? undefined}
             data-staged={stagedHere !== undefined ? '' : undefined}
+            data-last={isLast ? '' : undefined}
             data-blank={square?.isBlank || stagedHere?.tile === '_' ? '' : undefined}
             onClick={() => { onCellTap(pos); }}
-            className={`aspect-square p-0 ${
-              premium !== null ? PREMIUM_CLASS[premium] : 'bg-emerald-50 text-emerald-700'
+            className={`aspect-square rounded-sm p-0 ${
+              premium !== null ? PREMIUM_CLASS[premium] : 'bg-board-cell text-board-cell-ink'
             }`}
           >
             {square !== null ? (
-              <TileFace letter={square.letter} isBlank={square.isBlank} />
+              <TileFace letter={square.letter} isBlank={square.isBlank} last={isLast} />
             ) : stagedHere !== undefined ? (
               <TileFace
                 letter={stagedHere.tile === '_' ? stagedHere.as ?? '?' : stagedHere.tile}

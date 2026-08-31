@@ -24,7 +24,7 @@ describe('Board', () => {
     expect(screen.getByTestId(`cell-${parseCoord('F6')}`)).toHaveAttribute('data-premium', 'TL');
     expect(screen.getByTestId(`cell-${parseCoord('A4')}`)).toHaveAttribute('data-premium', 'DL');
     expect(screen.getByTestId(`cell-${parseCoord('A2')}`)).not.toHaveAttribute('data-premium');
-    expect(screen.getByTestId(`cell-${parseCoord('A1')}`)).toHaveTextContent('TW');
+    expect(screen.getByTestId(`cell-${parseCoord('A1')}`)).toHaveTextContent('3W');
     // …and every square agrees with the canonical layout.
     for (let pos = 0; pos < BOARD_SQUARES; pos += 1) {
       const premium = PREMIUMS[pos];
@@ -70,5 +70,19 @@ describe('Board', () => {
     fireEvent.click(stagedCell);
     fireEvent.click(screen.getByTestId('cell-8'));
     expect(onTap.mock.calls).toEqual([[7], [8]]);
+  });
+
+  it('marks the last play with data-last', () => {
+    const board = emptyBoard();
+    board[112] = { letter: 'Q', isBlank: false };
+    board[113] = { letter: 'I', isBlank: false };
+    render(<Board board={board} staged={[]} lastPositions={[112, 113]} onCellTap={noop} />);
+    expect(screen.getByTestId('cell-112')).toHaveAttribute('data-last');
+    expect(screen.getByTestId('cell-113')).toHaveAttribute('data-last');
+  });
+
+  it('labels premiums 3W/2W/3L/2L', () => {
+    render(<Board board={emptyBoard()} staged={[]} onCellTap={noop} />);
+    expect(screen.getByTestId('cell-0')).toHaveTextContent('3W'); // A1
   });
 });
