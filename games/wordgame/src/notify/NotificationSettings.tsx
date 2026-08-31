@@ -296,11 +296,12 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
                   ) : (
                     <>
                       <form
+                        noValidate
                         className="flex gap-2"
                         onSubmit={(e) => { e.preventDefault(); void submitEmail(); }}
                       >
                         <input
-                          type="text"
+                          type="email"
                           aria-label="Email address"
                           value={draft}
                           onChange={(e) => { setDraft(e.target.value); setValidationError(false); }}
