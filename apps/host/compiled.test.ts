@@ -191,12 +191,14 @@ describe('the host, compiled', () => {
     }
   });
 
-  it('answers the aggregate health for all three games', async () => {
+  it('answers the aggregate health for every game', async () => {
     const { url } = await listenCompiled();
     const body = await (await fetch(`${url}/health`)).json() as {
       ok: boolean; games: Record<string, unknown>;
     };
     expect(body.ok).toBe(true);
-    expect(Object.keys(body.games).sort()).toEqual(['/acquire', '/marcopolo', '/railbaron']);
+    expect(Object.keys(body.games).sort()).toEqual(
+      ['/acquire', '/marcopolo', '/railbaron', '/wordgame'],
+    );
   });
 });

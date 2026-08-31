@@ -15,26 +15,30 @@
 // railbaron's slowest test (120 fake-timer ticks with full DOM queries per
 // tick) past its default timeout under contention alone, no code change
 // behind it, and CI runners with 2-4 cores feel this worse than a fat dev
-// machine does. Railbaron and acquire (the two heavy suites) run one after
-// the other; lobby and marcopolo (the two light ones) run together — at
-// most three full-machine-sized pools contending at once, never four.
+// machine does. The heavy suites (the games with jsdom projects, and
+// apps-host, which boots every game per file) run one after the other; the
+// light ones run together beside them, so the heavy lane never contends
+// with more than one of its own.
 import { spawn } from 'node:child_process';
 
 const packages = [
   ['lobby', 'packages/lobby'],
   ['host', 'packages/host'],
   ['room-store', 'packages/room-store'],
+  ['notify', 'packages/notify'],
   ['marcopolo', 'games/marcopolo'],
   ['railbaron', 'games/railbaron'],
   ['acquire', 'games/acquire'],
+  ['wordgame', 'games/wordgame'],
   ['apps-host', 'apps/host'],
 ];
 
 // Weight is measured in worker-pool contention, not file count. `host` boots
 // a socket.io server per test but holds no DOM and no game state, so it sits
-// with the light pair. `apps-host` will not: it boots three whole games per
-// file, and belongs with the heavy ones when it arrives.
-const LIGHT = new Set(['lobby', 'host', 'room-store', 'marcopolo']);
+// with the light pair — `notify` likewise: timers and temp files, no DOM.
+// `apps-host` does not: it boots every game per file, and `wordgame` carries
+// a jsdom project like the other games, so both run in the heavy lane.
+const LIGHT = new Set(['lobby', 'host', 'room-store', 'notify', 'marcopolo']);
 const light = packages.filter(([name]) => LIGHT.has(name));
 const heavy = packages.filter(([name]) => !LIGHT.has(name));
 

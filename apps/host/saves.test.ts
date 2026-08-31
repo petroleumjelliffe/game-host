@@ -45,7 +45,11 @@ describe('the directories the host allocates', () => {
 
     const entries = (await readdir(host.dataDir)).sort();
 
-    expect(entries).toEqual(['acquire', 'railbaron']);
+    // `notifications` is the host's own, not a game's: what the notification
+    // service stores is cross-game (a player's email address is nobody's
+    // room), so it sits beside the per-game directories rather than in the
+    // GAMES table.
+    expect(entries).toEqual(['acquire', 'notifications', 'railbaron', 'wordgame']);
     // Marco Polo persists nothing, so it gets no directory at all rather than
     // an empty one somebody has to ask about later.
     expect(entries).not.toContain('marcopolo');

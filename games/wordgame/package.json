@@ -1,0 +1,48 @@
+{
+  "name": "@game-host/wordgame",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./*.js": "./*.ts",
+    "./*": "./*.ts"
+  },
+  "scripts": {
+    "dev": "vite --host",
+    "predev:server": "node scripts/check-port.mjs 4004",
+    "dev:server": "NODE_ENV=development tsx watch server/index.ts",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "start:server": "tsx server/index.ts",
+    "serve": "npm run build && tsx server/index.ts",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "check:bundle": "vite build && ! grep -rl zyzzyva dist/assets 2>/dev/null && ! grep -rlE \"['\\\"]vitest['\\\"]\" dist/assets 2>/dev/null"
+  },
+  "dependencies": {
+    "@game-host/host": "*",
+    "@game-host/lobby": "*",
+    "@game-host/room-store": "*",
+    "express": "^5.2.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/express": "^5.0.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^10.0.5",
+    "postcss": "^8.4.27",
+    "tailwindcss": "^3.3.3",
+    "tsx": "^4.23.12"
+  }
+}

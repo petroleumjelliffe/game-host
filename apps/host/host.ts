@@ -16,6 +16,9 @@ import type { HostContext, Mount, MountedGame } from '@game-host/host/contract.j
 import { mount as mountAcquire } from '@game-host/acquire/server/index.js';
 import { mount as mountMarcoPolo } from '@game-host/marcopolo/server/app.js';
 import { mount as mountRailBaron } from '@game-host/railbaron/server/index.js';
+import { mount as mountWordGame } from '@game-host/wordgame/server/index.js';
+import { createNotifyServiceFromEnv } from '@game-host/notify/fromEnv.js';
+import { createNotifyRouter } from '@game-host/notify/routes.js';
 import { renderMenu } from './menu.js';
 
 /**
@@ -42,6 +45,7 @@ const GAMES: readonly { mount: Mount; dataDir: string | undefined }[] = [
   { mount: mountRailBaron, dataDir: 'railbaron' },
   { mount: mountAcquire, dataDir: 'acquire' },
   { mount: mountMarcoPolo, dataDir: undefined },
+  { mount: mountWordGame, dataDir: 'wordgame' },
 ];
 
 export interface HostOptions {
@@ -118,8 +122,21 @@ export async function createHost(opts: HostOptions): Promise<RunningHost> {
     res.redirect(301, `/acquire${req.originalUrl.slice(OLD_ACQUIRE.length)}`);
   });
 
+  // The turn-notification service: host-level, because what it stores is
+  // cross-game — a player's email address is not any one game's, so its
+  // directory is a sibling of the per-game ones, not a row in GAMES. Routes
+  // registered before the mounts for the same shadowing reason as /health,
+  // at a path (`/notify`) no game's base path can collide with. Channels
+  // configure themselves from env (see packages/notify/fromEnv.ts) and are
+  // off, not broken, when unconfigured — the service still tracks turns and
+  // seat bindings so a later deploy with keys picks up where this left off.
+  const notifyDir = join(opts.dataDir, 'notifications');
+  await mkdir(notifyDir, { recursive: true });
+  const notify = await createNotifyServiceFromEnv(notifyDir);
+  app.use('/notify', createNotifyRouter(notify));
+
   for (const { mount, dataDir } of GAMES) {
-    const ctx: HostContext = { app, httpServer };
+    const ctx: HostContext = { app, httpServer, notify };
     if (dataDir !== undefined) {
       const dir = join(opts.dataDir, dataDir);
       // Created before the mount that needs it: a game may open its store
@@ -150,6 +167,9 @@ export async function createHost(opts: HostOptions): Promise<RunningHost> {
       // two — Rail Baron's close() awaits in-flight saves and can reject if a
       // disk write failed.
       await Promise.allSettled(games.map((game) => game.close()));
+      // After the games: a closing game can still commit, and that commit's
+      // turn report should land on a live service rather than a closed one.
+      await notify.close();
       // The host created this server, so the host closes it — after every
       // game has stopped, never by a game on its way out. See
       // packages/host/close.ts for what that would have cost.

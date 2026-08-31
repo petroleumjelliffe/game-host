@@ -97,7 +97,7 @@ export function mount(ctx: HostContext): Promise<MountedGame> {
 }
 
 async function mountInto(
-  { app, httpServer, dataDir }: HostContext,
+  { app, httpServer, dataDir, notify }: HostContext,
   opts: MountOptions,
 ): Promise<MountedGame> {
   if (dataDir === undefined) {
@@ -191,7 +191,22 @@ async function mountInto(
     },
   });
 
-  const attachGame = attachGameHandlers(io, rooms, wiring);
+  // Turn notifications, when the host runs the service. Rail Baron's whole
+  // cost is this registration plus the turnChanged calls beside the two
+  // broadcastLog sites in handlers.ts — whose turn it is stays derived from
+  // the log, exactly as everywhere else.
+  const notifier = notify?.registerGame({
+    gameId: 'railbaron',
+    title: TITLE,
+    roomPath: (roomId) => `${BASE_PATH}/room/${roomId}`,
+    isConnected: (roomId, playerId) => wiring.socketsFor(roomId, playerId).length > 0,
+    verifySeat: (roomId, playerId, token) => {
+      const seat = rooms.registry.get(roomId)?.players.find((p) => p.id === playerId);
+      return seat !== undefined && seat.token === token;
+    },
+  });
+
+  const attachGame = attachGameHandlers(io, rooms, wiring, notifier);
   io.on('connection', (socket) => {
     // Guard first: it patches `on`, so it covers every handler registered
     // after it — the lobby's included, which nothing here could otherwise

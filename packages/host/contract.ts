@@ -11,6 +11,54 @@ import type { Server as HttpServer } from 'node:http';
 import type { Express } from 'express';
 import type { Server as SocketServer } from 'socket.io';
 
+/**
+ * A game, as the turn-notification service sees it.
+ *
+ * The lobby is deliberately turn-agnostic, so "whose turn is it" can only
+ * come from each game — and each game already has the three capabilities
+ * below sitting on its registry and socket wiring. Registering hands the
+ * service closures over them; nothing about rooms or game state crosses the
+ * boundary.
+ */
+export interface NotifyGameRegistration {
+  /** Stable id, filename-safe (`[a-z0-9-]+`) — keys persisted per-room notification state. */
+  gameId: string;
+  /** Display name, for the notification text ("Rail Baron — your turn"). */
+  title: string;
+  /** Path (origin-relative) that deep-links a player back into the room. */
+  roomPath(roomId: string): string;
+  /**
+   * Whether this player has a live socket in this room *right now* — asked
+   * when the debounce fires, not when the turn changed, so a player who
+   * stepped away for less than the window is never notified.
+   */
+  isConnected(roomId: string, playerId: string): boolean;
+  /**
+   * Whether this token is the seat's rejoin token. Binding a notification
+   * profile to a seat must prove the seat is yours, and the token the lobby
+   * minted at seating is the only proof of identity that exists.
+   */
+  verifySeat(roomId: string, playerId: string, token: string): boolean;
+}
+
+/** What a registered game calls back into. */
+export interface GameTurnReporter {
+  /**
+   * The current player changed. `turnKey` must be distinct per turn within a
+   * room (a move counter serialises fine) — it is the once-per-turn dedupe
+   * key, persisted so a restart cannot re-notify. `null` player clears any
+   * pending notification (game over, room reset).
+   */
+  turnChanged(roomId: string, currentPlayerId: string | null, turnKey: string): void;
+  /** The room is gone; drop its bindings and markers. */
+  roomRemoved(roomId: string): void;
+}
+
+/** The host-level turn-notification service, as lent to a game. */
+export interface TurnNotifier {
+  registerGame(registration: NotifyGameRegistration): GameTurnReporter;
+}
+
 /** What the host lends a game. Everything here belongs to the host. */
 export interface HostContext {
   /**
@@ -37,6 +85,13 @@ export interface HostContext {
    * the failure mode is every saved room appearing to vanish at once.
    */
   dataDir?: string;
+  /**
+   * The turn-notification service, when the host runs one. Absent in
+   * standalone boots and in tests that don't care, rather than a null
+   * object — a game guards one call site (`ctx.notify?.registerGame(…)`)
+   * and everything downstream holds an optional reporter.
+   */
+  notify?: TurnNotifier;
 }
 
 /** What a game hands back, so the host can describe it and stop it. */

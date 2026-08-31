@@ -28,6 +28,10 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/coverage/**',
+      // Agent worktrees are whole checkouts of this repo nested inside it;
+      // linting one from here double-lints every file against the wrong
+      // tsconfig root (2026-08-31: 928 parsing errors from one stale tree).
+      '.claude/**',
       'games/acquire/prototype/**',
       '**/*.js',
       '**/*.mjs',

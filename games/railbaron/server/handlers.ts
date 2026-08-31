@@ -8,16 +8,18 @@ import {
   type AppendMessage, type LogMessage,
 } from '../session/protocol.js';
 import { isGameEvent, SEATS, type SeatId } from '../src/state/events.js';
-import { undo } from '../src/state/game.js';
+import { replay, undo } from '../src/state/game.js';
 import { appendLegality, undoLegality } from '../src/state/legal.js';
 import { LOBBY_SERVER_EVENTS } from '@game-host/lobby/protocol/protocol';
 import type { LobbyWiring } from '@game-host/lobby/server/handlers';
+import type { GameTurnReporter } from '@game-host/host/contract';
 import type { GameRoom, Rooms } from './rooms.js';
 
 const asSeat = (id: string): SeatId | undefined => SEATS.find((s) => s === id);
 
 export function attachGameHandlers(
   io: SocketServer, rooms: Rooms, wiring: LobbyWiring<GameRoom>,
+  notifier?: GameTurnReporter,
 ): (socket: Socket) => void {
   function broadcastLog(room: GameRoom): void {
     const msg: LogMessage = { roomId: room.id, events: room.log };
@@ -87,6 +89,12 @@ export function attachGameHandlers(
       here.room.log.push(msg.event);
       save(here.room);
       broadcastLog(here.room);
+      // Whose turn now is derived, never stored, so ask the replay the
+      // appended log produces. The log length is the turnKey: monotonic per
+      // append, and part of the saved log, so it survives a restart. (An
+      // undo-then-redo can revisit a length; the cost is one suppressed
+      // re-notification for a turn that was already notified once.)
+      notifier?.turnChanged(here.room.id, replay(here.room.log).turn, String(here.room.log.length));
       // No roster send: the lifecycle only changes at Begin, which broadcasts
       // its own roster. Nothing a client may append moves a room out of the
       // lobby — `started` is the server's alone.
@@ -106,6 +114,7 @@ export function attachGameHandlers(
       here.room.log = undo(here.room.log);
       save(here.room);
       broadcastLog(here.room);
+      notifier?.turnChanged(here.room.id, replay(here.room.log).turn, String(here.room.log.length));
     });
   };
 }
