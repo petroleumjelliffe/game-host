@@ -66,6 +66,17 @@ export function createGameRoom(
       const intent: Intent = { ...move, playerId };
       try {
         state = applyIntent(state, intent, dictionary);
+        // Stamp what only the server knows (the clock) and what the client
+        // needs back (where the play landed) onto the record applyIntent
+        // just appended. The engine stays deterministic; the record is fresh
+        // this call, so mutating it races nothing.
+        const record = state.log[state.log.length - 1];
+        if (record !== undefined) {
+          record.at = Date.now();
+          if (move.type === 'play') {
+            record.positions = move.placements.map((p) => p.pos).sort((a, b) => a - b);
+          }
+        }
         return { kind: 'commit' };
       } catch (error) {
         if (error instanceof IllegalIntentError) {

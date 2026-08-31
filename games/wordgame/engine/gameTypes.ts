@@ -33,6 +33,13 @@ export interface MoveRecord {
   /** play: tiles placed; exchange: tiles exchanged. */
   tilesPlayed?: number;
   bingo?: boolean;
+  /** Epoch ms, stamped by the server at commit — never by the engine, which
+   * must stay deterministic under a seed. Absent on saves from before
+   * 2026-08-31. */
+  at?: number;
+  /** For plays: the board positions placed, ascending — what the client
+   * highlights as the last word. Stamped beside `at`. */
+  positions?: number[];
 }
 
 export interface FinalAdjustment {
