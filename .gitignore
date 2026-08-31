@@ -5,3 +5,11 @@ dist
 # Where compiled.test.ts emits the bundle it boots. Never committed: it is
 # build output whose whole purpose is to be regenerated from current sources.
 .compiled-test
+
+# local env for by-hand dev runs; nothing loads it automatically — source it
+.env.local
+
+# The word game's standalone save default is repo-relative (server/games/),
+# so a by-hand playtest writes room files into the source tree. The composed
+# host saves under DATA_DIR and never hits this.
+games/wordgame/server/games/
