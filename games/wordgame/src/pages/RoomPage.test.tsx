@@ -133,8 +133,10 @@ describe('RoomPage', () => {
       message: 'QIZX is not a word.',
       words: ['QIZX'],
     } as RejectedMessage);
-    const note = screen.getByTestId('rejection-note');
-    expect(note).toHaveTextContent('Not in the dictionary: QIZX');
+    // invalidWord surfaces as the board's own overlay card, not the
+    // top-of-screen strip (Task 8: docs/plans/2026-08-31-wordgame-redesign).
+    const card = screen.getByTestId('invalid-card');
+    expect(card).toHaveTextContent('QIZX');
     // Still on the board — a refused move never tears the game down.
     expect(screen.getByTestId('game-screen')).toBeInTheDocument();
   });

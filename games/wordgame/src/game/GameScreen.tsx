@@ -6,6 +6,7 @@
 
 import { useEffect, useState, type ButtonHTMLAttributes } from 'react';
 import { EXCHANGE_MINIMUM_BAG } from '../../engine/intents';
+import { colOf, rowOf } from '../../engine/board';
 import type { Letter, Tile } from '../../engine/constants';
 import type {
   GameView,
@@ -21,6 +22,7 @@ import { LastMove } from './LastMove';
 import { MoveLog } from './MoveLog';
 import { GameOverPanel } from './GameOverPanel';
 import { RejectionNote } from './RejectionNote';
+import { previewPlay } from './scorePreview';
 import { seatEmoji } from './seatEmoji';
 import { NotificationSettings } from '../notify/NotificationSettings';
 import { useNotifyStatus } from '../notify/useNotifyStatus';
@@ -101,6 +103,11 @@ export function GameScreen({
   const canAct = myTurn && connected;
   const exchangeAllowed = view.bagCount >= EXCHANGE_MINIMUM_BAG;
   const bingoStaging = myTurn && localRack.length === 0 && staged.length === 7;
+  // Optimistic score preview for what's staged right now — geometry and
+  // arithmetic only, no dictionary (see scorePreview.ts). null whenever
+  // there's nothing to price: not your turn, mid-exchange, or an
+  // ungeometric/wordless staging.
+  const preview = myTurn && !exchangeOn ? previewPlay(view.board, staged) : null;
 
   const myInitial = view.players.find((p) => p.id === viewerId)?.name[0] ?? '·';
   const otherNames = view.players.filter((p) => p.id !== viewerId).map((p) => p.name).join(', ');
@@ -268,7 +275,7 @@ export function GameScreen({
 
       <LastMove view={view} seatEmoji={seatEmoji} />
 
-      {rejection !== null && (
+      {rejection !== null && rejection.code !== 'invalidWord' && (
         <div className="px-3.5 pt-2.5">
           <RejectionNote rejection={rejection} onDismiss={onDismissRejection} />
         </div>
@@ -281,7 +288,47 @@ export function GameScreen({
       )}
 
       <div className="px-3.5 pt-3">
-        <Board board={view.board} staged={staged} lastPositions={lastPlayPositions} onCellTap={cellTap} />
+        <div className="relative">
+          <Board board={view.board} staged={staged} lastPositions={lastPlayPositions} onCellTap={cellTap} />
+
+          {preview !== null && (
+            <div
+              data-testid="stage-badge"
+              className="pointer-events-none absolute z-10 -translate-y-full rounded-full bg-accent px-2.5 py-0.5 text-[13px] font-bold text-white shadow"
+              style={{
+                left: `${((colOf(preview.anchorPos) + 1) / 15) * 100}%`,
+                top: `${(rowOf(preview.anchorPos) / 15) * 100}%`,
+              }}
+            >
+              {preview.bingo ? `+${preview.total} · BINGO` : `+${preview.total}`}
+            </div>
+          )}
+
+          {/* Dictionary rejections get the board's own overlay card instead
+           * of the top-of-screen strip: tiles stay staged right where the
+           * word failed, so "rearrange or recall" reads as an instruction
+           * about what's in front of you. */}
+          {rejection !== null && rejection.code === 'invalidWord' && (
+            <div
+              data-testid="invalid-card"
+              className="absolute inset-x-6 top-[38%] z-20 rounded-2xl border-2 border-danger bg-white px-3.5 py-3 text-center shadow-2xl"
+            >
+              <p className="text-[15px] font-bold text-danger-ink">
+                ✕ {rejection.words?.join(', ') ?? 'That'} isn’t in the dictionary
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-ink-faint">
+                Tiles stay on the board — rearrange or recall
+              </p>
+              <button
+                type="button"
+                onClick={onDismissRejection}
+                className="m-0 mt-2 rounded-lg border border-line-strong px-3 py-1 text-sm font-semibold text-ink-soft"
+              >
+                OK
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {view.stage === 'playing' && (
@@ -322,9 +369,9 @@ export function GameScreen({
                 type="button"
                 onClick={play}
                 disabled={!canAct || staged.length === 0}
-                className="m-0 flex min-h-[46px] flex-1 items-center justify-center rounded-xl bg-accent font-bold text-white disabled:cursor-not-allowed disabled:bg-line disabled:text-ink-ghost"
+                className="m-0 flex min-h-[46px] flex-1 items-center justify-center rounded-xl bg-accent font-bold text-white shadow disabled:cursor-not-allowed disabled:bg-hairline disabled:text-ink-faint disabled:shadow-none"
               >
-                Play
+                {preview === null ? 'Play' : `Play · +${preview.total}`}
               </button>
               <Ctl
                 icon="↺"

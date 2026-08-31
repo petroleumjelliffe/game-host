@@ -65,6 +65,16 @@ function renderScreen(overrides: {
 
 const rackTiles = () => within(screen.getByTestId('rack')).getAllByRole('button');
 
+/** Stages the rack's first two tiles onto CENTER and CENTER+1 — against the
+ * fixture's empty board that's a geometrically valid first move (two tiles,
+ * in line, through center), which is what previewPlay needs to price it. */
+function stageFirstTwoTiles() {
+  fireEvent.click(screen.getByTestId('rack-tile-0'));
+  fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
+  fireEvent.click(screen.getByTestId('rack-tile-0')); // rack shifted after the first placement
+  fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
+}
+
 describe('GameScreen tap-to-place', () => {
   it('stages a rack tile on an empty square and shrinks the rack', () => {
     renderScreen({ view: makeView() });
@@ -94,7 +104,9 @@ describe('GameScreen tap-to-place', () => {
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
     fireEvent.click(screen.getByTestId('rack-tile-0')); // A (rack shifted)
     fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
-    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    // CA through center prices a preview, so the button reads "Play · +N"
+    // rather than bare "Play" — match by prefix, not exact name.
+    fireEvent.click(screen.getByRole('button', { name: /^Play/ }));
     expect(sendMove).toHaveBeenCalledExactlyOnceWith({
       type: 'play',
       placements: [
@@ -139,6 +151,26 @@ describe('GameScreen tap-to-place', () => {
     renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
     expect(screen.getByText('Bob’s turn')).toBeInTheDocument();
+  });
+});
+
+describe('GameScreen staged preview', () => {
+  it('prices the play button from the staged preview', () => {
+    renderScreen();
+    stageFirstTwoTiles();
+    expect(screen.getByRole('button', { name: /^Play · \+\d+$/ })).toBeInTheDocument();
+  });
+
+  it('shows nothing staged yet as a bare Play label with no floating badge', () => {
+    renderScreen();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+    expect(screen.queryByTestId('stage-badge')).not.toBeInTheDocument();
+  });
+
+  it('floats a score badge over the board once a play prices', () => {
+    renderScreen();
+    stageFirstTwoTiles();
+    expect(screen.getByTestId('stage-badge')).toHaveTextContent(/^\+\d+$/);
   });
 });
 
@@ -280,16 +312,36 @@ describe('GameScreen move log', () => {
 });
 
 describe('GameScreen rejection', () => {
-  it('renders the server message and the failing words, dismissibly', () => {
+  it('draws the invalid-word card over the board and keeps tiles staged', () => {
+    renderScreen({
+      rejection: { code: 'invalidWord', message: 'not in the dictionary: DAX', words: ['DAX'] },
+    });
+    const card = screen.getByTestId('invalid-card');
+    expect(card).toHaveTextContent(/DAX isn’t in the dictionary/);
+    expect(card).toHaveTextContent(/rearrange or recall/i);
+    // Dictionary rejections don't also show the top-of-screen strip.
+    expect(screen.queryByTestId('rejection-note')).not.toBeInTheDocument();
+  });
+
+  it('dismisses the invalid-word card', () => {
     const onDismissRejection = vi.fn();
     renderScreen({
-      view: makeView(),
-      rejection: { code: 'invalidWord', message: 'Not a word.', words: ['QIZX', 'VLOP'] },
+      rejection: { code: 'invalidWord', message: 'not in the dictionary: DAX', words: ['DAX'] },
+      onDismissRejection,
+    });
+    fireEvent.click(within(screen.getByTestId('invalid-card')).getByRole('button', { name: 'OK' }));
+    expect(onDismissRejection).toHaveBeenCalledOnce();
+  });
+
+  it('keeps other rejection codes in the dismissible strip', () => {
+    const onDismissRejection = vi.fn();
+    renderScreen({
+      rejection: { code: 'notYourTurn', message: 'The game has not started.' },
       onDismissRejection,
     });
     const note = screen.getByTestId('rejection-note');
-    expect(note).toHaveTextContent('Not a word.');
-    expect(note).toHaveTextContent('Not in the dictionary: QIZX, VLOP');
+    expect(note).toHaveTextContent('The game has not started.');
+    expect(screen.queryByTestId('invalid-card')).not.toBeInTheDocument();
     fireEvent.click(within(note).getByRole('button', { name: 'Dismiss' }));
     expect(onDismissRejection).toHaveBeenCalledOnce();
   });

@@ -5,26 +5,24 @@ export interface RejectionNoteProps {
   onDismiss(): void;
 }
 
-/** The server's own words on a refused move, dismissible; dictionary
- * rejections name the offending words. */
+/** The server's own words on a refused move, dismissible. Dictionary
+ * rejections (`invalidWord`) never reach this component — GameScreen routes
+ * those to the board's own overlay card instead, since only that code ever
+ * carries `words`. This strip is for everything else: not your turn, an
+ * illegal placement, an exchange the bag can't support. */
 export function RejectionNote({ rejection, onDismiss }: RejectionNoteProps) {
   return (
     <div
       role="alert"
       data-testid="rejection-note"
-      className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+      className="flex items-start gap-2 rounded-lg border border-warnbd bg-warnbg px-3 py-2 text-sm text-warn-ink"
     >
-      <div className="min-w-0 flex-1">
-        <p>{rejection.message}</p>
-        {rejection.code === 'invalidWord' && rejection.words !== undefined && (
-          <p className="font-semibold">Not in the dictionary: {rejection.words.join(', ')}</p>
-        )}
-      </div>
+      <p className="min-w-0 flex-1">{rejection.message}</p>
       <button
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss"
-        className="flex-none rounded px-1 text-red-700 hover:bg-red-100"
+        className="flex-none rounded px-1 text-warn-ink"
       >
         ✕
       </button>
