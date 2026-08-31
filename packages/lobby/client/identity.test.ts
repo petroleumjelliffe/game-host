@@ -147,3 +147,15 @@ describe('a name nobody actually chose', () => {
     },
   );
 });
+
+describe('listing every room identity', () => {
+  it('lists every stored room identity for this app only', () => {
+    const store = createIdentityStore('wordgame');
+    const other = createIdentityStore('acquire');
+    store.saveIdentity('AAAA', { playerId: 'p1', token: 't1', name: 'Pete' });
+    store.saveIdentity('BBBB', { playerId: 'p2', token: 't2', name: 'Pete' });
+    other.saveIdentity('CCCC', { playerId: 'p1', token: 't3', name: 'Pete' });
+    const rooms = store.listRooms().map((r) => r.roomId).sort();
+    expect(rooms).toEqual(['AAAA', 'BBBB']);
+  });
+});
