@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#e9e5da;font-family:'Outfit',sans-serif;color:#2b2820}
+a{color:#2563eb}a:hover{color:#1d4ed8}
+</style></helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:28px 12px">
+<div style="width:398px;background:#f7f4ec;border-radius:22px;box-shadow:0 12px 40px rgba(31,41,26,.18);display:flex;flex-direction:column;overflow:hidden;min-height:780px">
+
+<div style="display:flex;align-items:center;gap:10px;padding:18px 16px 12px">
+<div style="flex:1;font-weight:700;font-size:21px">Word Game</div>
+<div style="position:relative;width:34px;height:34px;border-radius:50%;background:#ded7c5;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:#5f5744">P
+<sc-if value="{{ badgeOn }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;right:-3px;bottom:-3px;width:16px;height:16px;border-radius:50%;background:#2563eb;border:2px solid #f7f4ec;display:flex;align-items:center;justify-content:center;font-size:8px">🔔</span></sc-if>
+</div>
+</div>
+
+<sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+<div style="margin:0 16px 6px;background:{{bannerBg}};border:1.5px solid {{bannerBd}};border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px">
+<div style="flex:1;font-size:13px;color:{{bannerC}}">{{bannerText}}</div>
+<div style="flex:none;background:{{bannerBd}};color:#fff;font-weight:600;font-size:12.5px;border-radius:8px;padding:6px 12px">{{bannerBtn}}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showWaiting }}" hint-placeholder-val="{{ false }}">
+<div style="padding:10px 18px 4px;font-size:11.5px;font-weight:600;letter-spacing:.07em;color:#8a8271">WAITING FOR PLAYERS</div>
+<div style="margin:0 16px 8px;background:#fff;border:1.5px dashed #c98a1e;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+<div style="display:flex;align-items:center;gap:8px"><span>🦊🐢🐝</span><span style="font-weight:600;font-size:14px;flex:1">Room LARK · you host</span><span style="background:#fdf3e0;color:#8a5f10;font-weight:700;font-size:10.5px;border-radius:6px;padding:2px 8px">3 OF 4</span></div>
+<div style="font-size:12px;color:#7a7361">Kit and Ro joined · link shared 20m ago</div>
+</div>
+</sc-if>
+<div style="padding:10px 18px 4px;font-size:11.5px;font-weight:600;letter-spacing:.07em;color:#8a8271">YOUR MOVE (2)</div>
+<div style="margin:0 16px 8px;background:#f0f5ff;border:1.5px solid #2563eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+<div style="display:flex;align-items:center;gap:8px"><span>🦊🐙</span><span style="font-weight:600;font-size:14px;flex:1">vs Maya</span><span style="background:#2563eb;color:#fff;font-weight:700;font-size:10.5px;border-radius:6px;padding:2px 8px">YOUR TURN</span></div>
+<div style="font-size:12px;color:#7a7361">You 212 · Maya 198 · Maya played SQUID for 62 · 3h ago</div>
+</div>
+<div style="margin:0 16px 8px;background:#f0f5ff;border:1.5px solid #2563eb;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+<div style="display:flex;align-items:center;gap:8px"><span>🦊🐙🦉🐸</span><span style="font-weight:600;font-size:14px;flex:1">vs Sam, Lee, Ana</span><span style="background:#2563eb;color:#fff;font-weight:700;font-size:10.5px;border-radius:6px;padding:2px 8px">YOUR TURN</span></div>
+<div style="font-size:12px;color:#7a7361">2nd of 4 · Ana passed · 1d ago</div>
+</div>
+
+<div style="padding:10px 18px 4px;font-size:11.5px;font-weight:600;letter-spacing:.07em;color:#8a8271">THEIR MOVE</div>
+<div style="margin:0 16px 8px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+<div style="display:flex;align-items:center;gap:8px"><span>🦊🦉</span><span style="font-weight:600;font-size:14px;flex:1;color:#5f5744">vs Sam</span><span style="background:#eee8db;color:#7a7361;font-weight:600;font-size:10.5px;border-radius:6px;padding:2px 8px">SAM'S TURN</span></div>
+<div style="font-size:12px;color:#a39a85">You 88 · Sam 104 · yesterday</div>
+</div>
+
+<div style="padding:10px 18px 4px;font-size:11.5px;font-weight:600;letter-spacing:.07em;color:#8a8271">ON THIS DEVICE</div>
+<div style="margin:0 16px 8px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:8px">
+<span>📱</span><span style="font-weight:600;font-size:14px;flex:1;color:#5f5744">Pass &amp; play — turn 12</span><span style="background:#eee8db;color:#7a7361;font-weight:600;font-size:10.5px;border-radius:6px;padding:2px 8px">LEE'S TURN</span>
+</div>
+
+<div style="flex:1"></div>
+<div style="display:flex;flex-direction:column;gap:8px;padding:12px 16px 20px">
+<div style="background:#2563eb;color:#fff;border-radius:12px;min-height:46px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;box-shadow:0 2px 6px rgba(37,99,235,.35)">New room</div>
+<div style="border:1.5px solid #d8d0bd;background:#fff;color:#5f5744;border-radius:12px;min-height:44px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px">Join with a code</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;430&quot;,&quot;height&quot;:&quot;840&quot;},&quot;notif&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;on&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;off&quot;,&quot;pending&quot;,&quot;on&quot;],&quot;section&quot;:&quot;State&quot;},&quot;waitingRoom&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const notif = this.props.notif ?? 'on';
+    return {
+      showWaiting: this.props.waitingRoom ?? false,
+      badgeOn: notif === 'on',
+      showBanner: notif !== 'on',
+      bannerBg: notif === 'off' ? '#f0f5ff' : '#fdf3e0',
+      bannerBd: notif === 'off' ? '#2563eb' : '#c98a1e',
+      bannerC: notif === 'off' ? '#1d4ed8' : '#8a5f10',
+      bannerText: notif === 'off'
+        ? '🔔 Turns can be days apart — get a nudge when it’s yours'
+        : '✉️ Confirm your email — we sent a link to p•••@gmail.com',
+      bannerBtn: notif === 'off' ? 'Set up' : 'Resend',
+    };
+  }
+}
+</script>
+</body>
+</html>

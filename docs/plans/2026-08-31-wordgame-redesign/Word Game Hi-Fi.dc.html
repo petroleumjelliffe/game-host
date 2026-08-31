@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Bitter:wght@600;700&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#e9e5da;font-family:'Outfit',sans-serif;color:#2b2820}
+a{color:#2563eb}a:hover{color:#1d4ed8}
+</style></helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:28px 12px">
+<div style="width:398px;background:#f7f4ec;border-radius:22px;box-shadow:0 12px 40px rgba(31,41,26,.18);display:flex;flex-direction:column;overflow:hidden">
+
+<div style="display:flex;align-items:center;gap:10px;padding:14px 14px 10px;border-bottom:1px solid #e3ddcf">
+<div style="display:flex;align-items:center;gap:2px;color:#2563eb;font-weight:600;font-size:15px;flex:none">‹ Lobby</div>
+<div style="flex:1;text-align:center;font-weight:600;font-size:15px">vs Maya · <span style="letter-spacing:.08em;color:#8a8271">KTWQ</span></div>
+<div style="position:relative;width:32px;height:32px;border-radius:50%;background:#ded7c5;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:#5f5744;flex:none">P
+<sc-if value="{{ notif }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;right:-3px;bottom:-3px;width:15px;height:15px;border-radius:50%;background:#2563eb;border:2px solid #f7f4ec;display:flex;align-items:center;justify-content:center;font-size:8px">🔔</span></sc-if>
+</div>
+</div>
+
+<div style="display:flex;gap:8px;padding:10px 14px 2px;flex-wrap:wrap">
+<sc-for list="{{players}}" as="p" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:6px;padding:5px 10px 5px 7px;border-radius:999px;background:{{p.bg}};border:1.5px solid {{p.bd}};color:{{p.c}};font-weight:{{p.fw}};font-size:13px"><span>{{p.emoji}}</span><span>{{p.name}}</span><span style="background:{{p.pillBg}};border-radius:999px;padding:1px 7px;font-size:12px;font-weight:700">{{p.score}}</span></div>
+</sc-for>
+</div>
+<div style="padding:2px 16px 0;font-size:12.5px;font-weight:600;color:{{statusColor}}">{{statusText}}</div>
+
+<div style="margin:10px 14px 0;background:#ffffff;border:1px solid #e3ddcf;border-radius:12px;padding:8px 12px;font-size:13px;color:#5f5744">
+🐙 <b style="color:#2b2820">Maya</b> played <b style="color:#a67c14">SQUID</b> for <b style="color:#2b2820">62</b> · 3h ago
+</div>
+
+<div style="position:relative;margin:12px auto 0;width:max-content">
+<dc-import name="HiFiBoard" cell="23" staged="{{stagedMode}}" hint-size="380px,380px"></dc-import>
+<sc-if value="{{ showBadge }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:{{badgeLeft}}px;top:{{badgeTop}}px;z-index:5;background:#2563eb;color:#fff;font-weight:700;font-size:13px;padding:2px 9px;border-radius:999px;box-shadow:0 2px 8px rgba(37,99,235,.45);white-space:nowrap">{{badgeText}}</div>
+</sc-if>
+<sc-if value="{{ invalid }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:24px;right:24px;top:38%;z-index:6;background:#fff;border:2px solid #d05a41;border-radius:14px;padding:12px 14px;text-align:center;box-shadow:0 8px 28px rgba(0,0,0,.28)">
+<div style="font-weight:700;font-size:15px;color:#b34430">✕ DAX isn't in the dictionary</div>
+<div style="font-size:12.5px;color:#8a8271;margin-top:2px">Tiles stay on the board — rearrange or recall</div>
+</div>
+</sc-if>
+<sc-if value="{{ chooser }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:7;background:rgba(24,36,28,.5);border-radius:10px;display:flex;align-items:center;justify-content:center;padding:16px">
+<div style="background:#f7f4ec;border-radius:16px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:10px;width:100%">
+<div style="text-align:center;font-weight:700;font-size:15px">Blank tile — choose its letter</div>
+<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">
+<sc-for list="{{letters}}" as="l" hint-placeholder-count="26">
+<div style="position:relative;height:36px;background:#f7ebc8;border-radius:5px;box-shadow:inset 0 -2px 0 #d9bf8a, 0 1px 2px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;font-family:'Bitter',serif;font-weight:700;font-size:16px;color:#5f4a1d">{{l}}</div>
+</sc-for>
+</div>
+<div style="font-size:11.5px;color:#8a8271;text-align:center">Worth 0 points — shown lowercase on the board</div>
+<div style="border:1.5px solid #d8d0bd;background:#fff;border-radius:10px;padding:8px;text-align:center;font-weight:600;font-size:13px;color:#5f5744">Cancel — back to rack</div>
+</div>
+</div>
+</sc-if>
+</div>
+
+<div style="display:flex;align-items:center;gap:5px;padding:14px 14px 0;justify-content:center">
+<sc-for list="{{rack}}" as="t" hint-placeholder-count="5">
+<div style="position:relative;flex:none;width:44px;height:50px;background:{{t.bg}};border:{{t.bd}};border-radius:6px;box-shadow:{{t.sh}};display:flex;align-items:center;justify-content:center;font-family:'Bitter',serif;font-weight:700;font-size:22px;color:{{t.c}};box-sizing:border-box"><span>{{t.letter}}</span><span style="position:absolute;right:4px;bottom:2px;font-size:10px;font-weight:600">{{t.v}}</span></div>
+</sc-for>
+<div style="width:8px;flex:none"></div>
+<div style="position:relative;flex:none;width:44px;height:50px;background:#1e4d3b;border-radius:6px;box-shadow:inset 0 -3px 0 #143528, 0 1px 3px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center">
+<span style="width:22px;height:22px;border:2px solid rgba(255,255,255,.35);border-radius:4px"></span>
+<span style="position:absolute;right:-6px;top:-6px;background:#2b2820;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:1px 6px;border:2px solid #f7f4ec">43</span>
+</div>
+</div>
+
+<div style="display:flex;gap:8px;padding:14px 14px 18px;align-items:stretch">
+<div style="flex:1;background:{{playBg}};color:{{playC}};border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;min-height:46px;box-shadow:{{playSh}}">{{playText}}</div>
+<div style="width:46px;border:1.5px solid #d8d0bd;background:#fff;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:{{ctlColor}}"><span style="font-size:16px;line-height:1">↺</span><span style="font-size:8.5px;font-weight:600">RECALL</span></div>
+<div style="width:46px;border:1.5px solid #d8d0bd;background:#fff;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:{{ctlColor}}"><span style="font-size:16px;line-height:1">⇄</span><span style="font-size:8.5px;font-weight:600">SWAP</span></div>
+<div style="width:46px;border:1.5px solid #d8d0bd;background:#fff;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:{{ctlColor}}"><span style="font-size:16px;line-height:1">»</span><span style="font-size:8.5px;font-weight:600">PASS</span></div>
+<div style="width:46px;border:1.5px solid #d8d0bd;background:#fff;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#5f5744"><span style="font-size:16px;line-height:1">⤨</span><span style="font-size:8.5px;font-weight:600">MIX</span></div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;430&quot;,&quot;height&quot;:&quot;880&quot;},&quot;yourTurn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;},&quot;tray&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;semi&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;semi&quot;,&quot;empty&quot;],&quot;section&quot;:&quot;State&quot;},&quot;blank&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;set&quot;,&quot;chooser&quot;],&quot;section&quot;:&quot;State&quot;},&quot;invalidWord&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;},&quot;notifEnabled&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const yourTurn = this.props.yourTurn ?? true;
+    const tray = this.props.tray ?? 'semi';
+    const blank = yourTurn ? this.props.blank ?? 'none' : 'none';
+    const invalid = (this.props.invalidWord ?? false) && yourTurn;
+    const notif = this.props.notifEnabled ?? true;
+    const tileSh = 'inset 0 -3px 0 #d9bf8a, 0 1px 3px rgba(0,0,0,.2)';
+    const mk = (letter, v, sel) => ({
+      letter, v, c: letter === '·' ? '#bfa564' : '#5f4a1d',
+      bg: '#f7ebc8', bd: 'none',
+      sh: sel ? `${tileSh}, 0 0 0 2px #2563eb` : tileSh,
+    });
+    const slot = { letter: '', v: '', c: 'transparent', bg: 'transparent', bd: '1.5px dashed #cfc7b4', sh: 'none' };
+    const FULL = [mk('E',1), mk('R',1), mk('T',1), mk('O',1), mk('A',1), mk('B',3), mk('·',0)];
+    const SEMI = [mk('E',1), mk('R',1), mk('T',1), mk('O',1), mk('·',0)];
+
+    let stagedMode = 'none', rack = FULL, badge = null, playText = 'Play', playOn = false;
+    if (!yourTurn) {
+      playText = 'Maya is playing…';
+    } else if (invalid) {
+      stagedMode = 'ax'; rack = SEMI; playText = 'Play'; playOn = true;
+    } else if (blank === 'chooser') {
+      stagedMode = 'ablank'; rack = [mk('E',1), mk('R',1), mk('T',1), mk('O',1)];
+    } else if (blank === 'set') {
+      stagedMode = 'ablank'; rack = [mk('E',1), mk('R',1), mk('T',1), mk('O',1)];
+      badge = { left: 184, top: 248, text: '+4' }; playText = 'Play · +4'; playOn = true;
+    } else if (tray === 'full') {
+      // turn just started — nothing staged yet
+    } else if (tray === 'empty') {
+      stagedMode = 'bingo'; rack = [slot, slot, slot, slot, slot, slot, slot];
+      badge = { left: 96, top: 233, text: '+86 · BINGO' }; playText = 'Play · +86'; playOn = true;
+    } else {
+      stagedMode = 'ab'; rack = SEMI;
+      badge = { left: 184, top: 248, text: '+7' }; playText = 'Play · +7'; playOn = true;
+    }
+
+    const roster = [
+      { emoji: '🦊', name: 'You', score: 212 },
+      { emoji: '🐙', name: 'Maya', score: 198 },
+      { emoji: '🦉', name: 'Sam', score: 176 },
+      { emoji: '🐸', name: 'Lee', score: 154 },
+    ];
+    const players = roster.map((p, i) => {
+      const current = yourTurn ? i === 0 : i === 1;
+      return {
+        ...p,
+        bg: current ? '#2563eb' : '#ffffff',
+        bd: current ? '#2563eb' : '#e0d9c8',
+        c: current ? '#ffffff' : '#5f5744',
+        fw: current ? 700 : 500,
+        pillBg: current ? 'rgba(255,255,255,.22)' : '#f1ede2',
+      };
+    });
+
+    return {
+      notif, players, rack, invalid, stagedMode,
+      chooser: blank === 'chooser' && !invalid,
+      letters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+      showBadge: badge !== null,
+      badgeLeft: badge?.left ?? 0, badgeTop: badge?.top ?? 0, badgeText: badge?.text ?? '',
+      playText,
+      playBg: playOn ? '#2563eb' : '#e3ddcf',
+      playC: playOn ? '#ffffff' : '#8a8271',
+      playSh: playOn ? '0 2px 6px rgba(37,99,235,.35)' : 'none',
+      statusText: !yourTurn ? "Maya's turn — you'll get a nudge"
+        : tray === 'empty' ? 'Your turn — all seven tiles played!' : 'Your turn',
+      statusColor: yourTurn ? '#2563eb' : '#8a8271',
+      ctlColor: yourTurn ? '#5f5744' : '#b8b0a0',
+    };
+  }
+}
+</script>
+</body>
+</html>

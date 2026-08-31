@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Bitter:wght@600;700&display=swap" rel="stylesheet"></helmet>
+<div style="background:#1e4d3b;padding:5px;border-radius:10px;width:max-content;box-shadow:inset 0 1px 3px rgba(0,0,0,.35)">
+<div style="display:grid;grid-template-columns:repeat(15,{{cell}}px);gap:2px">
+<sc-for list="{{cells}}" as="c" hint-placeholder-count="30">
+<div style="position:relative;width:{{cell}}px;height:{{cell}}px;background:{{c.bg}};color:{{c.c}};border-radius:{{c.rad}}px;display:flex;align-items:center;justify-content:center;font-family:{{c.ff}};font-weight:{{c.fw}};font-size:{{c.fs}}px;line-height:1;box-shadow:{{c.sh}};z-index:{{c.z}}"><span>{{c.t}}</span><span style="position:absolute;right:2px;bottom:1px;font-size:{{vfs}}px;font-weight:600;line-height:1">{{c.v}}</span></div>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;400&quot;,&quot;height&quot;:&quot;400&quot;},&quot;cell&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:23,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:12,&quot;max&quot;:40},&quot;staged&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;ab&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;ab&quot;,&quot;ax&quot;,&quot;ablank&quot;,&quot;bingo&quot;,&quot;none&quot;]},&quot;last&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const cell = this.props.cell ?? 23;
+    const stagedMode = this.props.staged ?? 'ab';
+    const showLast = this.props.last ?? true;
+    const parse = (s) => (parseInt(s.slice(1), 10) - 1) * 15 + (s.charCodeAt(0) - 65);
+    const P = {};
+    const paint = (list, l) => list.forEach((s) => { P[parse(s)] = l; });
+    paint(['A1','A8','A15','H1','H15','O1','O8','O15'], '3W');
+    paint(['B2','C3','D4','E5','K11','L12','M13','N14','B14','C13','D12','E11','K5','L4','M3','N2','H8'], '2W');
+    paint(['B6','B10','F2','F6','F10','F14','J2','J6','J10','J14','N6','N10'], '3L');
+    paint(['A4','A12','C7','C9','D1','D8','D15','G3','G7','G9','G13','H4','H12','I3','I7','I9','I13','L1','L8','L15','M7','M9','O4','O12'], '2L');
+    const VAL = { W:4, O:1, R:1, D:2, S:1, Q:10, U:1, I:1, A:1, B:3, X:8, J:8, K:5, E:1 };
+    const tiles = { 110:'W', 111:'O', 112:'R', 113:'D', 114:'S', 129:'Q', 144:'U', 159:'I', 174:'D' };
+    const lastWord = new Set([114, 129, 144, 159, 174]);
+    const STAGED = {
+      ab: { 128:'A', 143:'B' },
+      ax: { 128:'A', 143:'X' },
+      ablank: { 128:'A', 143:'b' },
+      bingo: { 121:'J', 122:'U', 123:'K', 124:'E', 125:'B', 126:'O', 127:'X' },
+    };
+    const staged = STAGED[stagedMode] ?? {};
+    const PREM = {
+      '3W': ['#d05a41', '#ffffff'], '2W': ['#f2c9bd', '#a04b33'],
+      '3L': ['#3f88ba', '#ffffff'], '2L': ['#b9d8ea', '#33698f'],
+    };
+    const lfs = Math.round(cell * 0.38);
+    const tfs = Math.round(cell * 0.55);
+    const vfs = Math.max(7, Math.round(cell * 0.3));
+    const tileSh = 'inset 0 -2px 0 #d9bf8a, 0 1px 1px rgba(0,0,0,.18)';
+    const cells = [];
+    for (let i = 0; i < 225; i += 1) {
+      const t = tiles[i];
+      const s = staged[i];
+      if (t !== undefined || s !== undefined) {
+        const isLast = showLast && t !== undefined && lastWord.has(i);
+        const face = t ?? s;
+        const isBlank = face >= 'a' && face <= 'z';
+        cells.push({
+          bg: '#f7ebc8', c: isBlank ? '#a08a4a' : '#5f4a1d', t: face, v: isBlank ? 0 : VAL[face] ?? 0,
+          fw: 700, fs: tfs, ff: "'Bitter', serif", rad: 4, z: s !== undefined ? 2 : 1,
+          sh: s !== undefined
+            ? 'inset 0 -2px 0 #d9bf8a, 0 0 0 2px #2563eb, 0 2px 6px rgba(37,99,235,.4)'
+            : isLast ? `${tileSh}, 0 0 0 2px #e0a924` : tileSh,
+        });
+      } else if (P[i] !== undefined) {
+        const [bg, c] = PREM[P[i]];
+        cells.push({ bg, c, t: P[i], v: '', fw: 600, fs: lfs, ff: "'Outfit', sans-serif", rad: 2, sh: 'none', z: 0 });
+      } else {
+        cells.push({ bg: '#ecf2e9', c: '#9db2a4', t: '', v: '', fw: 400, fs: lfs, ff: "'Outfit', sans-serif", rad: 2, sh: 'none', z: 0 });
+      }
+    }
+    return { cell, cells, vfs };
+  }
+}
+</script>
+</body>
+</html>
