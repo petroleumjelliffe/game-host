@@ -12,6 +12,7 @@
 // validates it wholesale (dictionary included) and either commits or
 // rejects, so `state` messages carry a per-player *view*, never raw state.
 
+import type { Lifecycle } from '@game-host/lobby/protocol/protocol.js';
 import type { Letter, Tile } from '../engine/constants.js';
 import { isLetter, isTile } from '../engine/constants.js';
 import type { Placement } from '../engine/intents.js';
@@ -126,3 +127,34 @@ export interface MoveRejectedMessage {
 }
 
 export type { Letter, MoveRecord, Placement, Square, Tile };
+
+/**
+ * What the entry screen's game list is drawn from — one row per room a
+ * player holds a seat in, built server-side by `server/summaries.ts` and
+ * declared here because it is the game half of the wire, same as everything
+ * else in this file.
+ *
+ * `known: false` covers both "no such room" and "your token doesn't match
+ * this seat" with the same shape, so a client asking about a room it isn't
+ * in learns nothing more than a client asking about one that never existed.
+ */
+export type RoomSummary =
+  | { roomId: string; known: false }
+  | {
+      roomId: string;
+      known: true;
+      lifecycle: Lifecycle;
+      capacity: number;
+      players: { name: string; score: number | null; isHost: boolean; isYou: boolean }[];
+      yourTurn: boolean;
+      currentPlayerName: string | null;
+      /** Last committed move, when playing/over and the log has one. */
+      lastMove: {
+        name: string;
+        kind: MoveRecord['kind'];
+        word: string | null;
+        score: number;
+        at: number | null;
+      } | null;
+      winnerNames: string[] | null;
+    };
