@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { io as connect, type Socket } from 'socket.io-client';
 import { closeSockets } from '@game-host/host/close.js';
+import type { RosterMessage } from '@game-host/lobby/protocol/protocol.js';
 import { BASE_PATH } from '../basePath.js';
 import { createDictionary } from '../engine/dictionary.js';
 import { PROTOCOL_VERSION, type StateMessage } from '../session/protocol.js';
@@ -124,6 +125,78 @@ test('a mid-game room survives a restart, tokens and all', async () => {
   ).toBe(true);
 });
 
+test('a lobby-stage room survives a restart: seats, names, host — nobody connected', async () => {
+  const first = await boot();
+  const ada = await client(first.url);
+  const joined = next<{ roomId: string; playerId: string; token: string }>(ada, 'joined');
+  ada.emit('createRoom', { name: 'Ada', protocolVersion: PROTOCOL_VERSION });
+  const adaSeat = await joined;
+
+  const ben = await client(first.url);
+  const benJoined = next<{ roomId: string; playerId: string; token: string }>(ben, 'joined');
+  ben.emit('joinRoom', { roomId: adaSeat.roomId, protocolVersion: PROTOCOL_VERSION });
+  const benSeat = await benJoined;
+
+  // A rename and a vacated seat are both roster changes; both must be what
+  // the disk remembers, not the shapes that preceded them.
+  const renamed = next<RosterMessage>(ada, 'roster');
+  ben.emit('renamePlayer', { name: 'Ben' });
+  await renamed;
+
+  const cat = await client(first.url);
+  const catJoined = next<{ roomId: string; playerId: string; token: string }>(cat, 'joined');
+  cat.emit('joinRoom', { roomId: adaSeat.roomId, name: 'Cat', protocolVersion: PROTOCOL_VERSION });
+  await catJoined;
+  const catLeft = next<RosterMessage>(ada, 'roster');
+  cat.emit('leaveSeat');
+  await catLeft;
+
+  // No beginGame. Stop the process, keep the disk.
+  const roomId = adaSeat.roomId;
+  const stopping = handles[0];
+  handles = [];
+  await stopping?.game.close();
+  await new Promise<void>((resolve) => stopping?.httpServer.close(() => resolve()));
+  ada.disconnect();
+  ben.disconnect();
+  cat.disconnect();
+
+  const second = await boot();
+  expect(await second.handle.rooms.restore()).toBe(1);
+
+  const back = await client(second.url);
+  const roster = next<RosterMessage>(back, 'roster');
+  back.emit('joinRoom', {
+    roomId,
+    playerId: adaSeat.playerId,
+    token: adaSeat.token,
+    protocolVersion: PROTOCOL_VERSION,
+  });
+  const seen = await roster;
+  expect(seen.lifecycle).toBe('lobby');
+  expect(seen.players).toEqual([
+    { id: adaSeat.playerId, name: 'Ada', isHost: true, connected: true },
+    { id: benSeat.playerId, name: 'Ben', isHost: false, connected: false },
+  ]);
+
+  // The restored room is still a room: Ben's token still opens his seat, and
+  // the host may still begin — with Ben away, which is this game's whole point.
+  const benBack = await client(second.url);
+  const benRoster = next<RosterMessage>(benBack, 'roster');
+  benBack.emit('joinRoom', {
+    roomId,
+    playerId: benSeat.playerId,
+    token: benSeat.token,
+    protocolVersion: PROTOCOL_VERSION,
+  });
+  await benRoster;
+  benBack.disconnect();
+
+  const begun = next<StateMessage>(back, 'state');
+  back.emit('beginGame');
+  expect((await begun).view.moveCount).toBe(0);
+});
+
 test('eviction: finished rooms age out at 30 days, live ones at 60', async () => {
   const store = createFileStore(dir);
   const now = Date.now();
@@ -142,18 +215,32 @@ test('eviction: finished rooms age out at 30 days, live ones at 60', async () =>
       state,
     };
   };
+  // A lobby record is the same envelope with the game not yet begun — no
+  // `state`. It ages on the live clock: a lobby is a live thing being waited
+  // on, not a scoreboard.
+  const lobbyRecord = (roomId: string, savedAt: number): SavedRoom => ({
+    roomId,
+    version: 1,
+    protocolVersion: PROTOCOL_VERSION,
+    savedAt,
+    players: [{ id: 'p1', name: 'Ada', token: 't1', isHost: true, connected: false }],
+  });
   await store.save(record('LIVEOK', now - ACTIVE_MAX_AGE_MS + 60_000, false));
   await store.save(record('LIVOLD', now - ACTIVE_MAX_AGE_MS - 60_000, false));
   await store.save(record('OVEROK', now - FINISHED_MAX_AGE_MS + 60_000, true));
   await store.save(record('OVROLD', now - FINISHED_MAX_AGE_MS - 60_000, true));
+  await store.save(lobbyRecord('LOBBOK', now - ACTIVE_MAX_AGE_MS + 60_000));
+  await store.save(lobbyRecord('LOBOLD', now - ACTIVE_MAX_AGE_MS - 60_000));
   await store.settled();
 
   const rooms = createRoomRegistry(store, DICT);
-  expect(await rooms.restore(now)).toBe(2);
+  expect(await rooms.restore(now)).toBe(3);
   expect(rooms.get('LIVEOK')).toBeDefined();
   expect(rooms.get('OVEROK')).toBeDefined();
+  expect(rooms.get('LOBBOK')?.lifecycle()).toBe('lobby');
   expect(rooms.get('LIVOLD')).toBeUndefined();
   expect(rooms.get('OVROLD')).toBeUndefined();
+  expect(rooms.get('LOBOLD')).toBeUndefined();
   // A 40-day-old live game — Acquire's policy would have evicted it at 7
   // days — is exactly the multi-day case this game exists for.
   expect(ACTIVE_MAX_AGE_MS).toBeGreaterThan(39 * 24 * 60 * 60 * 1000);

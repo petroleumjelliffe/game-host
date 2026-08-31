@@ -19,7 +19,12 @@ import { isGameState, type GameState } from '../engine/gameTypes.js';
 export const SAVE_VERSION = 1;
 
 export interface SavedRoom extends SavedRoomEnvelope {
-  state: GameState;
+  /**
+   * Absent while the room is still a lobby: seats are worth a file the moment
+   * a shared link has been handed out (a deploy must not eat the room), but
+   * there is no game yet to record. Present from `begin` onward.
+   */
+  state?: GameState;
 }
 
 export type RoomStore = GenericRoomStore<SavedRoom>;
@@ -32,7 +37,8 @@ export type RoomStore = GenericRoomStore<SavedRoom>;
  */
 export function isSavedRoom(value: unknown): value is SavedRoom {
   if (!hasEnvelope(value, SAVE_VERSION)) return false;
-  return isGameState((value as { state?: unknown }).state);
+  const state = (value as { state?: unknown }).state;
+  return state === undefined || isGameState(state);
 }
 
 export function createFileStore(dir: string): RoomStore {

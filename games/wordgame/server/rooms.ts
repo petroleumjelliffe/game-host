@@ -49,8 +49,6 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
 
     async persist(room: GameRoom): Promise<void> {
       const state = room.state();
-      // Drafts don't exist and lobbies aren't worth a file: no game, no record.
-      if (state === null) return;
       const record: SavedRoom = {
         roomId: room.id,
         version: SAVE_VERSION,
@@ -58,7 +56,11 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
         savedAt: Date.now(),
         // Copied: `connected` mutates under a live socket.
         players: room.players.map((p) => ({ ...p })),
-        state,
+        // A lobby has seats but no game yet; the record says so by omission.
+        // Seats are worth a file the moment a shared link is out — a deploy
+        // between "friends joined" and "host pressed start" must not eat the
+        // room (2026-08-31, found in the first multi-day playtest).
+        ...(state === null ? {} : { state }),
       };
       await store.save(record);
     },
@@ -79,7 +81,9 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
       let count = 0;
       for (const record of records) {
         try {
-          const maxAge = record.state.stage === 'over' ? FINISHED_MAX_AGE_MS : ACTIVE_MAX_AGE_MS;
+          // A lobby ages on the live clock: it is a live thing being waited
+          // on, not a scoreboard.
+          const maxAge = record.state?.stage === 'over' ? FINISHED_MAX_AGE_MS : ACTIVE_MAX_AGE_MS;
           if (now - record.savedAt > maxAge) {
             await store.remove(record.roomId);
             continue;
@@ -92,7 +96,7 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
               record.roomId,
               record.players.map((p) => ({ ...p, connected: false })),
               dictionary,
-              record.state,
+              record.state ?? null,
             ),
           );
           count += 1;

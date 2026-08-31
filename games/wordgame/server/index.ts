@@ -157,6 +157,10 @@ function build(
       // no-leaks rule as structurally as the broadcast path.
       if (room.lifecycle() !== 'lobby') sendState(room, playerId, 'resume');
     },
+    // Every durable seating change hits the disk, so a deploy between
+    // "friends joined by the shared link" and "host pressed start" cannot
+    // eat the room — the lobby's version of one-move-apart.
+    onRosterChanged: (room) => save(room),
   });
 
   function save(room: GameRoom): void {

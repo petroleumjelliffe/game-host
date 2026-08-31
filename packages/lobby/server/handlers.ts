@@ -31,6 +31,18 @@ export interface LobbyHooks<R extends LobbyRoomLike> {
   onBegin(room: R): void;
   /** A socket was seated (first join or rejoin), `joined` + roster already sent. */
   onSeated(room: R, playerId: string): void;
+  /**
+   * The roster durably changed: a room was created, a seat claimed, a player
+   * renamed, or a seat given up (host handover included). For a game that
+   * persists rooms, this is the save trigger that keeps a restart from being
+   * more than one seating event behind — the lobby's version of the
+   * one-move-apart rule. Deliberately NOT fired on disconnect: presence is
+   * runtime state, and restore marks every seat away regardless. A seat
+   * *claim* does fire it even when the roster text is unchanged, because the
+   * honor-system reclaim rotates the seat's token, and a token only the
+   * process knew is a seat lost at the next restart.
+   */
+  onRosterChanged?(room: R): void;
 }
 
 export interface LobbyWiring<R extends LobbyRoomLike> {
@@ -126,6 +138,7 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
       const joined: JoinedMessage = { roomId: room.id, playerId: player.id, token: player.token };
       socket.emit(LOBBY_SERVER_EVENTS.joined, joined);
       io.to(room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(room));
+      hooks.onRosterChanged?.(room);
     });
 
     socket.on(LOBBY_CLIENT_EVENTS.joinRoom, (msg: JoinRoomMessage) => {
@@ -201,6 +214,7 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
       socket.emit(LOBBY_SERVER_EVENTS.joined, joined);
       io.to(seat.room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(seat.room));
 
+      hooks.onRosterChanged?.(seat.room);
       hooks.onSeated(seat.room, seat.player.id);
     });
 
@@ -238,6 +252,7 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
       if (!player) return;
       player.name = name;
       io.to(room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(room));
+      hooks.onRosterChanged?.(room);
     });
 
     socket.on(LOBBY_CLIENT_EVENTS.leaveSeat, () => {
@@ -264,6 +279,7 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
       bindings.delete(socket.id);
       void socket.leave(room.id);
       io.to(room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(room));
+      hooks.onRosterChanged?.(room);
     });
 
     socket.on(LOBBY_CLIENT_EVENTS.beginGame, () => {
