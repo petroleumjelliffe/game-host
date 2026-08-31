@@ -10,7 +10,7 @@
   "scripts": {
     "start:host": "tsx apps/host/main.ts",
     "start:host:compiled": "node --enable-source-maps apps/host/dist/main.mjs",
-    "dev:host": "tsx watch apps/host/main.ts",
+    "dev:host": "tsx --env-file-if-exists=.env watch apps/host/main.ts",
     "test": "node scripts/test-all.mjs",
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces --if-present",

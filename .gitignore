@@ -6,7 +6,10 @@ dist
 # build output whose whole purpose is to be regenerated from current sources.
 .compiled-test
 
-# local env for by-hand dev runs; nothing loads it automatically — source it
+# Local env for by-hand dev runs: `dev:host` loads .env via node's
+# --env-file-if-exists (absent file is fine; real shell env wins over the
+# file). Never committed — SMTP credentials may live here.
+.env
 .env.local
 
 # The word game's standalone save default is repo-relative (server/games/),
