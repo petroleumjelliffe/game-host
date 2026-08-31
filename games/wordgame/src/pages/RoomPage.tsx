@@ -47,6 +47,7 @@ export function RoomPage({ connect = getConnection }: RoomPageProps) {
         <GameScreen
           view={room.view}
           viewerId={room.playerId}
+          roomId={roomId ?? ''}
           connected={room.status === 'open'}
           {...(presence === undefined ? {} : { presence })}
           sendMove={room.sendMove}
