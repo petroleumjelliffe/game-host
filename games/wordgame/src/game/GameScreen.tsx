@@ -221,6 +221,7 @@ export function GameScreen({
             tiles={localRack}
             selected={exchangeOn ? exchangeSel : selected === null ? [] : [selected]}
             onTileTap={rackTap}
+            bagCount={view.bagCount}
           />
 
           {exchangeOn ? (

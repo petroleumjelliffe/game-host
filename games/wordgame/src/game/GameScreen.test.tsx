@@ -146,6 +146,11 @@ describe('GameScreen status and scores', () => {
     expect(screen.getByTestId('scoreless-counter')).toHaveTextContent('Scoreless turns: 3/6');
   });
 
+  it('shows the bag tile with the bag count', () => {
+    renderScreen(makeView({ bagCount: 12 }));
+    expect(screen.getByTestId('bag-tile')).toHaveTextContent('12');
+  });
+
   it('shows the opponent as a tile count, never letters', () => {
     const view = makeView({
       players: [
