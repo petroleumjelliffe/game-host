@@ -43,14 +43,31 @@ export function RoomLobby({
 }: RoomLobbyProps) {
   const isHost = view.you?.isHost === true;
 
+  // Capacity is `view.seats.length`, never a hardcoded number — the seat
+  // count is whatever this game's kit configured, and a design's "of 4" is
+  // illustrative, not a limit this component may assume.
+  const filled = view.seats.filter((seat) => seat.id !== null).length;
+  const empty = view.seats.length - filled;
+  const seatNote = empty === 0
+    ? (isHost ? `All ${view.seats.length} seats filled — you can start` : `All ${view.seats.length} seats filled`)
+    : `${filled} of ${view.seats.length} seats — waiting for ${empty} more`;
+
+  // The roster carries no host name of its own — it is just the seat whose
+  // `isHost` flag is set. 'the host' is the fallback for the moment before a
+  // roster has arrived at all.
+  const hostName = view.seats.find((seat) => seat.isHost)?.name ?? 'the host';
+
   return (
     <LobbyCard
-      title="New Room"
-      subtitle="Share this code with other players"
+      title={isHost ? 'New room' : `Room ${view.code}`}
+      subtitle={isHost
+        ? 'Share this code with other players'
+        : 'You’re in — the game starts when the host says go'}
       code={view.code}
       underCode={shareUrl !== undefined && (
         <ShareRoomButton url={shareUrl} {...(shareText === undefined ? {} : { text: shareText })} />
       )}
+      seatNote={<p className="text-center text-[12px] text-ink-faint">{seatNote}</p>}
       note={note}
       onLeave={onLeaveSeat}
       primary={isHost ? (
@@ -58,12 +75,18 @@ export function RoomLobby({
           type="button"
           onClick={onStart}
           disabled={!view.canBegin}
-          className="m-0 w-full rounded-lg bg-[var(--lobby-accent,#2563eb)] px-4 py-3 font-semibold text-[var(--lobby-on-accent,#ffffff)] hover:bg-[var(--lobby-accent-strong,#1d4ed8)] disabled:cursor-not-allowed disabled:bg-gray-300"
+          className="m-0 w-full rounded-xl bg-[var(--lobby-accent,#2563eb)] px-4 py-3 font-bold text-[var(--lobby-on-accent,#ffffff)] hover:bg-[var(--lobby-accent-strong,#1d4ed8)] disabled:cursor-not-allowed disabled:bg-chipbg disabled:text-ink-ghost"
         >
-          {view.beginBlocked === 'notEnoughPlayers' ? 'Waiting for another player' : 'Start game'}
+          {/* Stays "Start game" even while disabled — the seat note above
+              already explains why, so the button never had to double as the
+              explanation. */}
+          Start game
         </button>
       ) : (
-        <p className="text-center text-sm text-gray-600">Waiting for the host to start.</p>
+        <div className="rounded-xl border-[1.5px] border-warnbd bg-warnbg p-3 text-center">
+          <p className="text-[15px] font-bold text-warn-ink">Waiting for {hostName} to start</p>
+          <p className="text-[12.5px] text-[#a08a55]">You’ll get a nudge when the first turn is yours</p>
+        </div>
       )}
     >
       {view.seats.map((seat) => (
@@ -73,6 +96,7 @@ export function RoomLobby({
           connected={seat.connected}
           isHost={seat.isHost}
           empty={seat.id === null}
+          reconnecting={seat.id !== null && seat.name !== null && !seat.connected}
         >
           {seat.canRename ? (
             // Your row and only yours: the field. Committed on blur or Enter
@@ -92,7 +116,7 @@ export function RoomLobby({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
               }}
-              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 font-semibold"
+              className="min-w-0 flex-1 rounded-lg border-[1.5px] border-line-strong bg-white px-2 py-1 font-semibold"
             />
           ) : (
             // An empty seat says so rather than being absent — the room's
@@ -100,7 +124,7 @@ export function RoomLobby({
             <span
               className={
                 seat.id === null
-                  ? 'min-w-0 flex-1 truncate italic text-gray-400'
+                  ? 'min-w-0 flex-1 truncate italic'
                   : 'min-w-0 flex-1 truncate font-semibold'
               }
             >

@@ -36,6 +36,12 @@ export interface SeatRowProps {
    * room has is information, and the roster has no way to mention one.
    */
   empty?: boolean;
+  /**
+   * A seat that IS occupied but whose socket has dropped — a distinct fact
+   * from `empty`, drawn as a trailing "reconnecting…" note rather than
+   * folded into the presence dot's color alone.
+   */
+  reconnecting?: boolean;
   /** The name: a plain span in the room, an input on your own row. */
   children: ReactNode;
 }
@@ -43,12 +49,16 @@ export interface SeatRowProps {
 /** One row's chrome. The name itself is the caller's, because the room's field
  *  is uncontrolled (committed on blur) and the join card's is controlled (read
  *  at submit) — one shared input would have to be both. */
-export function SeatRow({ emoji, connected, isHost, empty = false, children }: SeatRowProps) {
+export function SeatRow({
+  emoji, connected, isHost, empty = false, reconnecting = false, children,
+}: SeatRowProps) {
   return (
     <li
       data-empty={empty ? '' : undefined}
-      className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-        empty ? 'border-dashed border-gray-200 opacity-60' : 'border-gray-200'
+      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${
+        empty
+          ? 'border-[1.5px] border-dashed border-line-strong text-ink-ghost italic'
+          : 'border-line bg-white'
       }`}
     >
       <span aria-hidden className="flex-none text-base leading-none">{emoji ?? '·'}</span>
@@ -56,12 +66,15 @@ export function SeatRow({ emoji, connected, isHost, empty = false, children }: S
         <span
           data-testid="presence-dot"
           aria-hidden
-          className={`h-2 w-2 flex-none rounded-full ${connected ? 'bg-green-500' : 'bg-gray-300'}`}
+          className={`h-2 w-2 flex-none rounded-full ${connected ? 'bg-green-500' : 'bg-line-strong'}`}
         />
       )}
       {children}
+      {reconnecting && (
+        <span className="flex-none text-[11px] text-ink-ghost">reconnecting…</span>
+      )}
       {isHost && (
-        <span className="flex-none text-xs uppercase tracking-wide text-gray-500">host</span>
+        <span className="flex-none text-[10px] font-bold uppercase tracking-wide text-ink-faint">host</span>
       )}
     </li>
   );
@@ -70,7 +83,7 @@ export function SeatRow({ emoji, connected, isHost, empty = false, children }: S
 /** The letter-spaced block, identical in both states — which is the whole
  *  point of the design note: you type the code into the box the host reads it
  *  from. Only its editability changes. */
-const CODE_CLASS = 'w-full rounded-lg bg-gray-100 py-4 text-center text-3xl font-bold tracking-[0.3em]';
+const CODE_CLASS = 'w-full rounded-2xl bg-[#ece7da] py-4 text-center text-[30px] font-bold tracking-[0.32em]';
 
 export interface LobbyCardProps {
   title: string;
@@ -82,6 +95,13 @@ export interface LobbyCardProps {
   children: ReactNode;
   /** Rendered directly under the code block — the New Room card's Share button. */
   underCode?: ReactNode;
+  /**
+   * A line rendered directly under the seat list — the room's "N of 6 seats"
+   * note, or the Join card's "already sat here before" helper. Distinct from
+   * `note`: this is informational, never an error, and each caller brings its
+   * own text styling.
+   */
+  seatNote?: ReactNode;
   note?: string | null;
   /** The primary action, or whatever stands in its place. */
   primary: ReactNode;
@@ -91,12 +111,12 @@ export interface LobbyCardProps {
 }
 
 export function LobbyCard({
-  title, subtitle, code, onCodeChange, children, underCode, note, primary, onLeave, onSubmit,
+  title, subtitle, code, onCodeChange, children, underCode, seatNote, note, primary, onLeave, onSubmit,
 }: LobbyCardProps) {
   const inner = (
     <>
-      <h1 className="mb-1 text-center text-2xl font-bold">{title}</h1>
-      <p className="mb-6 text-center text-sm text-gray-600">{subtitle}</p>
+      <h1 className="mb-1 text-center text-[21px] font-bold">{title}</h1>
+      <p className="mb-5 -mt-1 text-center text-[13.5px] text-ink-faint">{subtitle}</p>
 
       {onCodeChange === undefined ? (
         <div data-testid="room-code" className={`mb-6 ${CODE_CLASS}`}>{code}</div>
@@ -109,13 +129,15 @@ export function LobbyCard({
           // alphabet, and a lowercase paste that silently fails to match would
           // look like the room is gone rather than like a typo.
           onChange={(e) => onCodeChange(e.target.value.toUpperCase())}
-          className={`mb-6 ${CODE_CLASS} border border-gray-300 uppercase`}
+          className={`mb-6 ${CODE_CLASS} border-2 border-dashed border-line-strong uppercase`}
         />
       )}
 
       {underCode && <div className="-mt-3 mb-6">{underCode}</div>}
 
-      <ul className="mb-6 flex flex-col gap-2">{children}</ul>
+      <ul className="mb-3 flex flex-col gap-2">{children}</ul>
+
+      {seatNote && <div className="mb-4">{seatNote}</div>}
 
       {note && (
         <div role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -128,17 +150,17 @@ export function LobbyCard({
       <button
         type="button"
         onClick={onLeave}
-        className="m-0 mt-3 w-full rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+        className="m-0 mt-3 w-full rounded-xl border-[1.5px] border-line-strong bg-white px-4 py-2.5 font-semibold text-ink-soft hover:bg-page/40"
       >
         Leave
       </button>
     </>
   );
 
-  const shell = 'mx-auto max-w-md rounded-xl bg-white p-8 shadow-xl';
+  const shell = 'mx-auto w-full max-w-[398px] rounded-[22px] bg-paper p-4 shadow-xl';
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="flex min-h-screen items-start justify-center bg-page px-3 py-7">
       {onSubmit === undefined ? (
         <div className={shell}>{inner}</div>
       ) : (

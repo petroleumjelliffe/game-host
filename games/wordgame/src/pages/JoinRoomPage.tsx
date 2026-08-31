@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { JoinRoomCard } from '../game/lobby/JoinRoomCard';
 import { getConnection, type Connection } from '../net/connection';
 import { loadIdentity, rememberName, rememberedName, saveIdentity } from '../net/identity';
@@ -13,7 +13,12 @@ export function JoinRoomPage({ connect = getConnection }: JoinRoomPageProps) {
   const connection = connect();
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
-  const [code, setCode] = useState('');
+  // A room link (`?code=`) prefills the box rather than auto-joining — the
+  // page still asks for a name first. Uppercased immediately: the code is
+  // generated from an uppercase alphabet, so a lowercase link should look
+  // exactly like typing it in.
+  const [params] = useSearchParams();
+  const [code, setCode] = useState(() => (params.get('code') ?? '').toUpperCase());
   // Prefilled with whatever you last called yourself, and empty if you never
   // have. Empty is a legal join: the server names the seat it gives you.
   const [name, setName] = useState(() => rememberedName() ?? '');
