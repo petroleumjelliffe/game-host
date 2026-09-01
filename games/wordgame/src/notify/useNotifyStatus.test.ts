@@ -24,19 +24,23 @@ describe('useNotifyStatus', () => {
     fetchSettings.mockResolvedValue(null);
     const { result } = renderHook(() => useNotifyStatus());
     await waitFor(() => { expect(result.current.status).toBe('unavailable'); });
+    expect(result.current.emailAddress).toBeNull();
   });
 
-  it('off / pending / on from email status', async () => {
+  it('off / pending / on from email status, carrying the address along', async () => {
     fetchSettings.mockResolvedValue(settings(null));
     const { result, rerender } = renderHook(() => useNotifyStatus());
     await waitFor(() => { expect(result.current.status).toBe('off'); });
+    expect(result.current.emailAddress).toBeNull();
 
     fetchSettings.mockResolvedValue(settings({ address: 'a@b.c', status: 'pending' }));
     result.current.refresh(); rerender();
     await waitFor(() => { expect(result.current.status).toBe('pending'); });
+    expect(result.current.emailAddress).toBe('a@b.c');
 
     fetchSettings.mockResolvedValue(settings({ address: 'a@b.c', status: 'confirmed' }));
     result.current.refresh(); rerender();
     await waitFor(() => { expect(result.current.status).toBe('on'); });
+    expect(result.current.emailAddress).toBe('a@b.c');
   });
 });
