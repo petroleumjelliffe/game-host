@@ -31,6 +31,20 @@ describe('BoardViewport', () => {
     expect(screen.getByTestId('board-transform').style.transform).toContain('scale(1)');
   });
 
+  it('forgets a pointer that lifts outside the viewport — no phantom pinch', () => {
+    render(<BoardViewport><div>board</div></BoardViewport>);
+    const vp = screen.getByTestId('board-viewport');
+    // Two presses on the board that each release elsewhere (a drag to the rack).
+    fireEvent.pointerDown(vp, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 100, clientY: 400 });
+    fireEvent.pointerDown(vp, { pointerId: 2, clientX: 120, clientY: 100 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 120, clientY: 400 });
+    // A lone finger moving must not read as the second half of a pinch.
+    fireEvent.pointerDown(vp, { pointerId: 3, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(vp, { pointerId: 3, clientX: 250, clientY: 100 });
+    expect(screen.getByTestId('board-transform').style.transform).toContain('scale(1)');
+  });
+
   it('one pointer alone never pans or zooms', () => {
     render(<BoardViewport><div>board</div></BoardViewport>);
     const vp = screen.getByTestId('board-viewport');

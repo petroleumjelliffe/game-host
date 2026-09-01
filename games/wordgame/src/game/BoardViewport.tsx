@@ -3,7 +3,7 @@
 // belongs to tap and drag. Double-tap resets. touch-action is none: the
 // app-shell layout doesn't scroll, so the browser gets no gestures at all.
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { IDENTITY, pinch, type BoardTransform, type Point } from './boardTransform';
 
 const DOUBLE_TAP_MS = 300;
@@ -48,6 +48,20 @@ export function BoardViewport({ children }: { children: ReactNode }) {
   const up = (e: ReactPointerEvent) => {
     pointers.current.delete(e.pointerId);
   };
+
+  // A finger that goes down on the board can come UP anywhere — e.g. a tile
+  // drag released over the rack. That up never bubbles through this element,
+  // so without a window-level cleanup the pointer would leak in the map and
+  // a later lone finger could read as the second half of a pinch.
+  useEffect(() => {
+    const drop = (e: PointerEvent) => { pointers.current.delete(e.pointerId); };
+    window.addEventListener('pointerup', drop);
+    window.addEventListener('pointercancel', drop);
+    return () => {
+      window.removeEventListener('pointerup', drop);
+      window.removeEventListener('pointercancel', drop);
+    };
+  }, []);
 
   return (
     <div
