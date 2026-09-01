@@ -17,6 +17,11 @@ export default defineConfig(() => ({
     // game server. 4004 per PORTS.md — build tooling, not shipped code.
     proxy: {
       [`${BASE_PATH}/socket.io`]: { target: 'http://localhost:4004', ws: true },
+      // The game's own HTTP API (api/summaries feeds the entry list). Without
+      // this line dev 404s the fetch and the entry page silently shows no
+      // games — sockets still work, so everything *else* looks fine
+      // (2026-08-31, found the evening the entry page shipped).
+      [`${BASE_PATH}/api`]: { target: 'http://localhost:4004' },
       '/notify': { target: 'http://localhost:4004' },
     },
   },
