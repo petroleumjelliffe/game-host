@@ -57,7 +57,9 @@ export function Rack({
           if (insertionSlot !== null && slot >= insertionSlot) slot += 1;
           const slide = {
             left: slot * RACK_SLOT_W,
-            transition: `left ${REFLOW_MS}ms ${EASE_REFLOW}`,
+            // Slot slides at the spec's reflow; transform carries the 90ms
+            // tap-pop (the active:scale below acknowledges the press).
+            transition: `left ${REFLOW_MS}ms ${EASE_REFLOW}, transform 90ms ${EASE_REFLOW}`,
           };
           if (entry.tile === null) {
             // Reserved: the tile is on the board; the slot waits for it.
@@ -82,7 +84,7 @@ export function Rack({
               data-testid={`rack-tile-${index}`}
               onClick={() => { onTileTap(index); }}
               onPointerDown={onTilePointerDown === undefined ? undefined : (e) => { onTilePointerDown(index, e); }}
-              className={`absolute top-0 flex h-[50px] w-11 items-center justify-center rounded-md bg-tile font-tile text-lg font-bold ${
+              className={`absolute top-0 flex h-[50px] w-11 items-center justify-center rounded-md bg-tile font-tile text-lg font-bold active:scale-[1.12] ${
                 tile === '_' ? 'text-tile-blank' : 'text-tile-ink'
               }`}
               style={{

@@ -6,6 +6,7 @@ export const TRAVEL_MS = 220;
 export const REFLOW_MS = 180;
 export const STAGGER_MS = 60;
 export const SNAPBACK_MS = 200;
+export const BADGE_OUT_MS = 120;
 export const EASE_LIFT = 'cubic-bezier(.34,1.56,.64,1)';
 export const EASE_DROP = 'cubic-bezier(.22,1,.36,1)';
 export const EASE_TRAVEL = 'cubic-bezier(.2,.8,.2,1)';

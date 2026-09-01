@@ -18,7 +18,7 @@ import { Board } from './Board';
 import { BoardViewport } from './BoardViewport';
 import { dropAction, hitCell, moveTile, rackSlot, type DragSource, type Rect } from './dragPlan';
 import { useTileDrag } from './useTileDrag';
-import { EASE_LIFT, LIFT_MS, SNAPBACK_MS, TRAVEL_MS } from './motion';
+import { BADGE_OUT_MS, EASE_LIFT, LIFT_MS, SNAPBACK_MS, TRAVEL_MS } from './motion';
 import { TileFlightLayer, useTileFlights } from './TileFlightLayer';
 import { Rack } from './Rack';
 import { BlankPicker } from './BlankPicker';
@@ -27,7 +27,7 @@ import { LastMove } from './LastMove';
 import { MoveLog } from './MoveLog';
 import { GameOverPanel } from './GameOverPanel';
 import { RejectionNote } from './RejectionNote';
-import { previewPlay } from './scorePreview';
+import { previewPlay, type PlayPreview } from './scorePreview';
 import { seatEmoji } from './seatEmoji';
 import { NotificationSettings } from '../notify/NotificationSettings';
 import { useNotifyStatus } from '../notify/useNotifyStatus';
@@ -139,6 +139,25 @@ export function GameScreen({
   // there's nothing to price: not your turn, mid-exchange, or an
   // ungeometric/wordless staging.
   const preview = myTurn && !exchangeOn ? previewPlay(view.board, staged) : null;
+
+  // Hold the last priced preview for the badge's 120ms fade-out after a
+  // recall (the spec: "fades the badge out in 120ms with no rise"). The
+  // null branch of `preview` is referentially stable, so this effect fires
+  // exactly once per non-null → null transition and the timer survives the
+  // re-render its own setState causes.
+  const [fadingBadge, setFadingBadge] = useState<PlayPreview | null>(null);
+  const prevPreview = useRef<PlayPreview | null>(null);
+  useEffect(() => {
+    const prev = prevPreview.current;
+    prevPreview.current = preview;
+    if (preview === null && prev !== null) {
+      setFadingBadge(prev);
+      const timer = setTimeout(() => { setFadingBadge(null); }, BADGE_OUT_MS);
+      return () => { clearTimeout(timer); };
+    }
+    return undefined;
+  }, [preview]);
+  const badge = preview ?? fadingBadge;
 
   const myInitial = view.players.find((p) => p.id === viewerId)?.name[0] ?? '·';
   const otherNames = view.players.filter((p) => p.id !== viewerId).map((p) => p.name).join(', ');
@@ -435,23 +454,32 @@ export function GameScreen({
                   : flightHidden?.pos ?? null}
               />
 
-              {preview !== null && (() => {
-                const col = colOf(preview.anchorPos);
-                const row = rowOf(preview.anchorPos);
+              {badge !== null && (() => {
+                const col = colOf(badge.anchorPos);
+                const row = rowOf(badge.anchorPos);
                 const flushRight = col >= 12; // the badge is wider than a cell — hug the edge
                 const belowAnchor = row === 0; // no room above row 0 — sit under the anchor
                 return (
                   <div
                     data-testid="stage-badge"
-                    className={`pointer-events-none absolute z-10 rounded-full bg-accent px-2.5 py-0.5 text-[13px] font-bold text-white shadow ${
-                      belowAnchor ? '' : '-translate-y-full'
-                    }`}
+                    className={`pointer-events-none absolute z-10 ${belowAnchor ? '' : '-translate-y-full'}`}
                     style={{
                       ...(flushRight ? { right: 0 } : { left: `${((col + 1) / 15) * 100}%` }),
                       top: `${((belowAnchor ? row + 1 : row) / 15) * 100}%`,
                     }}
                   >
-                    {preview.bingo ? `+${preview.total} · BINGO` : `+${preview.total}`}
+                    {/* The inner span carries the motion so the keyframes'
+                      * transform can't fight the positioning class above.
+                      * Keyed per landing: each new total remounts it and the
+                      * rise replays, 80ms after the tile's settle begins. */}
+                    <span
+                      key={`${badge.total}-${badge.anchorPos}`}
+                      className={`block rounded-full bg-accent px-2.5 py-0.5 text-[13px] font-bold text-white shadow ${
+                        preview !== null ? 'wg-badge-in' : 'wg-badge-out'
+                      }`}
+                    >
+                      {badge.bingo ? `+${badge.total} · BINGO` : `+${badge.total}`}
+                    </span>
                   </div>
                 );
               })()}
