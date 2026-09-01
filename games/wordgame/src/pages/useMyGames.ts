@@ -58,9 +58,13 @@ export function useMyGames(): { games: MyGame[] | null } {
           else clearIdentity(s.roomId);
         }
         setGames(known);
-      } catch {
+      } catch (error) {
         // Standalone dev server (404) or a blip: an empty list, not an error
-        // page — the New room door still works.
+        // page — the New room door still works. But say what was swallowed:
+        // this fallback once made a 100%-of-deployments 404 look like an
+        // empty lobby (2026-08-31), and a named URL in the console is what
+        // finally told it apart from "no games".
+        console.warn(`[wordgame] game list unavailable (${summariesUrl()}):`, error);
         if (!cancelled) setGames([]);
       }
     })();
