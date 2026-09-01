@@ -38,8 +38,15 @@ export function Rack({
   entries, selected, onTileTap, bagCount,
   onTilePointerDown, draggingIndex = null, insertionSlot = null, tilesRef, hiddenId = null,
 }: RackProps) {
-  const visibleCount = entries.length - (draggingIndex === null ? 0 : 1);
-  const slots = visibleCount + (insertionSlot === null ? 0 : 1);
+  // During a rack drag a dashed placeholder HOLDS a slot — the hovered one,
+  // else the lifted tile's own — so the row never closes up: the tile can
+  // come straight home and neighbours only move when the gap actually
+  // relocates (feedback 2026-09-01). Without a drag, insertionSlot keeps its
+  // original open-a-gap meaning.
+  const dragging = draggingIndex !== null;
+  const gapSlot = dragging ? insertionSlot ?? draggingIndex : insertionSlot;
+  const visibleCount = entries.length - (dragging ? 1 : 0);
+  const slots = visibleCount + (gapSlot === null ? 0 : 1);
   let nextSlot = 0;
 
   return (
@@ -50,11 +57,18 @@ export function Rack({
         className="relative h-[50px]"
         style={{ width: Math.max(RACK_TILE_W, slots * RACK_SLOT_W - 4) }}
       >
+        {dragging && gapSlot !== null && (
+          <div
+            data-testid="rack-slot-hold"
+            className="absolute top-0 box-border h-[50px] w-11 rounded-md border-[1.5px] border-dashed border-line-strong"
+            style={{ left: gapSlot * RACK_SLOT_W, transition: `left ${REFLOW_MS}ms ${EASE_REFLOW}` }}
+          />
+        )}
         {entries.map((entry, index) => {
           if (index === draggingIndex) return null;
           let slot = nextSlot;
           nextSlot += 1;
-          if (insertionSlot !== null && slot >= insertionSlot) slot += 1;
+          if (gapSlot !== null && slot >= gapSlot) slot += 1;
           const slide = {
             left: slot * RACK_SLOT_W,
             // Slot slides at the spec's reflow; transform carries the 90ms

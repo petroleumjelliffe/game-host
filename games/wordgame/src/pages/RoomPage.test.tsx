@@ -148,7 +148,8 @@ describe('RoomPage', () => {
     expect(screen.getByTestId('board')).toBeInTheDocument();
     // The viewer's own rack arrived in the view.
     expect(screen.getByTestId('rack')).toBeInTheDocument();
-    expect(screen.getByText('Your turn')).toBeInTheDocument();
+    // Turn shows on the highlighted chip now — the turn-text line is gone.
+    expect(screen.getByTestId('game-screen').querySelector('[data-current]')).not.toBeNull();
   });
 
   it('a played move goes out over the transport', () => {

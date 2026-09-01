@@ -17,15 +17,18 @@ export function ago(at: number | undefined, now = Date.now()): string {
 
 export interface LastMoveProps {
   view: GameView;
+  viewerId: string;
   seatEmoji(index: number): string | null;
 }
 
-/** The last committed move as one line — the design's banner over the board. */
-export function LastMove({ view, seatEmoji }: LastMoveProps) {
+/** The last committed move as one line — the design's banner over the board.
+ * The viewer's own move says "You"; the scoreless-turns countdown rides
+ * this line since the turn-status line was retired (2026-09-01). */
+export function LastMove({ view, viewerId, seatEmoji }: LastMoveProps) {
   const record: MoveRecord | undefined = view.log[view.log.length - 1];
   if (record === undefined) return null;
   const index = view.players.findIndex((p) => p.id === record.playerId);
-  const name = view.players[index]?.name ?? '…';
+  const name = record.playerId === viewerId ? 'You' : view.players[index]?.name ?? '…';
   const when = ago(record.at);
   const suffix = when === '' ? '' : ` · ${when}`;
   const emoji = seatEmoji(index) ?? '';
@@ -52,6 +55,11 @@ export function LastMove({ view, seatEmoji }: LastMoveProps) {
     >
       {emoji} {body}
       {suffix}
+      {view.scorelessTurns > 0 && (
+        <span className="text-ink-faint" data-testid="scoreless-counter">
+          {' '}· Scoreless: {view.scorelessTurns}/6
+        </span>
+      )}
     </div>
   );
 }

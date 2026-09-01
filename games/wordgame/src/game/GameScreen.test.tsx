@@ -47,7 +47,7 @@ function renderScreen(overrides: {
   presence?: Record<string, boolean>;
 } = {}) {
   const sendMove = overrides.sendMove ?? vi.fn();
-  render(
+  const utils = render(
     <GameScreen
       view={overrides.view ?? view}
       viewerId="me"
@@ -60,7 +60,7 @@ function renderScreen(overrides: {
       onExit={() => {}}
     />,
   );
-  return { sendMove };
+  return { sendMove, ...utils };
 }
 
 const rackTiles = () => within(screen.getByTestId('rack')).getAllByRole('button');
@@ -152,7 +152,8 @@ describe('GameScreen tap-to-place', () => {
   it('disables Play when it is not your turn', () => {
     renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
-    expect(screen.getByText('Bob’s turn')).toBeInTheDocument();
+    // No "X's turn" line any more — the highlighted chip carries it.
+    expect(screen.getByTestId('player-chip-opp')).toHaveAttribute('data-current');
   });
 });
 
@@ -208,10 +209,17 @@ describe('GameScreen pass', () => {
 });
 
 describe('GameScreen status and scores', () => {
-  it('shows turn and the scoreless counter when nonzero', () => {
-    renderScreen({ view: makeView({ bagCount: 12, scorelessTurns: 3 }) });
-    expect(screen.getByText('Your turn')).toBeInTheDocument();
-    expect(screen.getByTestId('scoreless-counter')).toHaveTextContent('Scoreless turns: 3/6');
+  it('shows the scoreless countdown on the last-move banner when nonzero', () => {
+    // The counter rides the last-move line since the turn line was retired;
+    // scoreless turns imply a pass/exchange/zero-score play in the log.
+    renderScreen({
+      view: makeView({
+        scorelessTurns: 3,
+        log: [{ playerId: 'opp', kind: 'pass', score: 0 }],
+      }),
+    });
+    expect(screen.getByTestId('scoreless-counter')).toHaveTextContent('Scoreless: 3/6');
+    expect(screen.queryByText(/turn$/)).not.toBeInTheDocument(); // the line is gone
   });
 
   it('shows the bag tile with the bag count', () => {
@@ -265,16 +273,16 @@ describe('GameScreen last move', () => {
 });
 
 describe('GameScreen notifications', () => {
-  it('adds a nudge note and the profile badge when notifications are on', () => {
+  it('shows the profile badge exactly when notifications are on', () => {
+    // The "you'll get a nudge" turn-line note went with the turn line; the
+    // badge on the profile chip is the whole signal now.
     notifyStatusValue = 'on';
-    renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
-    expect(screen.getByText('Bob’s turn — you’ll get a nudge')).toBeInTheDocument();
+    const { unmount } = renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
     expect(screen.getByTestId('notify-badge')).toBeInTheDocument();
-  });
+    unmount();
 
-  it('shows plain turn text and no badge when notifications are not on', () => {
+    notifyStatusValue = 'off';
     renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
-    expect(screen.getByText('Bob’s turn')).toBeInTheDocument();
     expect(screen.queryByTestId('notify-badge')).not.toBeInTheDocument();
   });
 
@@ -547,6 +555,29 @@ describe('GameScreen refill', () => {
     rerender(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
     const fresh = screen.getAllByTestId(/^rack-tile-/).filter((el) => el.className.includes('wg-refill'));
     expect(fresh).toHaveLength(0);
+  });
+});
+
+describe('GameScreen roster and last-move naming', () => {
+  it('pins your chip leftmost with the rest following in turn order', () => {
+    renderScreen({
+      view: makeView({
+        players: [
+          { id: 'opp', name: 'Bob', score: 0, rackCount: 7, rack: null },
+          { id: 'me', name: 'Alice', score: 0, rackCount: 7, rack: ['C', 'A', 'T', 'S', 'D', 'O', '_'] },
+          { id: 'p3', name: 'Zed', score: 0, rackCount: 7, rack: null },
+        ],
+        currentPlayerId: 'opp',
+      }),
+    });
+    const ids = screen.getAllByTestId(/^player-chip-/).map((el) => el.getAttribute('data-testid'));
+    // Viewer first, then turn order wrapping: me → p3 → opp.
+    expect(ids).toEqual(['player-chip-me', 'player-chip-p3', 'player-chip-opp']);
+  });
+
+  it('says You on the last-move banner when the move was yours', () => {
+    renderScreen({ view: makeView({ log: [{ playerId: 'me', kind: 'pass', score: 0 }] }) });
+    expect(screen.getByTestId('last-move')).toHaveTextContent('You passed');
   });
 });
 

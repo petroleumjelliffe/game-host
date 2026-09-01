@@ -15,11 +15,14 @@ function entriesOf(tiles: (Tile | null)[]) {
 describe('Rack — drag rendering', () => {
   const tiles = entriesOf(['A', 'B', 'C', 'D']);
 
-  it('removes the dragged tile from the row — no dimmed placeholder', () => {
+  it('holds the dragged tile\'s slot with a dashed placeholder — nothing shifts', () => {
     render(<Rack entries={tiles} selected={[]} onTileTap={() => {}} bagCount={10} draggingIndex={1} insertionSlot={null} />);
-    expect(screen.queryByTestId('rack-tile-1')).toBeNull();
+    expect(screen.queryByTestId('rack-tile-1')).toBeNull(); // the ghost carries it
+    // The placeholder keeps the slot from drag start so the tile can come
+    // straight home and neighbours never move (feedback 2026-09-01).
+    expect(screen.getByTestId('rack-slot-hold')).toHaveStyle({ left: '48px' });
     expect(screen.getByTestId('rack-tile-0')).toHaveStyle({ left: '0px' });
-    expect(screen.getByTestId('rack-tile-2')).toHaveStyle({ left: '48px' });
+    expect(screen.getByTestId('rack-tile-2')).toHaveStyle({ left: '96px' });
   });
 
   it('opens an insertion gap: tiles at and after the slot slide one slot right', () => {

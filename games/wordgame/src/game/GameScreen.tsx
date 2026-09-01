@@ -151,11 +151,9 @@ export function GameScreen({
       ? { pos: e.stagedAt, tile: '_', as: e.as ?? 'A' }
       : { pos: e.stagedAt, tile: e.tile }));
 
-  const current = view.players.find((p) => p.id === view.currentPlayerId);
   const myTurn = view.stage === 'playing' && view.currentPlayerId === viewerId;
   const canAct = myTurn && connected;
   const exchangeAllowed = view.bagCount >= EXCHANGE_MINIMUM_BAG;
-  const bingoStaging = myTurn && staged.length === 7 && rack.every((e) => e.stagedAt !== null);
   // Optimistic score preview for what's staged right now — geometry and
   // arithmetic only, no dictionary (see scorePreview.ts). null whenever
   // there's nothing to price: not your turn, mid-exchange, or an
@@ -228,9 +226,13 @@ export function GameScreen({
   const { drag, start: startDrag, consumeDragClick } = useTileDrag((source, p) => {
     const bRect = boardGridRef.current?.getBoundingClientRect();
     const cell = bRect === undefined ? null : hitCell(bRect, p);
+    // Slot targeting is a rack-rearrange affair. A staged tile dropped
+    // anywhere off the board goes home to its own reserved slot — that slot
+    // is already visibly waiting for it (feedback 2026-09-01).
     const rRect = rackTilesRef.current?.getBoundingClientRect();
-    const visible = rack.length - (source.kind === 'rack' ? 1 : 0);
-    const slot = cell !== null || rRect === undefined ? null : rackSlot(rRect, p, visible);
+    const slot = source.kind !== 'rack' || cell !== null || rRect === undefined
+      ? null
+      : rackSlot(rRect, p, rack.length - 1);
     const action = dropAction(source, cell, slot, view.board, staged);
     switch (action.kind) {
       case 'place': placeFromRack(action.rackIndex, action.pos); break;
@@ -258,11 +260,10 @@ export function GameScreen({
   // Live hover: which tray slot the current drag would drop into — drives
   // the sliding insertion gap.
   const hoverSlot = (() => {
-    if (drag === null || !drag.active) return null;
+    if (drag === null || !drag.active || drag.source.kind !== 'rack') return null;
     const rRect = rackTilesRef.current?.getBoundingClientRect();
     if (rRect === undefined) return null;
-    const visible = rack.length - (drag.source.kind === 'rack' ? 1 : 0);
-    return rackSlot(rRect, drag, visible);
+    return rackSlot(rRect, drag, rack.length - 1);
   })();
 
   const rackTap = (index: number) => {
@@ -411,31 +412,10 @@ export function GameScreen({
         seatEmoji={seatEmoji}
       />
 
-      <div
-        data-testid="turn-status"
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 pt-2.5 text-[12.5px] font-semibold"
-      >
-        {view.stage === 'playing' ? (
-          myTurn ? (
-            <span className="text-accent">
-              {bingoStaging ? 'Your turn — all seven tiles played!' : 'Your turn'}
-            </span>
-          ) : (
-            <span className="text-ink-faint">
-              {current?.name ?? '…'}’s turn{notifyStatus === 'on' ? ' — you’ll get a nudge' : ''}
-            </span>
-          )
-        ) : (
-          <span className="text-ink-faint">Game over</span>
-        )}
-        {view.scorelessTurns > 0 && (
-          <span className="font-normal text-ink-faint" data-testid="scoreless-counter">
-            Scoreless turns: {view.scorelessTurns}/6
-          </span>
-        )}
-      </div>
-
-      <LastMove view={view} seatEmoji={seatEmoji} />
+      {/* No "X's turn" line: the highlighted chip already says it, and the
+        * line cost a full row of a pinned layout (feedback 2026-09-01).
+        * The scoreless countdown rides the last-move banner now. */}
+      <LastMove view={view} viewerId={viewerId} seatEmoji={seatEmoji} />
 
       {rejection !== null && rejection.code !== 'invalidWord' && (
         <div className="px-3.5 pt-2.5">
