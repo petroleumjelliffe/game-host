@@ -31,6 +31,30 @@ describe('BoardViewport', () => {
     expect(screen.getByTestId('board-transform').style.transform).toContain('scale(1)');
   });
 
+  it('one finger pans while zoomed, and the trailing click is swallowed', () => {
+    const onCell = vi.fn();
+    render(
+      <BoardViewport>
+        <button type="button" data-testid="a-cell" onClick={onCell}>cell</button>
+      </BoardViewport>,
+    );
+    const vp = screen.getByTestId('board-viewport');
+    vp.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 300, height: 300, right: 300, bottom: 300, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    pinchOut(); // scale 2, translate(-100, -100) — pinned by boardTransform.test
+    fireEvent.pointerDown(vp, { pointerId: 5, clientX: 150, clientY: 150 });
+    fireEvent.pointerMove(vp, { pointerId: 5, clientX: 120, clientY: 150 });
+    fireEvent.pointerUp(vp, { pointerId: 5 });
+    expect(screen.getByTestId('board-transform').style.transform)
+      .toBe('translate(-130px, -100px) scale(2)');
+    // The pan ended over a cell — that click must not stage anything…
+    fireEvent.click(screen.getByTestId('a-cell'));
+    expect(onCell).not.toHaveBeenCalled();
+    // …but an honest tap right after still lands.
+    fireEvent.click(screen.getByTestId('a-cell'));
+    expect(onCell).toHaveBeenCalledOnce();
+  });
+
   it('forgets a pointer that lifts outside the viewport — no phantom pinch', () => {
     render(<BoardViewport><div>board</div></BoardViewport>);
     const vp = screen.getByTestId('board-viewport');

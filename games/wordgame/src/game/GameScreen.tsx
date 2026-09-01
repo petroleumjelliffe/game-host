@@ -447,6 +447,11 @@ export function GameScreen({
                 onStagedPointerDown={dragEnabled ? (pos, e) => {
                   const pl = staged.find((p) => p.pos === pos);
                   if (pl !== undefined) {
+                    // The viewport never sees this press: a finger on a
+                    // staged tile drags the tile, it must not also pan the
+                    // zoomed board. (Cost: a pinch whose first finger lands
+                    // on a staged tile won't zoom — lift and re-pinch.)
+                    e.stopPropagation();
                     dragSourceRect.current = e.currentTarget.getBoundingClientRect();
                     startDrag({ kind: 'board', pos, tile: pl.tile }, e);
                   }
