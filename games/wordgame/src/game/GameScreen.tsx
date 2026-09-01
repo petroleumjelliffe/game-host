@@ -53,6 +53,9 @@ interface RackEntry {
   tile: Tile;
   stagedAt: number | null;
   as?: Letter;
+  /** Set when this tile was just drawn from the bag: its stagger index for
+   * the refill animation (the spec's 60ms-per-tile rise, left to right). */
+  fresh?: number;
 }
 
 function shuffled<T>(items: T[]): T[] {
@@ -106,12 +109,31 @@ export function GameScreen({
   const [notifyOpen, setNotifyOpen] = useState(false);
   const { status: notifyStatus, refresh: refreshNotify } = useNotifyStatus();
 
+  // The previous view's server rack, for spotting freshly drawn tiles: any
+  // tile the old multiset can't account for rose from the bag. An
+  // opponent's move leaves the rack identical, so nothing animates then —
+  // "replenishment starts only after the board has confirmed the play".
+  const prevServerRack = useRef<Tile[] | null>(null);
   useEffect(() => {
     const me = view.players.find((p) => p.id === viewerId);
-    setRack((me?.rack ?? []).map((tile) => {
+    const serverRack = me?.rack ?? [];
+    const carried = new Map<Tile, number>();
+    for (const t of prevServerRack.current ?? serverRack) {
+      carried.set(t, (carried.get(t) ?? 0) + 1);
+    }
+    prevServerRack.current = serverRack;
+    let freshIndex = 0;
+    setRack(serverRack.map((tile) => {
       const id = nextEntryId.current;
       nextEntryId.current += 1;
-      return { id, tile, stagedAt: null };
+      const left = carried.get(tile) ?? 0;
+      if (left > 0) {
+        carried.set(tile, left - 1);
+        return { id, tile, stagedAt: null };
+      }
+      const fresh = freshIndex;
+      freshIndex += 1;
+      return { id, tile, stagedAt: null, fresh };
     }));
     setSelected(null);
     setExchangeOn(false);
@@ -521,7 +543,11 @@ export function GameScreen({
         <>
           <div className="px-3.5 pt-3.5">
             <Rack
-              entries={rack.map((e) => ({ id: e.id, tile: e.stagedAt === null ? e.tile : null }))}
+              entries={rack.map((e) => ({
+                id: e.id,
+                tile: e.stagedAt === null ? e.tile : null,
+                ...(e.fresh === undefined ? {} : { fresh: e.fresh }),
+              }))}
               selected={exchangeOn ? exchangeSel : selected === null ? [] : [selected]}
               onTileTap={rackTap}
               bagCount={view.bagCount}

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { GameScreen } from './GameScreen';
 import { makeView } from '../test/fixtures';
-import { CENTER } from '../../engine/constants';
+import { CENTER, type Tile } from '../../engine/constants';
 import type { GameView, MoveRejectedMessage, WireMove } from '../../session/protocol';
 import type { NotifyStatus } from '../notify/useNotifyStatus';
 
@@ -507,6 +507,46 @@ describe('GameScreen drag and drop', () => {
     fireEvent.click(tile);
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
     expect(screen.getByTestId(`cell-${CENTER}`)).toHaveAttribute('data-staged');
+  });
+});
+
+describe('GameScreen refill', () => {
+  function screenFor(view: GameView) {
+    return (
+      <GameScreen
+        view={view}
+        viewerId="me"
+        roomId="ABCD"
+        connected
+        sendMove={() => {}}
+        rejection={null}
+        onDismissRejection={() => {}}
+        onExit={() => {}}
+      />
+    );
+  }
+  const rackOf = (tiles: string[]) => makeView({
+    players: [
+      { id: 'me', name: 'Alice', score: 0, rackCount: 7, rack: tiles as Tile[] },
+      { id: 'opp', name: 'Bob', score: 0, rackCount: 7, rack: null },
+    ],
+  });
+
+  it('animates freshly drawn tiles in from the bag, staggered left to right', () => {
+    const { rerender } = render(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
+    // O and _ played; Z and Q drawn.
+    rerender(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'Z', 'Q'])));
+    const fresh = screen.getAllByTestId(/^rack-tile-/).filter((el) => el.className.includes('wg-refill'));
+    expect(fresh).toHaveLength(2);
+    expect(fresh[0]).toHaveStyle({ animationDelay: '0ms' });
+    expect(fresh[1]).toHaveStyle({ animationDelay: '60ms' });
+  });
+
+  it('an unchanged rack (someone else moved) animates nothing', () => {
+    const { rerender } = render(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
+    rerender(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
+    const fresh = screen.getAllByTestId(/^rack-tile-/).filter((el) => el.className.includes('wg-refill'));
+    expect(fresh).toHaveLength(0);
   });
 });
 

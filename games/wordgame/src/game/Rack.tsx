@@ -1,6 +1,6 @@
 import { TILE_VALUES, type Tile } from '../../engine/constants';
 import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
-import { EASE_REFLOW, REFLOW_MS } from './motion';
+import { EASE_REFLOW, REFLOW_MS, STAGGER_MS } from './motion';
 
 export const RACK_TILE_W = 44;
 export const RACK_SLOT_W = 48; // tile + 4px gap; rackSlot() in dragPlan.ts assumes this rhythm
@@ -10,7 +10,7 @@ export interface RackProps {
    * reserved slot — its tile is on the board this turn and will come back
    * here (the motion spec's "the rack slot stays reserved"). Ids are
    * stable across reorders so slides keep tile identity. */
-  entries: { id: number; tile: Tile | null }[];
+  entries: { id: number; tile: Tile | null; fresh?: number }[];
   /** Selected indices — one in placement mode, several in exchange mode. */
   selected: number[];
   onTileTap(index: number): void;
@@ -86,12 +86,13 @@ export function Rack({
               onPointerDown={onTilePointerDown === undefined ? undefined : (e) => { onTilePointerDown(index, e); }}
               className={`absolute top-0 flex h-[50px] w-11 items-center justify-center rounded-md bg-tile font-tile text-lg font-bold active:scale-[1.12] ${
                 tile === '_' ? 'text-tile-blank' : 'text-tile-ink'
-              }`}
+              } ${entry.fresh === undefined ? '' : 'wg-refill'}`}
               style={{
                 ...slide,
                 boxShadow: shadow,
                 ...(onTilePointerDown === undefined ? {} : { touchAction: 'none' }),
                 ...(hiddenId === entry.id ? { opacity: 0 } : {}),
+                ...(entry.fresh === undefined ? {} : { animationDelay: `${entry.fresh * STAGGER_MS}ms` }),
               }}
             >
               {tile === '_' ? '·' : tile}
@@ -104,8 +105,9 @@ export function Rack({
       </div>
       <div className="w-2 flex-none" />
       <div
+        key={bagCount}
         data-testid="bag-tile"
-        className="relative flex h-[50px] w-11 flex-none items-center justify-center rounded-md bg-board"
+        className="wg-bag-pulse relative flex h-[50px] w-11 flex-none items-center justify-center rounded-md bg-board"
         style={{ boxShadow: 'inset 0 -3px 0 #143528, 0 1px 3px rgba(0,0,0,.25)' }}
         title={`${bagCount} tiles left in the bag`}
       >
