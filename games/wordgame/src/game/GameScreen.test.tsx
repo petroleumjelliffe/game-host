@@ -303,7 +303,9 @@ describe('GameScreen move log', () => {
       ],
     });
     renderScreen({ view: v });
-    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem');
+    // { hidden: true }: the history section is hidden in the app shell until
+    // its reveal is designed — the log itself must keep rendering correctly.
+    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem', { hidden: true });
     expect(items[0]).toHaveTextContent('Bob: ZYMURGY (90) for 140 — bingo!');
     expect(items[1]).toHaveTextContent('Alice passed');
     expect(items[2]).toHaveTextContent('Bob exchanged 3 tiles');
@@ -326,7 +328,9 @@ describe('GameScreen move log', () => {
       ],
     });
     renderScreen({ view: v });
-    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem');
+    // { hidden: true }: the history section is hidden in the app shell until
+    // its reveal is designed — the log itself must keep rendering correctly.
+    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem', { hidden: true });
     expect(items[0]).toHaveTextContent('Alice: CATS (12) for 12 · 5m ago');
   });
 });
@@ -391,5 +395,16 @@ describe('GameScreen game over', () => {
     expect(over).toHaveTextContent('+6 played out');
     expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('rack')).not.toBeInTheDocument();
+  });
+});
+
+describe('GameScreen app-shell layout', () => {
+  it('pins chrome and keeps the move history in the DOM but hidden', () => {
+    renderScreen();
+    const screenEl = screen.getByTestId('game-screen');
+    expect(screenEl.className).toContain('h-[100dvh]');
+    expect(screen.getByTestId('board-region')).toBeInTheDocument();
+    const history = screen.getByTestId('move-history');
+    expect(history).not.toBeVisible(); // hidden attribute — kept for a future reveal
   });
 });

@@ -212,7 +212,10 @@ export function GameScreen({
   };
 
   return (
-    <div data-testid="game-screen" className="mx-auto flex min-h-screen max-w-2xl flex-col bg-paper pb-6">
+    <div data-testid="game-screen" className="mx-auto flex h-[100dvh] max-w-2xl flex-col bg-paper">
+      {/* Pinned top: title bar, chips, status, last move, notes. Scrolls
+        * itself only in the over state, where the panel can outgrow a phone. */}
+      <div className={`flex-none ${view.stage === 'over' ? 'overflow-y-auto' : ''}`}>
       <header className="flex items-center gap-2.5 border-b border-hairline px-3.5 py-3">
         <button
           type="button"
@@ -286,12 +289,18 @@ export function GameScreen({
           <GameOverPanel view={view} />
         </div>
       )}
+      </div>
 
-      <div className="px-3.5 pt-3">
-        <div className="relative">
-          <Board board={view.board} staged={staged} lastPositions={lastPlayPositions} onCellTap={cellTap} />
+      {/* The board region — fills whatever the pinned chrome leaves. The
+        * inner wrapper is height-driven and square (aspect-ratio), capped by
+        * width, so the board is always the largest square that fits. */}
+      <div data-testid="board-region" className="relative min-h-0 flex-1">
+        <div className="flex h-full items-center justify-center px-3.5 py-2">
+          <div className="mx-auto" style={{ height: '100%', aspectRatio: '1 / 1', maxWidth: 'min(100%, 600px)' }}>
+            <div className="relative w-full">
+              <Board board={view.board} staged={staged} lastPositions={lastPlayPositions} onCellTap={cellTap} />
 
-          {preview !== null && (
+              {preview !== null && (
             <div
               data-testid="stage-badge"
               className="pointer-events-none absolute z-10 -translate-y-full rounded-full bg-accent px-2.5 py-0.5 text-[13px] font-bold text-white shadow"
@@ -303,12 +312,16 @@ export function GameScreen({
               {preview.bingo ? `+${preview.total} · BINGO` : `+${preview.total}`}
             </div>
           )}
+            </div>
+          </div>
+        </div>
 
-          {/* Dictionary rejections get the board's own overlay card instead
-           * of the top-of-screen strip: tiles stay staged right where the
-           * word failed, so "rearrange or recall" reads as an instruction
-           * about what's in front of you. */}
-          {rejection !== null && rejection.code === 'invalidWord' && (
+        {/* Dictionary rejections get an overlay card instead of the
+         * top-of-screen strip: tiles stay staged right where the word
+         * failed, so "rearrange or recall" reads as an instruction about
+         * what's in front of you. It hangs off the board REGION, outside
+         * any zoom transform — screen-anchored and readable at any scale. */}
+        {rejection !== null && rejection.code === 'invalidWord' && (
             <div
               data-testid="invalid-card"
               className="absolute inset-x-6 top-[38%] z-20 rounded-2xl border-2 border-danger bg-white px-3.5 py-3 text-center shadow-2xl"
@@ -327,10 +340,11 @@ export function GameScreen({
                 OK
               </button>
             </div>
-          )}
-        </div>
+        )}
       </div>
 
+      {/* Pinned bottom: rack + actions (or the exchange UI), above the home bar. */}
+      <div className="flex-none pb-[max(12px,env(safe-area-inset-bottom))]">
       {view.stage === 'playing' && (
         <>
           <div className="px-3.5 pt-3.5">
@@ -406,8 +420,11 @@ export function GameScreen({
           )}
         </>
       )}
+      </div>
 
-      <section className="px-3.5 pb-3 pt-3">
+      {/* The move history stays in the code but hidden: Pete wants it back,
+        * the reveal (drawer? long-press?) is undecided (2026-08-31). */}
+      <section hidden data-testid="move-history" className="px-3.5 pb-3 pt-3">
         <h2 className="mb-1 text-sm font-semibold text-ink-soft">Moves</h2>
         <MoveLog view={view} />
       </section>

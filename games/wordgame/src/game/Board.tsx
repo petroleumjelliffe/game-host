@@ -67,7 +67,7 @@ export function Board({ board, staged, lastPositions, onCellTap }: BoardProps) {
   return (
     <div
       data-testid="board"
-      className="mx-auto grid w-full max-w-[600px] gap-0.5 rounded-lg bg-board p-1"
+      className="mx-auto grid w-full gap-0.5 rounded-lg bg-board p-1"
       style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
     >
       {board.map((square, pos) => {
