@@ -15,6 +15,7 @@ import type {
   WireMove,
 } from '../../session/protocol';
 import { Board } from './Board';
+import { BoardViewport } from './BoardViewport';
 import { Rack } from './Rack';
 import { BlankPicker } from './BlankPicker';
 import { PlayerChips } from './PlayerChips';
@@ -297,6 +298,7 @@ export function GameScreen({
       <div data-testid="board-region" className="relative min-h-0 flex-1">
         <div className="flex h-full items-center justify-center px-3.5 py-2">
           <div className="mx-auto" style={{ height: '100%', aspectRatio: '1 / 1', maxWidth: 'min(100%, 600px)' }}>
+            <BoardViewport>
             <div className="relative w-full">
               <Board board={view.board} staged={staged} lastPositions={lastPlayPositions} onCellTap={cellTap} />
 
@@ -313,6 +315,7 @@ export function GameScreen({
             </div>
           )}
             </div>
+            </BoardViewport>
           </div>
         </div>
 
