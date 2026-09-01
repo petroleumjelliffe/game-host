@@ -54,7 +54,7 @@ function TileFace({ letter, isBlank, staged = false, last = false }: TileFacePro
     <span
       className={`relative flex h-full w-full items-center justify-center rounded font-tile font-bold bg-tile ${
         isBlank ? 'text-tile-blank' : 'text-tile-ink'
-      } ${staged ? 'z-10' : ''}`}
+      } ${staged ? 'z-10 wg-settle' : ''}`}
       style={{ boxShadow: ring }}
     >
       <span style={{ fontSize: 'clamp(9px, 3.2vw, 18px)', lineHeight: 1 }}>

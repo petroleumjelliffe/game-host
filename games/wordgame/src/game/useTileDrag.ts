@@ -14,10 +14,13 @@ export interface DragState {
   source: DragSource;
   x: number;
   y: number;
+  /** Where the press began — consumers read the drag direction off x − ox. */
+  ox: number;
+  oy: number;
   active: boolean;
 }
 
-interface InternalDrag extends DragState { ox: number; oy: number; pointerId: number | undefined }
+interface InternalDrag extends DragState { pointerId: number | undefined }
 
 export function useTileDrag(onDrop: (source: DragSource, p: Point) => void) {
   const [drag, setDrag] = useState<InternalDrag | null>(null);

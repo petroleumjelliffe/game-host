@@ -24,6 +24,9 @@ export interface RackProps {
   insertionSlot?: number | null;
   /** Ref to the tiles-only wrapper — drop targeting measures this rect. */
   tilesRef?: Ref<HTMLDivElement>;
+  /** Entry rendered invisible (still occupying its slot) while a flight
+   * carries its tile home — the flight is the tile until it lands. */
+  hiddenId?: number | null;
 }
 
 /** The viewer's own tiles plus the bag. Tiles sit at fixed 48px slots so a
@@ -33,7 +36,7 @@ export interface RackProps {
  * (decided 2026-08-31). */
 export function Rack({
   entries, selected, onTileTap, bagCount,
-  onTilePointerDown, draggingIndex = null, insertionSlot = null, tilesRef,
+  onTilePointerDown, draggingIndex = null, insertionSlot = null, tilesRef, hiddenId = null,
 }: RackProps) {
   const visibleCount = entries.length - (draggingIndex === null ? 0 : 1);
   const slots = visibleCount + (insertionSlot === null ? 0 : 1);
@@ -86,6 +89,7 @@ export function Rack({
                 ...slide,
                 boxShadow: shadow,
                 ...(onTilePointerDown === undefined ? {} : { touchAction: 'none' }),
+                ...(hiddenId === entry.id ? { opacity: 0 } : {}),
               }}
             >
               {tile === '_' ? '·' : tile}

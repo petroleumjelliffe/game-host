@@ -16,8 +16,10 @@ import type {
 } from '../../session/protocol';
 import { Board } from './Board';
 import { BoardViewport } from './BoardViewport';
-import { dropAction, hitCell, moveTile, rackSlot, type DragSource } from './dragPlan';
+import { dropAction, hitCell, moveTile, rackSlot, type DragSource, type Rect } from './dragPlan';
 import { useTileDrag } from './useTileDrag';
+import { EASE_LIFT, LIFT_MS, SNAPBACK_MS, TRAVEL_MS } from './motion';
+import { TileFlightLayer, useTileFlights } from './TileFlightLayer';
 import { Rack } from './Rack';
 import { BlankPicker } from './BlankPicker';
 import { PlayerChips } from './PlayerChips';
@@ -116,6 +118,7 @@ export function GameScreen({
     setExchangeSel([]);
     setPendingBlank(null);
     setPassArmed(false);
+    setFlightHidden(null);
   }, [view, viewerId]);
 
   // What's on the board this turn, derived — the entry array is the only
@@ -174,6 +177,13 @@ export function GameScreen({
   const rackTilesRef = useRef<HTMLDivElement>(null);
   const dragEnabled = view.stage === 'playing' && !exchangeOn;
 
+  // Tap travel and snap-back (motion spec): flights are garnish over already
+  // committed state; while one flies, the real tile hides behind it.
+  const { flights, launch: launchFlight, finish: finishFlight } = useTileFlights();
+  const [flightHidden, setFlightHidden] = useState<{ pos?: number; entryId?: number } | null>(null);
+  // Where the current drag lifted from — an invalid drop flies back here.
+  const dragSourceRect = useRef<Rect | null>(null);
+
   const { drag, start: startDrag, consumeDragClick } = useTileDrag((source, p) => {
     const bRect = boardGridRef.current?.getBoundingClientRect();
     const cell = bRect === undefined ? null : hitCell(bRect, p);
@@ -191,8 +201,17 @@ export function GameScreen({
         setSelected(null);
         break;
       case 'recallAt': recallOne(action.from, action.slot); break;
-      case 'none': break;
+      case 'none': {
+        // Invalid drop: the spec reverses the travel — fly the ghost's tile
+        // from the release point back to where it lifted from.
+        const from = { left: p.x - 22, top: p.y - 25, width: 44, height: 50 };
+        if (dragSourceRect.current !== null) {
+          launchFlight(source.tile, from, dragSourceRect.current, SNAPBACK_MS);
+        }
+        break;
+      }
     }
+    dragSourceRect.current = null;
   });
 
   // Live hover: which tray slot the current drag would drop into — drives
@@ -223,13 +242,34 @@ export function GameScreen({
     setPassArmed(false);
 
     if (staged.some((p) => p.pos === pos)) {
-      // Tap a staged tile to take it back.
+      // Tap a staged tile to take it back — it flies home to its reserved
+      // slot (the DOM still shows both ends until this handler returns).
+      const idx = rack.findIndex((e) => e.stagedAt === pos);
+      const entry = rack[idx];
+      const fromEl = boardGridRef.current?.querySelector(`[data-testid="cell-${pos}"]`);
+      const toEl = rackTilesRef.current?.querySelector(`[data-testid="rack-slot-reserved-${idx}"]`);
       recallOne(pos, null);
+      if (entry !== undefined && fromEl != null && toEl != null
+        && launchFlight(entry.tile, fromEl.getBoundingClientRect(), toEl.getBoundingClientRect(),
+          TRAVEL_MS, () => { setFlightHidden(null); })) {
+        setFlightHidden({ entryId: entry.id });
+      }
       return;
     }
 
     if (exchangeOn || selected === null) return;
+    // Tap-to-place: the tile flies from its rack slot to the cell and the
+    // settled tile appears when the flight lands (a blank skips the flight —
+    // it detours through the picker first).
+    const entry = rack[selected];
+    const fromEl = rackTilesRef.current?.querySelector(`[data-testid="rack-tile-${selected}"]`);
+    const toEl = boardGridRef.current?.querySelector(`[data-testid="cell-${pos}"]`);
     placeFromRack(selected, pos);
+    if (entry !== undefined && entry.tile !== '_' && fromEl != null && toEl != null
+      && launchFlight(entry.tile, fromEl.getBoundingClientRect(), toEl.getBoundingClientRect(),
+        TRAVEL_MS, () => { setFlightHidden(null); })) {
+      setFlightHidden({ pos });
+    }
   };
 
   const pickBlank = (letter: Letter) => {
@@ -385,9 +425,14 @@ export function GameScreen({
                 gridRef={boardGridRef}
                 onStagedPointerDown={dragEnabled ? (pos, e) => {
                   const pl = staged.find((p) => p.pos === pos);
-                  if (pl !== undefined) startDrag({ kind: 'board', pos, tile: pl.tile }, e);
+                  if (pl !== undefined) {
+                    dragSourceRect.current = e.currentTarget.getBoundingClientRect();
+                    startDrag({ kind: 'board', pos, tile: pl.tile }, e);
+                  }
                 } : undefined}
-                hiddenPos={drag?.active === true && drag.source.kind === 'board' ? drag.source.pos : null}
+                hiddenPos={drag?.active === true && drag.source.kind === 'board'
+                  ? drag.source.pos
+                  : flightHidden?.pos ?? null}
               />
 
               {preview !== null && (() => {
@@ -456,11 +501,13 @@ export function GameScreen({
               onTilePointerDown={dragEnabled ? (index, e) => {
                 const entry = rack[index];
                 if (entry !== undefined && entry.stagedAt === null) {
+                  dragSourceRect.current = e.currentTarget.getBoundingClientRect();
                   startDrag({ kind: 'rack', index, tile: entry.tile }, e);
                 }
               } : undefined}
               draggingIndex={drag?.active === true && drag.source.kind === 'rack' ? drag.source.index : null}
               insertionSlot={hoverSlot}
+              hiddenId={flightHidden?.entryId ?? null}
             />
           </div>
 
@@ -537,14 +584,24 @@ export function GameScreen({
         <MoveLog view={view} />
       </section>
 
-      {/* The dragged tile's only representation — rides under the finger. */}
+      <TileFlightLayer flights={flights} onFinished={finishFlight} />
+
+      {/* The dragged tile's only representation — rides under the finger,
+        * lifted 1.14/−12px and tilted 4° toward the drag direction with the
+        * spec's 120ms springy lift (the mount transition carries it). */}
       {drag !== null && drag.active && (
         <div
           data-testid="drag-ghost"
-          className={`pointer-events-none fixed z-50 flex h-[50px] w-11 items-center justify-center rounded-md bg-tile font-tile text-lg font-bold ${
+          className={`wg-ghost pointer-events-none fixed z-50 flex h-[50px] w-11 items-center justify-center rounded-md bg-tile font-tile text-lg font-bold ${
             drag.source.tile === '_' ? 'text-tile-blank' : 'text-tile-ink'
           }`}
-          style={{ left: drag.x - 22, top: drag.y - 25, boxShadow: 'inset 0 -3px 0 #d9bf8a, 0 6px 14px rgba(0,0,0,.35)' }}
+          style={{
+            left: drag.x - 22,
+            top: drag.y - 25,
+            transform: `translateY(-12px) scale(1.14) rotate(${drag.x >= drag.ox ? -4 : 4}deg)`,
+            transition: `transform ${LIFT_MS}ms ${EASE_LIFT}`,
+            boxShadow: 'inset 0 -3px 0 #d9bf8a, 0 14px 22px rgba(0,0,0,.32)',
+          }}
         >
           {drag.source.tile === '_' ? '·' : drag.source.tile}
           <span className="absolute bottom-0.5 right-1 text-[10px] font-semibold leading-none">
