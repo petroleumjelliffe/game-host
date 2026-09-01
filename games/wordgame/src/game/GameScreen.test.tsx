@@ -308,6 +308,26 @@ describe('GameScreen move log', () => {
     expect(items[1]).toHaveTextContent('Alice passed');
     expect(items[2]).toHaveTextContent('Bob exchanged 3 tiles');
     expect(items[3]).toHaveTextContent('Alice: CATS (12) for 12');
+    // None of these carry `at` (old-save shape) — no age suffix to show.
+    for (const item of items) expect(item).not.toHaveTextContent('ago');
+  });
+
+  it('appends the move\'s age when the record carries a timestamp', () => {
+    const v = makeView({
+      log: [
+        {
+          playerId: 'me',
+          kind: 'play',
+          words: [{ word: 'CATS', score: 12 }],
+          score: 12,
+          tilesPlayed: 4,
+          at: Date.now() - 5 * 60 * 1000,
+        },
+      ],
+    });
+    renderScreen({ view: v });
+    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('Alice: CATS (12) for 12 · 5m ago');
   });
 });
 

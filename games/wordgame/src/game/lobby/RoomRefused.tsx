@@ -20,16 +20,16 @@ export interface RoomRefusedProps {
 
 export function RoomRefused({ roomId, message, onRetry, onExit }: RoomRefusedProps) {
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-page p-6">
       <div
         data-testid="room-refused"
-        className="mx-auto max-w-md rounded-xl bg-white p-8 text-center shadow-xl"
+        className="mx-auto max-w-md rounded-xl bg-paper p-8 text-center shadow-xl"
       >
         <h1 className="mb-2 text-2xl font-bold">Could not join {roomId ?? 'that room'}</h1>
         {/* The server's own words. It knows why; inventing a friendlier reason
             here would be guessing, and the codes that need special handling
             already have their own screens. */}
-        <p className="mb-6 text-sm text-gray-600">{message ?? 'The room refused the seat.'}</p>
+        <p className="mb-6 text-sm text-ink-soft">{message ?? 'The room refused the seat.'}</p>
 
         <button
           type="button"
@@ -41,7 +41,7 @@ export function RoomRefused({ roomId, message, onRetry, onExit }: RoomRefusedPro
         <button
           type="button"
           onClick={onExit}
-          className="m-0 mt-3 w-full rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+          className="m-0 mt-3 w-full rounded-lg border border-line-strong px-4 py-2 hover:bg-page/40"
         >
           Back to the lobby
         </button>

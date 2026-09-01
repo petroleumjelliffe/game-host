@@ -118,9 +118,9 @@ export function RoomPage({ connect = getConnection }: RoomPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
+    <div className="flex min-h-screen items-center justify-center bg-page p-6">
       <ConnectionStrip status={room.status} />
-      <p className="text-gray-600">{room.phase === 'joining' ? 'Joining…' : 'Connecting…'}</p>
+      <p className="text-ink-soft">{room.phase === 'joining' ? 'Joining…' : 'Connecting…'}</p>
     </div>
   );
 }
