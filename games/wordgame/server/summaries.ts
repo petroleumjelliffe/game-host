@@ -10,6 +10,10 @@ import { MAX_PLAYERS } from '../engine/constants.js';
 import type { RoomSummary } from '../session/protocol.js';
 import type { RoomRegistry } from './rooms.js';
 
+// Cap the per-request workload: 20 covers any honest device's localStorage
+// several times over, and extra entries are dropped rather than erroring so
+// a wild client still gets its first 20 answered (documented 2026-08-31;
+// the silent-drop shape was a review finding on the redesign branch).
 const MAX_ROOMS = 20;
 
 export function summariesHandler(rooms: Pick<RoomRegistry, 'get'>) {

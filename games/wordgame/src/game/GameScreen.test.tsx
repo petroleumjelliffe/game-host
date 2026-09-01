@@ -482,6 +482,19 @@ describe('GameScreen drag and drop', () => {
     expect(screen.getByRole('dialog', { name: 'Choose a letter for the blank' })).toBeInTheDocument();
   });
 
+  it('clamps the score badge at the top-right corner', () => {
+    // A committed tile at pos 29 (row 1, col 14) lets a tile staged at pos 14
+    // form a two-letter word whose preview anchors the very corner cell.
+    const board = makeView().board;
+    board[29] = { letter: 'A', isBlank: false };
+    renderScreen({ view: makeView({ board }) });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 290, y: 10 }); // cell 14
+    const badge = screen.getByTestId('stage-badge');
+    expect(badge.className).not.toContain('-translate-y-full'); // row 0: below the anchor
+    expect(badge.style.right).toBe('0px'); // col 14: right-aligned
+  });
+
   it('a sub-threshold press is still the old tap-select', () => {
     renderScreen({ view: makeView() });
     stubGeometry();

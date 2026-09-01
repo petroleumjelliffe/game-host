@@ -123,6 +123,12 @@ test('a lobby-stage room summarizes with no game state yet', async () => {
   }]);
 });
 
+test('silently caps a request at 20 rooms — extras dropped, not an error', async () => {
+  const rooms = Array.from({ length: 21 }, (_, i) => ({ roomId: `R${i}`, playerId: 'p', token: 't' }));
+  const { summaries } = await fetchSummaries(rooms);
+  expect(summaries).toHaveLength(20);
+});
+
 test('a malformed body is refused rather than probed', async () => {
   const res = await fetch(`${url}${BASE_PATH}/api/summaries`, {
     method: 'POST',

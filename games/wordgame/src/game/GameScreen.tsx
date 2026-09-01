@@ -370,18 +370,26 @@ export function GameScreen({
                 hiddenPos={drag?.active === true && drag.source.kind === 'board' ? drag.source.pos : null}
               />
 
-              {preview !== null && (
-            <div
-              data-testid="stage-badge"
-              className="pointer-events-none absolute z-10 -translate-y-full rounded-full bg-accent px-2.5 py-0.5 text-[13px] font-bold text-white shadow"
-              style={{
-                left: `${((colOf(preview.anchorPos) + 1) / 15) * 100}%`,
-                top: `${(rowOf(preview.anchorPos) / 15) * 100}%`,
-              }}
-            >
-              {preview.bingo ? `+${preview.total} · BINGO` : `+${preview.total}`}
-            </div>
-          )}
+              {preview !== null && (() => {
+                const col = colOf(preview.anchorPos);
+                const row = rowOf(preview.anchorPos);
+                const flushRight = col >= 12; // the badge is wider than a cell — hug the edge
+                const belowAnchor = row === 0; // no room above row 0 — sit under the anchor
+                return (
+                  <div
+                    data-testid="stage-badge"
+                    className={`pointer-events-none absolute z-10 rounded-full bg-accent px-2.5 py-0.5 text-[13px] font-bold text-white shadow ${
+                      belowAnchor ? '' : '-translate-y-full'
+                    }`}
+                    style={{
+                      ...(flushRight ? { right: 0 } : { left: `${((col + 1) / 15) * 100}%` }),
+                      top: `${((belowAnchor ? row + 1 : row) / 15) * 100}%`,
+                    }}
+                  >
+                    {preview.bingo ? `+${preview.total} · BINGO` : `+${preview.total}`}
+                  </div>
+                );
+              })()}
             </div>
             </BoardViewport>
           </div>
