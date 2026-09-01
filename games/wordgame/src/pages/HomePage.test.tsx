@@ -167,6 +167,26 @@ describe('HomePage — the notification nudge', () => {
   });
 });
 
+describe('HomePage — the pending-email banner', () => {
+  it('shows the amber confirm banner with the address masked', async () => {
+    mockRooms([]);
+    notifyStatusValue = 'pending';
+    emailAddressValue = 'pete@example.com';
+    renderHome();
+    expect(await screen.findByText(/Confirm your email/)).toBeInTheDocument();
+    expect(screen.getByText(/p•••@example\.com/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resend' })).toBeInTheDocument();
+  });
+
+  it('masks a missing address as "your email" without crashing', async () => {
+    mockRooms([]);
+    notifyStatusValue = 'pending';
+    emailAddressValue = null;
+    renderHome();
+    expect(await screen.findByText(/we sent a link to your email/)).toBeInTheDocument();
+  });
+});
+
 describe('HomePage — stale identities', () => {
   it('drops identities for rooms the server no longer knows', async () => {
     listRoomsMock.mockReturnValue([
