@@ -17,8 +17,17 @@ export interface MyGame {
 }
 
 // The endpoint lives under the game's base path; the client stays
-// origin-relative by addressing it through Vite's own base
-// (`import.meta.env.BASE_URL` ends with '/'), never a hardcoded prefix.
+// origin-relative by addressing it through Vite's own base. BASE_URL arrives
+// verbatim from the config — '/wordgame', no trailing slash — so it is
+// normalized before joining, the same way connection.ts builds the socket
+// path and register.ts the worker's. Trusting the slash is how the entry
+// list shipped fetching '/wordgameapi/summaries' and came up empty on every
+// deployment (2026-08-31). A function rather than a module constant so the
+// regression test can pin the build's real, slashless value via stubEnv —
+// under vitest BASE_URL is '/', which is exactly how the bug got past the
+// suite the first time.
+const summariesUrl = () =>
+  `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}api/summaries`;
 
 export function useMyGames(): { games: MyGame[] | null } {
   const [games, setGames] = useState<MyGame[] | null>(null);
@@ -29,7 +38,7 @@ export function useMyGames(): { games: MyGame[] | null } {
     if (rooms.length === 0) { setGames([]); return; }
     void (async () => {
       try {
-        const res = await fetch(`${import.meta.env.BASE_URL}api/summaries`, {
+        const res = await fetch(summariesUrl(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

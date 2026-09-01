@@ -115,6 +115,24 @@ function renderHome(props: HomePageProps = {}) {
 }
 
 describe('HomePage — grouping and navigation', () => {
+  it('fetches summaries under the game base path, slash supplied', async () => {
+    // Regression: in a build BASE_URL arrives verbatim from the config —
+    // '/wordgame', NO trailing slash — and naive concatenation shipped a
+    // fetch of '/wordgameapi/summaries' that 404ed on every deployment,
+    // emptying the entry list (2026-08-31). Under vitest BASE_URL is '/',
+    // which is why no test caught it: stubbing the build's real value is the
+    // point of this one.
+    vi.stubEnv('BASE_URL', '/wordgame');
+    try {
+      mockRooms([playingRoom('KTWQ', { yourTurn: true })]);
+      renderHome();
+      await screen.findByTestId('game-KTWQ');
+      expect(fetchMock).toHaveBeenCalledWith('/wordgame/api/summaries', expect.anything());
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('groups games by whose move it is', async () => {
     mockRooms([
       lobbyRoom('LARK'),
