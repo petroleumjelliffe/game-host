@@ -13,7 +13,6 @@ import { useMyGames, type MyGame } from './useMyGames';
 import { useNotifyStatus } from '../notify/useNotifyStatus';
 import { NotificationSettings } from '../notify/NotificationSettings';
 import { ago } from '../game/LastMove';
-import { seatEmoji } from '../game/seatEmoji';
 import type { RoomSummary } from '../../session/protocol';
 
 export interface HomePageProps {
@@ -42,14 +41,6 @@ function ordinal(n: number): string {
     case 3: return `${n}rd`;
     default: return `${n}th`;
   }
-}
-
-/** "A", "A and B", "A, B and C" — no Oxford comma, matching the design's
- * "Kit and Ro joined". */
-function joinNames(names: string[]): string {
-  if (names.length === 0) return '';
-  if (names.length === 1) return names[0]!;
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
 }
 
 function moveFragment(lastMove: KnownSummary['lastMove']): string | null {
@@ -92,8 +83,15 @@ function playingSubline(summary: KnownSummary): string {
   return parts.join(' · ');
 }
 
-function emojiRow(seats: number): string {
-  return Array.from({ length: seats }, (_, i) => seatEmoji(i) ?? '').join('');
+/** Everyone in the room as one line, "You" first with the rest following in
+ * turn order — matching the in-game chip row, and replacing the seat-emoji
+ * strip that read as noise (feedback 2026-09-01). */
+function playerLine(summary: KnownSummary): string {
+  const i = summary.players.findIndex((p) => p.isYou);
+  const ordered = i <= 0
+    ? summary.players
+    : [...summary.players.slice(i), ...summary.players.slice(0, i)];
+  return ordered.map((p) => (p.isYou ? 'You' : p.name)).join(', ');
 }
 
 function SectionHeader({ children }: { children: ReactNode }) {
@@ -127,14 +125,12 @@ function CardShell({
 
 function WaitingCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
   const you = summary.players.find((p) => p.isYou);
-  const others = summary.players.filter((p) => !p.isYou).map((p) => p.name);
   const border = you?.isHost
     ? 'border-[1.5px] border-dashed border-warn-accent'
     : 'border border-line';
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass={border} bgClass="bg-white">
       <div className="flex items-center gap-2">
-        <span aria-hidden>{emojiRow(summary.players.length)}</span>
         <span className="flex-1 truncate text-[14px] font-semibold text-ink">
           Room {roomId}{you?.isHost === true ? ' · you host' : ''}
         </span>
@@ -142,20 +138,16 @@ function WaitingCard({ roomId, summary, navigate }: { roomId: string; summary: K
           {summary.players.length} OF {summary.capacity}
         </span>
       </div>
-      {others.length > 0 && (
-        <div className="text-[12px] text-ink-mute">{joinNames(others)} joined</div>
-      )}
+      <div className="text-[12px] text-ink-mute">{playerLine(summary)}</div>
     </CardShell>
   );
 }
 
 function YourMoveCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
-  const others = summary.players.filter((p) => !p.isYou).map((p) => p.name);
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass="border-[1.5px] border-accent" bgClass="bg-[#f0f5ff]">
       <div className="flex items-center gap-2">
-        <span aria-hidden>{emojiRow(summary.players.length)}</span>
-        <span className="flex-1 truncate text-[14px] font-semibold text-ink">vs {others.join(', ')}</span>
+        <span className="flex-1 truncate text-[14px] font-semibold text-ink">{playerLine(summary)}</span>
         <span className="flex-none rounded-md bg-accent px-2 py-0.5 text-[10.5px] font-bold text-white">
           YOUR TURN
         </span>
@@ -166,12 +158,10 @@ function YourMoveCard({ roomId, summary, navigate }: { roomId: string; summary: 
 }
 
 function TheirMoveCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
-  const others = summary.players.filter((p) => !p.isYou).map((p) => p.name);
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass="border border-line" bgClass="bg-white">
       <div className="flex items-center gap-2">
-        <span aria-hidden>{emojiRow(summary.players.length)}</span>
-        <span className="flex-1 truncate text-[14px] font-semibold text-ink-soft">vs {others.join(', ')}</span>
+        <span className="flex-1 truncate text-[14px] font-semibold text-ink-soft">{playerLine(summary)}</span>
         <span className="flex-none rounded-md bg-[#eee8db] px-2 py-0.5 text-[10.5px] font-semibold text-ink-mute">
           {(summary.currentPlayerName ?? '…').toUpperCase()}’S TURN
         </span>
@@ -182,13 +172,11 @@ function TheirMoveCard({ roomId, summary, navigate }: { roomId: string; summary:
 }
 
 function FinishedCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
-  const others = summary.players.filter((p) => !p.isYou).map((p) => p.name);
   const winner = (summary.winnerNames ?? []).join(' & ');
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass="border border-line" bgClass="bg-white">
       <div className="flex items-center gap-2">
-        <span aria-hidden>{emojiRow(summary.players.length)}</span>
-        <span className="flex-1 truncate text-[14px] font-semibold text-ink-soft">vs {others.join(', ')}</span>
+        <span className="flex-1 truncate text-[14px] font-semibold text-ink-soft">{playerLine(summary)}</span>
         <span className="flex-none rounded-md bg-[#eee8db] px-2 py-0.5 text-[10.5px] font-semibold text-ink-mute">
           {winner} WON
         </span>

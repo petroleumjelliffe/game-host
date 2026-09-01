@@ -42,3 +42,21 @@ describe('previewPlay', () => {
     expect(preview?.bingo).toBe(true);
   });
 });
+
+// The guards — each a way a mid-drag or mid-tap staging can be transiently
+// nonsensical; all must read as "no preview", never as a throw.
+describe('previewPlay guards', () => {
+  it('answers null for duplicate positions', () => {
+    expect(previewPlay(empty(), [{ pos: CENTER, tile: 'A' }, { pos: CENTER, tile: 'B' }])).toBeNull();
+  });
+
+  it('answers null when staging onto an occupied square', () => {
+    const board = empty();
+    board[CENTER] = { letter: 'Q', isBlank: false };
+    expect(previewPlay(board, [{ pos: CENTER, tile: 'A' }])).toBeNull();
+  });
+
+  it('answers null for a wordless single-tile first move', () => {
+    expect(previewPlay(empty(), [{ pos: CENTER, tile: 'A' }])).toBeNull();
+  });
+});

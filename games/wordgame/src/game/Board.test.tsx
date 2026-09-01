@@ -48,12 +48,13 @@ describe('Board', () => {
     expect(cell).toHaveTextContent('10');
   });
 
-  it('shows a placed blank as lowercase, worth 0, visibly distinct', () => {
+  it('shows a placed blank like any tile — CAPS, only the 0 gives it away', () => {
     const board: Square[] = emptyBoard();
     board[CENTER] = { letter: 'Z', isBlank: true };
     render(<Board board={board} staged={[]} onCellTap={noop} />);
     const cell = screen.getByTestId(`cell-${CENTER}`);
-    expect(cell).toHaveTextContent('z');
+    expect(cell).toHaveTextContent('Z');
+    expect(cell).not.toHaveTextContent('z');
     expect(cell).toHaveTextContent('0');
     expect(cell).not.toHaveTextContent('10');
     expect(cell).toHaveAttribute('data-blank');

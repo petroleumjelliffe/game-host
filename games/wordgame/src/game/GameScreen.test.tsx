@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { GameScreen } from './GameScreen';
 import { makeView } from '../test/fixtures';
-import { CENTER } from '../../engine/constants';
+import { CENTER, type Tile } from '../../engine/constants';
 import type { GameView, MoveRejectedMessage, WireMove } from '../../session/protocol';
 import type { NotifyStatus } from '../notify/useNotifyStatus';
 
@@ -47,7 +47,7 @@ function renderScreen(overrides: {
   presence?: Record<string, boolean>;
 } = {}) {
   const sendMove = overrides.sendMove ?? vi.fn();
-  render(
+  const utils = render(
     <GameScreen
       view={overrides.view ?? view}
       viewerId="me"
@@ -60,7 +60,7 @@ function renderScreen(overrides: {
       onExit={() => {}}
     />,
   );
-  return { sendMove };
+  return { sendMove, ...utils };
 }
 
 const rackTiles = () => within(screen.getByTestId('rack')).getAllByRole('button');
@@ -71,7 +71,8 @@ const rackTiles = () => within(screen.getByTestId('rack')).getAllByRole('button'
 function stageFirstTwoTiles() {
   fireEvent.click(screen.getByTestId('rack-tile-0'));
   fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
-  fireEvent.click(screen.getByTestId('rack-tile-0')); // rack shifted after the first placement
+  // Indices no longer shift: the staged tile's slot stays reserved.
+  fireEvent.click(screen.getByTestId('rack-tile-1'));
   fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
 }
 
@@ -102,7 +103,7 @@ describe('GameScreen tap-to-place', () => {
     renderScreen({ view: makeView(), sendMove });
     fireEvent.click(screen.getByTestId('rack-tile-0')); // C
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
-    fireEvent.click(screen.getByTestId('rack-tile-0')); // A (rack shifted)
+    fireEvent.click(screen.getByTestId('rack-tile-1')); // A (slot 0 stays reserved)
     fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
     // CA through center prices a preview, so the button reads "Play · +N"
     // rather than bare "Play" — match by prefix, not exact name.
@@ -127,7 +128,8 @@ describe('GameScreen tap-to-place', () => {
     const cell = screen.getByTestId(`cell-${CENTER}`);
     expect(cell).toHaveAttribute('data-staged');
     expect(cell).toHaveAttribute('data-blank');
-    expect(cell).toHaveTextContent('z');
+    expect(cell).toHaveTextContent('Z'); // blanks read like normal tiles; the 0 is the tell
+    expect(cell).toHaveTextContent('0');
     expect(rackTiles()).toHaveLength(6);
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
     expect(sendMove).toHaveBeenCalledExactlyOnceWith({
@@ -140,9 +142,10 @@ describe('GameScreen tap-to-place', () => {
     renderScreen({ view: makeView() });
     fireEvent.click(screen.getByTestId('rack-tile-0'));
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
-    fireEvent.click(screen.getByTestId('rack-tile-0'));
+    fireEvent.click(screen.getByTestId('rack-tile-1')); // slot 0 stays reserved
     fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
     expect(rackTiles()).toHaveLength(5);
+    expect(screen.getByTestId('rack-slot-reserved-0')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Recall' }));
     expect(rackTiles()).toHaveLength(7);
   });
@@ -150,7 +153,8 @@ describe('GameScreen tap-to-place', () => {
   it('disables Play when it is not your turn', () => {
     renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
-    expect(screen.getByText('Bob’s turn')).toBeInTheDocument();
+    // No "X's turn" line any more — the highlighted chip carries it.
+    expect(screen.getByTestId('player-chip-opp')).toHaveAttribute('data-current');
   });
 });
 
@@ -206,10 +210,17 @@ describe('GameScreen pass', () => {
 });
 
 describe('GameScreen status and scores', () => {
-  it('shows turn and the scoreless counter when nonzero', () => {
-    renderScreen({ view: makeView({ bagCount: 12, scorelessTurns: 3 }) });
-    expect(screen.getByText('Your turn')).toBeInTheDocument();
-    expect(screen.getByTestId('scoreless-counter')).toHaveTextContent('Scoreless turns: 3/6');
+  it('shows the scoreless countdown on the last-move banner when nonzero', () => {
+    // The counter rides the last-move line since the turn line was retired;
+    // scoreless turns imply a pass/exchange/zero-score play in the log.
+    renderScreen({
+      view: makeView({
+        scorelessTurns: 3,
+        log: [{ playerId: 'opp', kind: 'pass', score: 0 }],
+      }),
+    });
+    expect(screen.getByTestId('scoreless-counter')).toHaveTextContent('Scoreless: 3/6');
+    expect(screen.queryByText(/turn$/)).not.toBeInTheDocument(); // the line is gone
   });
 
   it('shows the bag tile with the bag count', () => {
@@ -263,16 +274,16 @@ describe('GameScreen last move', () => {
 });
 
 describe('GameScreen notifications', () => {
-  it('adds a nudge note and the profile badge when notifications are on', () => {
+  it('shows the profile badge exactly when notifications are on', () => {
+    // The "you'll get a nudge" turn-line note went with the turn line; the
+    // badge on the profile chip is the whole signal now.
     notifyStatusValue = 'on';
-    renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
-    expect(screen.getByText('Bob’s turn — you’ll get a nudge')).toBeInTheDocument();
+    const { unmount } = renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
     expect(screen.getByTestId('notify-badge')).toBeInTheDocument();
-  });
+    unmount();
 
-  it('shows plain turn text and no badge when notifications are not on', () => {
+    notifyStatusValue = 'off';
     renderScreen({ view: makeView({ currentPlayerId: 'opp', turnIndex: 1 }) });
-    expect(screen.getByText('Bob’s turn')).toBeInTheDocument();
     expect(screen.queryByTestId('notify-badge')).not.toBeInTheDocument();
   });
 
@@ -303,7 +314,9 @@ describe('GameScreen move log', () => {
       ],
     });
     renderScreen({ view: v });
-    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem');
+    // { hidden: true }: the history section is hidden in the app shell until
+    // its reveal is designed — the log itself must keep rendering correctly.
+    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem', { hidden: true });
     expect(items[0]).toHaveTextContent('Bob: ZYMURGY (90) for 140 — bingo!');
     expect(items[1]).toHaveTextContent('Alice passed');
     expect(items[2]).toHaveTextContent('Bob exchanged 3 tiles');
@@ -326,7 +339,9 @@ describe('GameScreen move log', () => {
       ],
     });
     renderScreen({ view: v });
-    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem');
+    // { hidden: true }: the history section is hidden in the app shell until
+    // its reveal is designed — the log itself must keep rendering correctly.
+    const items = within(screen.getByTestId('move-log')).getAllByRole('listitem', { hidden: true });
     expect(items[0]).toHaveTextContent('Alice: CATS (12) for 12 · 5m ago');
   });
 });
@@ -391,5 +406,201 @@ describe('GameScreen game over', () => {
     expect(over).toHaveTextContent('+6 played out');
     expect(screen.queryByRole('button', { name: 'Play' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('rack')).not.toBeInTheDocument();
+  });
+});
+
+// jsdom rects are 0×0 — stub the two rects drops are resolved against.
+function stubRect(el: HTMLElement, r: { left: number; top: number; width: number; height: number }) {
+  el.getBoundingClientRect = () =>
+    ({ ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top, toJSON: () => ({}) }) as DOMRect;
+}
+function stubGeometry() {
+  stubRect(screen.getByTestId('board'), { left: 0, top: 0, width: 300, height: 300 }); // 20px cells
+  stubRect(screen.getByTestId('rack-tiles'), { left: 0, top: 400, width: 288, height: 50 });
+}
+function dragFromTo(el: HTMLElement, from: { x: number; y: number }, to: { x: number; y: number }) {
+  fireEvent.pointerDown(el, { pointerId: 1, clientX: from.x, clientY: from.y });
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: to.x, clientY: to.y });
+  fireEvent.pointerUp(window, { pointerId: 1, clientX: to.x, clientY: to.y });
+}
+
+describe('GameScreen drag and drop', () => {
+  // The fixture rack is ['C','A','T','S','D','O','_'] — blank at index 6.
+  it('drags a rack tile onto an empty cell and stages it', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 });
+    expect(screen.getByTestId('cell-16')).toHaveAttribute('data-staged');
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(6); // one left the tray
+  });
+
+  it('shows the ghost while dragging and no dimmed source', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    const tile = screen.getByTestId('rack-tile-0');
+    fireEvent.pointerDown(tile, { pointerId: 1, clientX: 22, clientY: 425 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 100, clientY: 200 });
+    expect(screen.getByTestId('drag-ghost')).toBeInTheDocument();
+    expect(screen.queryByTestId('rack-tile-0')).toBeNull(); // gone, not dimmed
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 100, clientY: 200 });
+    expect(screen.queryByTestId('drag-ghost')).toBeNull();
+  });
+
+  it('rearranges the rack by dragging within the tray', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    const letters = () =>
+      screen.getAllByTestId(/^rack-tile-/).map((el) => el.textContent);
+    const before = letters();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 150, y: 425 }); // slot 3
+    const after = letters();
+    expect(after).not.toEqual(before);
+    expect([...after].sort()).toEqual([...before].sort()); // same tiles, new order
+  });
+
+  it('drags a staged tile back to the tray to recall it', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 }); // stage at 16
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(6);
+    dragFromTo(screen.getByTestId('cell-16'), { x: 30, y: 30 }, { x: 150, y: 425 });
+    expect(screen.getByTestId('cell-16')).not.toHaveAttribute('data-staged');
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(7);
+  });
+
+  it('moves a staged tile to another empty cell', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 }); // stage at 16
+    dragFromTo(screen.getByTestId('cell-16'), { x: 30, y: 30 }, { x: 90, y: 90 }); // cell (4,4) = 64
+    expect(screen.getByTestId('cell-16')).not.toHaveAttribute('data-staged');
+    expect(screen.getByTestId('cell-64')).toHaveAttribute('data-staged');
+  });
+
+  it('a drag onto an occupied cell snaps back — nothing changes', () => {
+    const board = makeView().board;
+    board[16] = { letter: 'Q', isBlank: false };
+    renderScreen({ view: makeView({ board }) });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 });
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(7); // all still in the tray
+  });
+
+  it('dropping a blank on a cell opens the blank picker', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-6'), { x: 310, y: 425 }, { x: 30, y: 30 });
+    expect(screen.getByRole('dialog', { name: 'Choose a letter for the blank' })).toBeInTheDocument();
+  });
+
+  it('clamps the score badge at the top-right corner', () => {
+    // A committed tile at pos 29 (row 1, col 14) lets a tile staged at pos 14
+    // form a two-letter word whose preview anchors the very corner cell.
+    const board = makeView().board;
+    board[29] = { letter: 'A', isBlank: false };
+    renderScreen({ view: makeView({ board }) });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 290, y: 10 }); // cell 14
+    const badge = screen.getByTestId('stage-badge');
+    expect(badge.className).not.toContain('-translate-y-full'); // row 0: below the anchor
+    expect(badge.style.right).toBe('0px'); // col 14: right-aligned
+  });
+
+  it('a sub-threshold press is still the old tap-select', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    const tile = screen.getByTestId('rack-tile-0');
+    fireEvent.pointerDown(tile, { pointerId: 1, clientX: 22, clientY: 425 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 25, clientY: 426 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 25, clientY: 426 });
+    fireEvent.click(tile);
+    fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
+    expect(screen.getByTestId(`cell-${CENTER}`)).toHaveAttribute('data-staged');
+  });
+});
+
+describe('GameScreen refill', () => {
+  function screenFor(view: GameView) {
+    return (
+      <GameScreen
+        view={view}
+        viewerId="me"
+        roomId="ABCD"
+        connected
+        sendMove={() => {}}
+        rejection={null}
+        onDismissRejection={() => {}}
+        onExit={() => {}}
+      />
+    );
+  }
+  const rackOf = (tiles: string[]) => makeView({
+    players: [
+      { id: 'me', name: 'Alice', score: 0, rackCount: 7, rack: tiles as Tile[] },
+      { id: 'opp', name: 'Bob', score: 0, rackCount: 7, rack: null },
+    ],
+  });
+
+  it('animates freshly drawn tiles in from the bag, staggered left to right', () => {
+    const { rerender } = render(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
+    // O and _ played; Z and Q drawn.
+    rerender(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'Z', 'Q'])));
+    const fresh = screen.getAllByTestId(/^rack-tile-/).filter((el) => el.className.includes('wg-refill'));
+    expect(fresh).toHaveLength(2);
+    expect(fresh[0]).toHaveStyle({ animationDelay: '0ms' });
+    expect(fresh[1]).toHaveStyle({ animationDelay: '60ms' });
+  });
+
+  it('an unchanged rack (someone else moved) animates nothing', () => {
+    const { rerender } = render(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
+    rerender(screenFor(rackOf(['C', 'A', 'T', 'S', 'D', 'O', '_'])));
+    const fresh = screen.getAllByTestId(/^rack-tile-/).filter((el) => el.className.includes('wg-refill'));
+    expect(fresh).toHaveLength(0);
+  });
+});
+
+describe('GameScreen roster and last-move naming', () => {
+  it('pins your chip leftmost with the rest following in turn order', () => {
+    renderScreen({
+      view: makeView({
+        players: [
+          { id: 'opp', name: 'Bob', score: 0, rackCount: 7, rack: null },
+          { id: 'me', name: 'Alice', score: 0, rackCount: 7, rack: ['C', 'A', 'T', 'S', 'D', 'O', '_'] },
+          { id: 'p3', name: 'Zed', score: 0, rackCount: 7, rack: null },
+        ],
+        currentPlayerId: 'opp',
+      }),
+    });
+    const ids = screen.getAllByTestId(/^player-chip-/).map((el) => el.getAttribute('data-testid'));
+    // Viewer first, then turn order wrapping: me → p3 → opp.
+    expect(ids).toEqual(['player-chip-me', 'player-chip-p3', 'player-chip-opp']);
+  });
+
+  it('says You on the last-move banner when the move was yours', () => {
+    renderScreen({ view: makeView({ log: [{ playerId: 'me', kind: 'pass', score: 0 }] }) });
+    expect(screen.getByTestId('last-move')).toHaveTextContent('You passed');
+  });
+});
+
+describe('GameScreen rack reservation', () => {
+  it('reserves the slot while the tile is on the board and returns it there', () => {
+    renderScreen({ view: makeView() });
+    fireEvent.click(screen.getByTestId('rack-tile-0')); // C
+    fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
+    expect(screen.getByTestId('rack-slot-reserved-0')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId(`cell-${CENTER}`)); // tap-return
+    expect(screen.queryByTestId('rack-slot-reserved-0')).toBeNull();
+    expect(screen.getByTestId('rack-tile-0')).toHaveTextContent(/^C/); // home again, same slot
+  });
+});
+
+describe('GameScreen app-shell layout', () => {
+  it('pins chrome and keeps the move history in the DOM but hidden', () => {
+    renderScreen();
+    const screenEl = screen.getByTestId('game-screen');
+    expect(screenEl.className).toContain('h-[100dvh]');
+    expect(screen.getByTestId('board-region')).toBeInTheDocument();
+    const history = screen.getByTestId('move-history');
+    expect(history).not.toBeVisible(); // hidden attribute — kept for a future reveal
   });
 });

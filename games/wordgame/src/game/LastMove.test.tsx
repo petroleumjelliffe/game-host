@@ -30,6 +30,13 @@ describe('ago', () => {
     expect(ago(at, now)).toMatch(/^\d+h ago$/);
   });
 
+  it('floors hours — never "24h ago" before a day has passed', () => {
+    const now = Date.now();
+    expect(ago(now - 1439 * 60_000, now)).toBe('23h ago');
+    expect(ago(now - 90 * 60_000, now)).toBe('1h ago');
+    expect(ago(now - 1440 * 60_000, now)).toBe('yesterday');
+  });
+
   it('reads "yesterday" once a full day has passed (25h)', () => {
     const now = Date.now();
     const at = now - 25 * 60 * 60_000;

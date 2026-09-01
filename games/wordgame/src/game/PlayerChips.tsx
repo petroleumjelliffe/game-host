@@ -10,11 +10,18 @@ export interface PlayerChipsProps {
 
 /** The roster as pills — the current player's is solid accent. Replaces the
  * old ScorePanel list; the bag count moved to the rack's bag tile, and a
- * disconnected player dims rather than growing a dot. */
+ * disconnected player dims rather than growing a dot.
+ *
+ * Rotated so the viewer leads: "You" is always leftmost and the others
+ * follow in turn order, so the highlight sweeps left→right and wraps
+ * (feedback 2026-09-01). Seat emojis stay tied to the ORIGINAL seat. */
 export function PlayerChips({ view, viewerId, presence, seatEmoji }: PlayerChipsProps) {
+  const seated = view.players.map((player, seat) => ({ player, seat }));
+  const viewerAt = seated.findIndex(({ player }) => player.id === viewerId);
+  const ordered = viewerAt <= 0 ? seated : [...seated.slice(viewerAt), ...seated.slice(0, viewerAt)];
   return (
     <div className="flex flex-wrap gap-2 px-3.5 pt-2.5">
-      {view.players.map((player, index) => {
+      {ordered.map(({ player, seat: index }) => {
         const current = view.stage === 'playing' && player.id === view.currentPlayerId;
         const connected = presence?.[player.id] ?? true;
         return (
