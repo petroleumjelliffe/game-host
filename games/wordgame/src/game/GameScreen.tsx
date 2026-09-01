@@ -4,10 +4,10 @@
 // game itself is the server's view, replaced wholesale on every commit, and
 // an arriving view resets the staging so the two can never disagree for long.
 
-import { useEffect, useState, type ButtonHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes } from 'react';
 import { EXCHANGE_MINIMUM_BAG } from '../../engine/intents';
 import { colOf, rowOf } from '../../engine/board';
-import type { Letter, Tile } from '../../engine/constants';
+import { TILE_VALUES, type Letter, type Tile } from '../../engine/constants';
 import type {
   GameView,
   MoveRejectedMessage,
@@ -16,6 +16,8 @@ import type {
 } from '../../session/protocol';
 import { Board } from './Board';
 import { BoardViewport } from './BoardViewport';
+import { dropAction, hitCell, moveTile, rackSlot, type DragSource } from './dragPlan';
+import { useTileDrag } from './useTileDrag';
 import { Rack } from './Rack';
 import { BlankPicker } from './BlankPicker';
 import { PlayerChips } from './PlayerChips';
@@ -120,7 +122,71 @@ export function GameScreen({
     setLocalRack((rack) => rack.filter((_, i) => i !== index));
   };
 
+  /** Stage a rack tile onto an empty cell — shared by tap and drag; a blank
+   * detours through the picker either way. */
+  const placeFromRack = (rackIndex: number, pos: number) => {
+    const tile = localRack[rackIndex];
+    if (tile === undefined) return;
+    if (tile === '_') {
+      setPendingBlank({ pos, rackIndex });
+      return;
+    }
+    setStaged((prev) => [...prev, { pos, tile }]);
+    removeRackAt(rackIndex);
+    setSelected(null);
+  };
+
+  /** Take one staged tile back to the rack — at `slot` when the drop said
+   * where, at the end for a tap or an off-board drop. */
+  const recallOne = (pos: number, slot: number | null) => {
+    const stagedHere = staged.find((p) => p.pos === pos);
+    if (stagedHere === undefined) return;
+    setStaged((prev) => prev.filter((p) => p.pos !== pos));
+    setLocalRack((rack) => {
+      const at = slot === null ? rack.length : Math.min(slot, rack.length);
+      return [...rack.slice(0, at), stagedHere.tile, ...rack.slice(at)];
+    });
+  };
+
+  // Drop targeting measures live rects: they already reflect the zoom
+  // transform, so the same math lands the same cell at 1× and 3×.
+  const boardGridRef = useRef<HTMLDivElement>(null);
+  const rackTilesRef = useRef<HTMLDivElement>(null);
+  const dragEnabled = view.stage === 'playing' && !exchangeOn;
+
+  const { drag, start: startDrag, consumeDragClick } = useTileDrag((source, p) => {
+    const bRect = boardGridRef.current?.getBoundingClientRect();
+    const cell = bRect === undefined ? null : hitCell(bRect, p);
+    const rRect = rackTilesRef.current?.getBoundingClientRect();
+    const visible = localRack.length - (source.kind === 'rack' ? 1 : 0);
+    const slot = cell !== null || rRect === undefined ? null : rackSlot(rRect, p, visible);
+    const action = dropAction(source, cell, slot, view.board, staged);
+    switch (action.kind) {
+      case 'place': placeFromRack(action.rackIndex, action.pos); break;
+      case 'moveStaged':
+        setStaged((prev) => prev.map((pl) => (pl.pos === action.from ? { ...pl, pos: action.pos } : pl)));
+        break;
+      case 'reorderRack':
+        setLocalRack((rack) => moveTile(rack, action.from, action.slot));
+        setSelected(null);
+        break;
+      case 'recallAt': recallOne(action.from, action.slot); break;
+      case 'none': break;
+    }
+  });
+
+  // Live hover: which tray slot the current drag would drop into — drives
+  // the sliding insertion gap.
+  const hoverSlot = (() => {
+    if (drag === null || !drag.active) return null;
+    const rRect = rackTilesRef.current?.getBoundingClientRect();
+    if (rRect === undefined) return null;
+    const visible = localRack.length - (drag.source.kind === 'rack' ? 1 : 0);
+    return rackSlot(rRect, drag, visible);
+  })();
+
   const rackTap = (index: number) => {
+    if (consumeDragClick()) return;
     setPassArmed(false);
     if (exchangeOn) {
       setExchangeSel((sel) =>
@@ -132,27 +198,18 @@ export function GameScreen({
   };
 
   const cellTap = (pos: number) => {
+    if (consumeDragClick()) return;
     if (view.board[pos] != null) return;
     setPassArmed(false);
 
-    const stagedHere = staged.find((p) => p.pos === pos);
-    if (stagedHere !== undefined) {
+    if (staged.some((p) => p.pos === pos)) {
       // Tap a staged tile to take it back.
-      setStaged((prev) => prev.filter((p) => p.pos !== pos));
-      setLocalRack((rack) => [...rack, stagedHere.tile]);
+      recallOne(pos, null);
       return;
     }
 
     if (exchangeOn || selected === null) return;
-    const tile = localRack[selected];
-    if (tile === undefined) return;
-    if (tile === '_') {
-      setPendingBlank({ pos, rackIndex: selected });
-      return;
-    }
-    setStaged((prev) => [...prev, { pos, tile }]);
-    removeRackAt(selected);
-    setSelected(null);
+    placeFromRack(selected, pos);
   };
 
   const pickBlank = (letter: Letter) => {
@@ -300,7 +357,18 @@ export function GameScreen({
           <div className="mx-auto" style={{ height: '100%', aspectRatio: '1 / 1', maxWidth: 'min(100%, 600px)' }}>
             <BoardViewport>
             <div className="relative w-full">
-              <Board board={view.board} staged={staged} lastPositions={lastPlayPositions} onCellTap={cellTap} />
+              <Board
+                board={view.board}
+                staged={staged}
+                lastPositions={lastPlayPositions}
+                onCellTap={cellTap}
+                gridRef={boardGridRef}
+                onStagedPointerDown={dragEnabled ? (pos, e) => {
+                  const pl = staged.find((p) => p.pos === pos);
+                  if (pl !== undefined) startDrag({ kind: 'board', pos, tile: pl.tile }, e);
+                } : undefined}
+                hiddenPos={drag?.active === true && drag.source.kind === 'board' ? drag.source.pos : null}
+              />
 
               {preview !== null && (
             <div
@@ -356,6 +424,13 @@ export function GameScreen({
               selected={exchangeOn ? exchangeSel : selected === null ? [] : [selected]}
               onTileTap={rackTap}
               bagCount={view.bagCount}
+              tilesRef={rackTilesRef}
+              onTilePointerDown={dragEnabled ? (index, e) => {
+                const tile = localRack[index];
+                if (tile !== undefined) startDrag({ kind: 'rack', index, tile }, e);
+              } : undefined}
+              draggingIndex={drag?.active === true && drag.source.kind === 'rack' ? drag.source.index : null}
+              insertionSlot={hoverSlot}
             />
           </div>
 
@@ -431,6 +506,22 @@ export function GameScreen({
         <h2 className="mb-1 text-sm font-semibold text-ink-soft">Moves</h2>
         <MoveLog view={view} />
       </section>
+
+      {/* The dragged tile's only representation — rides under the finger. */}
+      {drag !== null && drag.active && (
+        <div
+          data-testid="drag-ghost"
+          className={`pointer-events-none fixed z-50 flex h-[50px] w-11 items-center justify-center rounded-md bg-tile font-tile text-lg font-bold ${
+            drag.source.tile === '_' ? 'text-tile-blank' : 'text-tile-ink'
+          }`}
+          style={{ left: drag.x - 22, top: drag.y - 25, boxShadow: 'inset 0 -3px 0 #d9bf8a, 0 6px 14px rgba(0,0,0,.35)' }}
+        >
+          {drag.source.tile === '_' ? '·' : drag.source.tile}
+          <span className="absolute bottom-0.5 right-1 text-[10px] font-semibold leading-none">
+            {TILE_VALUES[drag.source.tile]}
+          </span>
+        </div>
+      )}
 
       {pendingBlank !== null && (
         <BlankPicker onPick={pickBlank} onCancel={() => { setPendingBlank(null); }} />

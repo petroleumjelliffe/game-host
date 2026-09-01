@@ -4,6 +4,7 @@
 
 import { CENTER, PREMIUMS, TILE_VALUES, type Premium } from '../../engine/constants';
 import type { Placement, Square } from '../../session/protocol';
+import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
 
 export interface BoardProps {
   board: Square[];
@@ -12,6 +13,14 @@ export interface BoardProps {
   /** The last committed play's squares — drawn with the gold ring. */
   lastPositions?: number[];
   onCellTap(pos: number): void;
+  /** Ref to the grid element — drop targeting measures this rect, which
+   * already reflects any zoom transform. */
+  gridRef?: Ref<HTMLDivElement>;
+  /** Pointerdown on a staged tile begins a board→board / board→rack drag. */
+  onStagedPointerDown?(pos: number, e: ReactPointerEvent<HTMLButtonElement>): void;
+  /** The staged tile being dragged — its cell renders as if unstaged (the
+   * ghost under the finger is its only representation). */
+  hiddenPos?: number | null;
 }
 
 const PREMIUM_CLASS: Record<Premium, string> = {
@@ -61,11 +70,14 @@ function TileFace({ letter, isBlank, staged = false, last = false }: TileFacePro
   );
 }
 
-export function Board({ board, staged, lastPositions, onCellTap }: BoardProps) {
-  const stagedAt = new Map(staged.map((p) => [p.pos, p]));
+export function Board({
+  board, staged, lastPositions, onCellTap, gridRef, onStagedPointerDown, hiddenPos = null,
+}: BoardProps) {
+  const stagedAt = new Map(staged.filter((p) => p.pos !== hiddenPos).map((p) => [p.pos, p]));
 
   return (
     <div
+      ref={gridRef}
       data-testid="board"
       className="mx-auto grid w-full gap-0.5 rounded-lg bg-board p-1"
       style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
@@ -84,9 +96,13 @@ export function Board({ board, staged, lastPositions, onCellTap }: BoardProps) {
             data-last={isLast ? '' : undefined}
             data-blank={square?.isBlank || stagedHere?.tile === '_' ? '' : undefined}
             onClick={() => { onCellTap(pos); }}
+            onPointerDown={stagedHere !== undefined && onStagedPointerDown !== undefined
+              ? (e) => { onStagedPointerDown(pos, e); }
+              : undefined}
             className={`aspect-square rounded-sm p-0 ${
               premium !== null ? PREMIUM_CLASS[premium] : 'bg-board-cell text-board-cell-ink'
             }`}
+            style={stagedHere !== undefined && onStagedPointerDown !== undefined ? { touchAction: 'none' } : undefined}
           >
             {square !== null ? (
               <TileFace letter={square.letter} isBlank={square.isBlank} last={isLast} />

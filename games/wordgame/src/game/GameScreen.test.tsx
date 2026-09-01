@@ -398,6 +398,103 @@ describe('GameScreen game over', () => {
   });
 });
 
+// jsdom rects are 0×0 — stub the two rects drops are resolved against.
+function stubRect(el: HTMLElement, r: { left: number; top: number; width: number; height: number }) {
+  el.getBoundingClientRect = () =>
+    ({ ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top, toJSON: () => ({}) }) as DOMRect;
+}
+function stubGeometry() {
+  stubRect(screen.getByTestId('board'), { left: 0, top: 0, width: 300, height: 300 }); // 20px cells
+  stubRect(screen.getByTestId('rack-tiles'), { left: 0, top: 400, width: 288, height: 50 });
+}
+function dragFromTo(el: HTMLElement, from: { x: number; y: number }, to: { x: number; y: number }) {
+  fireEvent.pointerDown(el, { pointerId: 1, clientX: from.x, clientY: from.y });
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: to.x, clientY: to.y });
+  fireEvent.pointerUp(window, { pointerId: 1, clientX: to.x, clientY: to.y });
+}
+
+describe('GameScreen drag and drop', () => {
+  // The fixture rack is ['C','A','T','S','D','O','_'] — blank at index 6.
+  it('drags a rack tile onto an empty cell and stages it', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 });
+    expect(screen.getByTestId('cell-16')).toHaveAttribute('data-staged');
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(6); // one left the tray
+  });
+
+  it('shows the ghost while dragging and no dimmed source', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    const tile = screen.getByTestId('rack-tile-0');
+    fireEvent.pointerDown(tile, { pointerId: 1, clientX: 22, clientY: 425 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 100, clientY: 200 });
+    expect(screen.getByTestId('drag-ghost')).toBeInTheDocument();
+    expect(screen.queryByTestId('rack-tile-0')).toBeNull(); // gone, not dimmed
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 100, clientY: 200 });
+    expect(screen.queryByTestId('drag-ghost')).toBeNull();
+  });
+
+  it('rearranges the rack by dragging within the tray', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    const letters = () =>
+      screen.getAllByTestId(/^rack-tile-/).map((el) => el.textContent);
+    const before = letters();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 150, y: 425 }); // slot 3
+    const after = letters();
+    expect(after).not.toEqual(before);
+    expect([...after].sort()).toEqual([...before].sort()); // same tiles, new order
+  });
+
+  it('drags a staged tile back to the tray to recall it', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 }); // stage at 16
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(6);
+    dragFromTo(screen.getByTestId('cell-16'), { x: 30, y: 30 }, { x: 150, y: 425 });
+    expect(screen.getByTestId('cell-16')).not.toHaveAttribute('data-staged');
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(7);
+  });
+
+  it('moves a staged tile to another empty cell', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 }); // stage at 16
+    dragFromTo(screen.getByTestId('cell-16'), { x: 30, y: 30 }, { x: 90, y: 90 }); // cell (4,4) = 64
+    expect(screen.getByTestId('cell-16')).not.toHaveAttribute('data-staged');
+    expect(screen.getByTestId('cell-64')).toHaveAttribute('data-staged');
+  });
+
+  it('a drag onto an occupied cell snaps back — nothing changes', () => {
+    const board = makeView().board;
+    board[16] = { letter: 'Q', isBlank: false };
+    renderScreen({ view: makeView({ board }) });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-0'), { x: 22, y: 425 }, { x: 30, y: 30 });
+    expect(screen.getAllByTestId(/^rack-tile-/)).toHaveLength(7); // all still in the tray
+  });
+
+  it('dropping a blank on a cell opens the blank picker', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    dragFromTo(screen.getByTestId('rack-tile-6'), { x: 310, y: 425 }, { x: 30, y: 30 });
+    expect(screen.getByRole('dialog', { name: 'Choose a letter for the blank' })).toBeInTheDocument();
+  });
+
+  it('a sub-threshold press is still the old tap-select', () => {
+    renderScreen({ view: makeView() });
+    stubGeometry();
+    const tile = screen.getByTestId('rack-tile-0');
+    fireEvent.pointerDown(tile, { pointerId: 1, clientX: 22, clientY: 425 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 25, clientY: 426 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 25, clientY: 426 });
+    fireEvent.click(tile);
+    fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
+    expect(screen.getByTestId(`cell-${CENTER}`)).toHaveAttribute('data-staged');
+  });
+});
+
 describe('GameScreen app-shell layout', () => {
   it('pins chrome and keeps the move history in the DOM but hidden', () => {
     renderScreen();
