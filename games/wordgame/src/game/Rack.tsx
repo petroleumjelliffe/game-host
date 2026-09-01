@@ -1,11 +1,16 @@
 import { TILE_VALUES, type Tile } from '../../engine/constants';
 import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
+import { EASE_REFLOW, REFLOW_MS } from './motion';
 
 export const RACK_TILE_W = 44;
 export const RACK_SLOT_W = 48; // tile + 4px gap; rackSlot() in dragPlan.ts assumes this rhythm
 
 export interface RackProps {
-  tiles: Tile[];
+  /** One entry per server rack tile, in display order. `tile: null` is a
+   * reserved slot — its tile is on the board this turn and will come back
+   * here (the motion spec's "the rack slot stays reserved"). Ids are
+   * stable across reorders so slides keep tile identity. */
+  entries: { id: number; tile: Tile | null }[];
   /** Selected indices — one in placement mode, several in exchange mode. */
   selected: number[];
   onTileTap(index: number): void;
@@ -23,13 +28,14 @@ export interface RackProps {
 
 /** The viewer's own tiles plus the bag. Tiles sit at fixed 48px slots so a
  * drag can open an insertion gap and the neighbours slide aside (the left
- * transition); the dragged tile is removed outright — the ghost under the
- * finger is its only representation (decided 2026-08-31). */
+ * transition, the spec's 180ms reflow); the dragged tile is removed
+ * outright — the ghost under the finger is its only representation
+ * (decided 2026-08-31). */
 export function Rack({
-  tiles, selected, onTileTap, bagCount,
+  entries, selected, onTileTap, bagCount,
   onTilePointerDown, draggingIndex = null, insertionSlot = null, tilesRef,
 }: RackProps) {
-  const visibleCount = tiles.length - (draggingIndex === null ? 0 : 1);
+  const visibleCount = entries.length - (draggingIndex === null ? 0 : 1);
   const slots = visibleCount + (insertionSlot === null ? 0 : 1);
   let nextSlot = 0;
 
@@ -41,18 +47,34 @@ export function Rack({
         className="relative h-[50px]"
         style={{ width: Math.max(RACK_TILE_W, slots * RACK_SLOT_W - 4) }}
       >
-        {tiles.map((tile, index) => {
+        {entries.map((entry, index) => {
           if (index === draggingIndex) return null;
           let slot = nextSlot;
           nextSlot += 1;
           if (insertionSlot !== null && slot >= insertionSlot) slot += 1;
+          const slide = {
+            left: slot * RACK_SLOT_W,
+            transition: `left ${REFLOW_MS}ms ${EASE_REFLOW}`,
+          };
+          if (entry.tile === null) {
+            // Reserved: the tile is on the board; the slot waits for it.
+            return (
+              <div
+                key={entry.id}
+                data-testid={`rack-slot-reserved-${index}`}
+                className="absolute top-0 box-border h-[50px] w-11 rounded-md border-[1.5px] border-dashed border-line-strong"
+                style={slide}
+              />
+            );
+          }
+          const tile = entry.tile;
           const isSelected = selected.includes(index);
           const shadow = isSelected
             ? 'inset 0 -3px 0 #d9bf8a, 0 0 0 2px #2563eb, 0 2px 6px rgba(37,99,235,.4)'
             : 'inset 0 -3px 0 #d9bf8a, 0 1px 3px rgba(0,0,0,.2)';
           return (
             <button
-              key={`${tile}-${index}`}
+              key={entry.id}
               type="button"
               data-testid={`rack-tile-${index}`}
               onClick={() => { onTileTap(index); }}
@@ -61,8 +83,7 @@ export function Rack({
                 tile === '_' ? 'text-tile-blank' : 'text-tile-ink'
               }`}
               style={{
-                left: slot * RACK_SLOT_W,
-                transition: 'left 150ms ease',
+                ...slide,
                 boxShadow: shadow,
                 ...(onTilePointerDown === undefined ? {} : { touchAction: 'none' }),
               }}

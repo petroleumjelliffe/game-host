@@ -71,7 +71,8 @@ const rackTiles = () => within(screen.getByTestId('rack')).getAllByRole('button'
 function stageFirstTwoTiles() {
   fireEvent.click(screen.getByTestId('rack-tile-0'));
   fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
-  fireEvent.click(screen.getByTestId('rack-tile-0')); // rack shifted after the first placement
+  // Indices no longer shift: the staged tile's slot stays reserved.
+  fireEvent.click(screen.getByTestId('rack-tile-1'));
   fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
 }
 
@@ -102,7 +103,7 @@ describe('GameScreen tap-to-place', () => {
     renderScreen({ view: makeView(), sendMove });
     fireEvent.click(screen.getByTestId('rack-tile-0')); // C
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
-    fireEvent.click(screen.getByTestId('rack-tile-0')); // A (rack shifted)
+    fireEvent.click(screen.getByTestId('rack-tile-1')); // A (slot 0 stays reserved)
     fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
     // CA through center prices a preview, so the button reads "Play · +N"
     // rather than bare "Play" — match by prefix, not exact name.
@@ -140,9 +141,10 @@ describe('GameScreen tap-to-place', () => {
     renderScreen({ view: makeView() });
     fireEvent.click(screen.getByTestId('rack-tile-0'));
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
-    fireEvent.click(screen.getByTestId('rack-tile-0'));
+    fireEvent.click(screen.getByTestId('rack-tile-1')); // slot 0 stays reserved
     fireEvent.click(screen.getByTestId(`cell-${CENTER + 1}`));
     expect(rackTiles()).toHaveLength(5);
+    expect(screen.getByTestId('rack-slot-reserved-0')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Recall' }));
     expect(rackTiles()).toHaveLength(7);
   });
@@ -505,6 +507,18 @@ describe('GameScreen drag and drop', () => {
     fireEvent.click(tile);
     fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
     expect(screen.getByTestId(`cell-${CENTER}`)).toHaveAttribute('data-staged');
+  });
+});
+
+describe('GameScreen rack reservation', () => {
+  it('reserves the slot while the tile is on the board and returns it there', () => {
+    renderScreen({ view: makeView() });
+    fireEvent.click(screen.getByTestId('rack-tile-0')); // C
+    fireEvent.click(screen.getByTestId(`cell-${CENTER}`));
+    expect(screen.getByTestId('rack-slot-reserved-0')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId(`cell-${CENTER}`)); // tap-return
+    expect(screen.queryByTestId('rack-slot-reserved-0')).toBeNull();
+    expect(screen.getByTestId('rack-tile-0')).toHaveTextContent(/^C/); // home again, same slot
   });
 });
 

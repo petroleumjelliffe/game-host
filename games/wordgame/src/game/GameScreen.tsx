@@ -43,6 +43,16 @@ export interface GameScreenProps {
   onExit(): void;
 }
 
+/** One server rack tile for the whole turn: `stagedAt` is its board square
+ * while staged (its rack slot renders reserved), `as` a blank's chosen
+ * letter. The id is the tile's identity for animation across reorders. */
+interface RackEntry {
+  id: number;
+  tile: Tile;
+  stagedAt: number | null;
+  as?: Letter;
+}
+
 function shuffled<T>(items: T[]): T[] {
   const next = [...items];
   for (let i = next.length - 1; i > 0; i -= 1) {
@@ -78,10 +88,14 @@ function Ctl({
 export function GameScreen({
   view, viewerId, roomId, connected, presence, sendMove, rejection, onDismissRejection, onExit,
 }: GameScreenProps) {
-  // The rack as displayed: the server's rack minus staged tiles, in a
-  // locally shuffled order. Rebuilt whenever a new view arrives.
-  const [localRack, setLocalRack] = useState<Tile[]>([]);
-  const [staged, setStaged] = useState<Placement[]>([]);
+  // The rack as displayed: every server tile keeps a slot for the whole
+  // turn — staging marks an entry with its board position and the slot
+  // renders reserved (dashed) until the tile comes home (the motion spec's
+  // "the rack slot stays reserved while the tile is on the board").
+  // Stable ids give animations tile identity across reorders. Rebuilt
+  // whenever a new view arrives.
+  const [rack, setRack] = useState<RackEntry[]>([]);
+  const nextEntryId = useRef(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [exchangeOn, setExchangeOn] = useState(false);
   const [exchangeSel, setExchangeSel] = useState<number[]>([]);
@@ -92,8 +106,11 @@ export function GameScreen({
 
   useEffect(() => {
     const me = view.players.find((p) => p.id === viewerId);
-    setLocalRack(me?.rack ?? []);
-    setStaged([]);
+    setRack((me?.rack ?? []).map((tile) => {
+      const id = nextEntryId.current;
+      nextEntryId.current += 1;
+      return { id, tile, stagedAt: null };
+    }));
     setSelected(null);
     setExchangeOn(false);
     setExchangeSel([]);
@@ -101,11 +118,19 @@ export function GameScreen({
     setPassArmed(false);
   }, [view, viewerId]);
 
+  // What's on the board this turn, derived — the entry array is the only
+  // truth, so the wire shape (and preview, and Board) never learn about it.
+  const staged: Placement[] = rack
+    .filter((e): e is RackEntry & { stagedAt: number } => e.stagedAt !== null)
+    .map((e) => (e.tile === '_'
+      ? { pos: e.stagedAt, tile: '_', as: e.as ?? 'A' }
+      : { pos: e.stagedAt, tile: e.tile }));
+
   const current = view.players.find((p) => p.id === view.currentPlayerId);
   const myTurn = view.stage === 'playing' && view.currentPlayerId === viewerId;
   const canAct = myTurn && connected;
   const exchangeAllowed = view.bagCount >= EXCHANGE_MINIMUM_BAG;
-  const bingoStaging = myTurn && localRack.length === 0 && staged.length === 7;
+  const bingoStaging = myTurn && staged.length === 7 && rack.every((e) => e.stagedAt !== null);
   // Optimistic score preview for what's staged right now — geometry and
   // arithmetic only, no dictionary (see scorePreview.ts). null whenever
   // there's nothing to price: not your turn, mid-exchange, or an
@@ -118,33 +143,28 @@ export function GameScreen({
   const lastPlay = [...view.log].reverse().find((r) => r.kind === 'play');
   const lastPlayPositions = lastPlay?.positions;
 
-  const removeRackAt = (index: number) => {
-    setLocalRack((rack) => rack.filter((_, i) => i !== index));
-  };
-
   /** Stage a rack tile onto an empty cell — shared by tap and drag; a blank
-   * detours through the picker either way. */
+   * detours through the picker either way. The entry keeps its slot. */
   const placeFromRack = (rackIndex: number, pos: number) => {
-    const tile = localRack[rackIndex];
-    if (tile === undefined) return;
-    if (tile === '_') {
+    const entry = rack[rackIndex];
+    if (entry === undefined || entry.stagedAt !== null) return;
+    if (entry.tile === '_') {
       setPendingBlank({ pos, rackIndex });
       return;
     }
-    setStaged((prev) => [...prev, { pos, tile }]);
-    removeRackAt(rackIndex);
+    setRack((prev) => prev.map((e, i) => (i === rackIndex ? { ...e, stagedAt: pos } : e)));
     setSelected(null);
   };
 
-  /** Take one staged tile back to the rack — at `slot` when the drop said
-   * where, at the end for a tap or an off-board drop. */
+  /** Take one staged tile back — to its own reserved slot (a tap or an
+   * off-board drop), or moved to `slot` when a drag said where. */
   const recallOne = (pos: number, slot: number | null) => {
-    const stagedHere = staged.find((p) => p.pos === pos);
-    if (stagedHere === undefined) return;
-    setStaged((prev) => prev.filter((p) => p.pos !== pos));
-    setLocalRack((rack) => {
-      const at = slot === null ? rack.length : Math.min(slot, rack.length);
-      return [...rack.slice(0, at), stagedHere.tile, ...rack.slice(at)];
+    setRack((prev) => {
+      const idx = prev.findIndex((e) => e.stagedAt === pos);
+      if (idx === -1) return prev;
+      const cleared = prev.map((e, i) =>
+        (i === idx ? { id: e.id, tile: e.tile, stagedAt: null } : e));
+      return slot === null ? cleared : moveTile(cleared, idx, slot);
     });
   };
 
@@ -158,16 +178,16 @@ export function GameScreen({
     const bRect = boardGridRef.current?.getBoundingClientRect();
     const cell = bRect === undefined ? null : hitCell(bRect, p);
     const rRect = rackTilesRef.current?.getBoundingClientRect();
-    const visible = localRack.length - (source.kind === 'rack' ? 1 : 0);
+    const visible = rack.length - (source.kind === 'rack' ? 1 : 0);
     const slot = cell !== null || rRect === undefined ? null : rackSlot(rRect, p, visible);
     const action = dropAction(source, cell, slot, view.board, staged);
     switch (action.kind) {
       case 'place': placeFromRack(action.rackIndex, action.pos); break;
       case 'moveStaged':
-        setStaged((prev) => prev.map((pl) => (pl.pos === action.from ? { ...pl, pos: action.pos } : pl)));
+        setRack((prev) => prev.map((e) => (e.stagedAt === action.from ? { ...e, stagedAt: action.pos } : e)));
         break;
       case 'reorderRack':
-        setLocalRack((rack) => moveTile(rack, action.from, action.slot));
+        setRack((prev) => moveTile(prev, action.from, action.slot));
         setSelected(null);
         break;
       case 'recallAt': recallOne(action.from, action.slot); break;
@@ -181,7 +201,7 @@ export function GameScreen({
     if (drag === null || !drag.active) return null;
     const rRect = rackTilesRef.current?.getBoundingClientRect();
     if (rRect === undefined) return null;
-    const visible = localRack.length - (drag.source.kind === 'rack' ? 1 : 0);
+    const visible = rack.length - (drag.source.kind === 'rack' ? 1 : 0);
     return rackSlot(rRect, drag, visible);
   })();
 
@@ -214,21 +234,21 @@ export function GameScreen({
 
   const pickBlank = (letter: Letter) => {
     if (pendingBlank === null) return;
-    setStaged((prev) => [...prev, { pos: pendingBlank.pos, tile: '_', as: letter }]);
-    removeRackAt(pendingBlank.rackIndex);
+    setRack((prev) => prev.map((e, i) =>
+      (i === pendingBlank.rackIndex ? { ...e, stagedAt: pendingBlank.pos, as: letter } : e)));
     setSelected(null);
     setPendingBlank(null);
   };
 
   const recall = () => {
-    if (staged.length === 0) return;
-    setLocalRack((rack) => [...rack, ...staged.map((p) => p.tile)]);
-    setStaged([]);
+    // Every tile back to its own reserved slot — order preserved.
+    setRack((prev) => prev.map((e) =>
+      (e.stagedAt === null ? e : { id: e.id, tile: e.tile, stagedAt: null })));
     setSelected(null);
   };
 
   const shuffleRack = () => {
-    setLocalRack(shuffled);
+    setRack(shuffled);
     setSelected(null);
     setExchangeSel([]);
   };
@@ -247,7 +267,7 @@ export function GameScreen({
 
   const confirmExchange = () => {
     const tiles = exchangeSel
-      .map((i) => localRack[i])
+      .map((i) => rack[i]?.tile)
       .filter((t): t is Tile => t !== undefined);
     if (tiles.length === 0) return;
     sendMove({ type: 'exchange', tiles });
@@ -428,14 +448,16 @@ export function GameScreen({
         <>
           <div className="px-3.5 pt-3.5">
             <Rack
-              tiles={localRack}
+              entries={rack.map((e) => ({ id: e.id, tile: e.stagedAt === null ? e.tile : null }))}
               selected={exchangeOn ? exchangeSel : selected === null ? [] : [selected]}
               onTileTap={rackTap}
               bagCount={view.bagCount}
               tilesRef={rackTilesRef}
               onTilePointerDown={dragEnabled ? (index, e) => {
-                const tile = localRack[index];
-                if (tile !== undefined) startDrag({ kind: 'rack', index, tile }, e);
+                const entry = rack[index];
+                if (entry !== undefined && entry.stagedAt === null) {
+                  startDrag({ kind: 'rack', index, tile: entry.tile }, e);
+                }
               } : undefined}
               draggingIndex={drag?.active === true && drag.source.kind === 'rack' ? drag.source.index : null}
               insertionSlot={hoverSlot}
