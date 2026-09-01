@@ -5,3 +5,44 @@
 body {
   @apply bg-page font-sans text-ink;
 }
+
+/* Motion (Word Game Motion.dc.html): mount-triggered keyframes. A staged
+ * tile settles on mount, the badge rises on (re)mount, fresh rack tiles
+ * rise from the bag. Everything dies under prefers-reduced-motion below;
+ * durations/easings mirror src/game/motion.ts — keep the two in sync. */
+@keyframes wg-settle {
+  0% { transform: scale(0.96); }
+  45% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes wg-badge-in {
+  0% { opacity: 0; transform: translateY(8px) scale(0.8); }
+  46% { opacity: 1; transform: translateY(-4px) scale(1.12); }
+  62% { transform: translateY(-8px) scale(1); }
+  100% { opacity: 1; transform: translateY(-8px) scale(1); }
+}
+@keyframes wg-badge-out {
+  to { opacity: 0; }
+}
+@keyframes wg-refill {
+  0% { opacity: 0; transform: translateY(36px) scale(0.82); }
+  55% { opacity: 1; transform: translateY(-5px) scale(1.05); }
+  75% { transform: translateY(0) scale(1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes wg-bag-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.wg-settle { animation: wg-settle 160ms cubic-bezier(0.22, 1, 0.36, 1); }
+.wg-badge-in { animation: wg-badge-in 260ms cubic-bezier(0.22, 1, 0.36, 1) 80ms backwards; }
+.wg-badge-out { animation: wg-badge-out 120ms ease-out forwards; }
+.wg-refill { animation: wg-refill 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.wg-bag-pulse { animation: wg-bag-pulse 300ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .wg-settle, .wg-badge-in, .wg-badge-out, .wg-refill, .wg-bag-pulse, .wg-flight, .wg-ghost {
+    animation: none !important;
+    transition: none !important;
+  }
+}
