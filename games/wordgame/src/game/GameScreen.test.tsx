@@ -128,7 +128,8 @@ describe('GameScreen tap-to-place', () => {
     const cell = screen.getByTestId(`cell-${CENTER}`);
     expect(cell).toHaveAttribute('data-staged');
     expect(cell).toHaveAttribute('data-blank');
-    expect(cell).toHaveTextContent('z');
+    expect(cell).toHaveTextContent('Z'); // blanks read like normal tiles; the 0 is the tell
+    expect(cell).toHaveTextContent('0');
     expect(rackTiles()).toHaveLength(6);
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
     expect(sendMove).toHaveBeenCalledExactlyOnceWith({

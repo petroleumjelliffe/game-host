@@ -41,8 +41,9 @@ interface TileFaceProps {
   last?: boolean;
 }
 
-/** A tile drawn in a cell: letter plus a small point value; blanks are
- * lowercase with a 0, which keeps them visibly distinct at 24px. */
+/** A tile drawn in a cell: letter plus a small point value. A placed blank
+ * reads like any other tile — CAPS, same ink — and only its 0 gives it
+ * away (feedback 2026-09-01; the lowercase/faded look confused the table). */
 function TileFace({ letter, isBlank, staged = false, last = false }: TileFaceProps) {
   const value = isBlank ? 0 : TILE_VALUES[letter as keyof typeof TILE_VALUES] ?? 0;
   const ring = staged
@@ -52,13 +53,13 @@ function TileFace({ letter, isBlank, staged = false, last = false }: TileFacePro
       : 'inset 0 -2px 0 #d9bf8a, 0 1px 1px rgba(0,0,0,.18)';
   return (
     <span
-      className={`relative flex h-full w-full items-center justify-center rounded font-tile font-bold bg-tile ${
-        isBlank ? 'text-tile-blank' : 'text-tile-ink'
-      } ${staged ? 'z-10 wg-settle' : ''}`}
+      className={`relative flex h-full w-full items-center justify-center rounded font-tile font-bold bg-tile text-tile-ink ${
+        staged ? 'z-10 wg-settle' : ''
+      }`}
       style={{ boxShadow: ring }}
     >
       <span style={{ fontSize: 'clamp(9px, 3.2vw, 18px)', lineHeight: 1 }}>
-        {isBlank ? letter.toLowerCase() : letter}
+        {letter.toUpperCase()}
       </span>
       <span
         className="absolute bottom-0 right-0.5"
