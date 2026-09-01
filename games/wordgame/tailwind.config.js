@@ -12,7 +12,10 @@ export default {
         chipbg: '#ded7c5',
         accent: { DEFAULT: '#2563eb', strong: '#1d4ed8' },
         tile: { DEFAULT: '#f7ebc8', edge: '#d9bf8a', ink: '#5f4a1d', blank: '#a08a4a' },
-        board: { DEFAULT: '#1e4d3b', cell: '#ecf2e9', 'cell-ink': '#9db2a4' },
+        // The "linen" board theme (Word Game Hi-Fi.dc.html, 2026-09-01):
+        // light frame with a hairline border, near-paper empty cells. The
+        // old forest green lives only in git history now.
+        board: { DEFAULT: '#e7e0d0', frame: '#cfc7b4', cell: '#faf8f2', 'cell-ink': '#b8b0a0' },
         prem: {
           '3w': '#d05a41',
           '2w': '#f2c9bd', '2w-ink': '#a04b33',

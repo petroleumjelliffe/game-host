@@ -60,7 +60,7 @@ export function Rack({
         {dragging && gapSlot !== null && (
           <div
             data-testid="rack-slot-hold"
-            className="absolute top-0 box-border h-[50px] w-11 rounded-md border-[1.5px] border-dashed border-line-strong"
+            className="absolute top-0 box-border h-[50px] w-11 rounded-md border-[1.5px] border-dashed border-board-frame"
             style={{ left: gapSlot * RACK_SLOT_W, transition: `left ${REFLOW_MS}ms ${EASE_REFLOW}` }}
           />
         )}
@@ -81,7 +81,7 @@ export function Rack({
               <div
                 key={entry.id}
                 data-testid={`rack-slot-reserved-${index}`}
-                className="absolute top-0 box-border h-[50px] w-11 rounded-md border-[1.5px] border-dashed border-line-strong"
+                className="absolute top-0 box-border h-[50px] w-11 rounded-md border-[1.5px] border-dashed border-board-frame"
                 style={slide}
               />
             );
@@ -118,17 +118,17 @@ export function Rack({
         })}
       </div>
       <div className="w-2 flex-none" />
+      {/* The bag as a quiet counter tile — big count, small LEFT caption
+        * (Word Game Hi-Fi.dc.html, linen revision 2026-09-01). Keyed by the
+        * count so a draw remounts it and the pulse plays. */}
       <div
         key={bagCount}
         data-testid="bag-tile"
-        className="wg-bag-pulse relative flex h-[50px] w-11 flex-none items-center justify-center rounded-md bg-board"
-        style={{ boxShadow: 'inset 0 -3px 0 #143528, 0 1px 3px rgba(0,0,0,.25)' }}
+        className="wg-bag-pulse relative box-border flex h-[50px] w-11 flex-none flex-col items-center justify-center gap-[1px] rounded-md border-[1.5px] border-board-frame bg-[#f1ece0]"
         title={`${bagCount} tiles left in the bag`}
       >
-        <span className="h-[22px] w-[22px] rounded border-2 border-white/35" />
-        <span className="absolute -right-1.5 -top-1.5 rounded-full border-2 border-paper bg-ink px-1.5 text-[11px] font-bold text-white">
-          {bagCount}
-        </span>
+        <span className="font-tile text-[15px] font-bold leading-none text-ink-soft">{bagCount}</span>
+        <span className="text-[7.5px] font-bold tracking-[.06em] text-ink-ghost">LEFT</span>
       </div>
     </div>
   );

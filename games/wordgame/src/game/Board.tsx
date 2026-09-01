@@ -80,7 +80,7 @@ export function Board({
     <div
       ref={gridRef}
       data-testid="board"
-      className="mx-auto grid w-full gap-0.5 rounded-lg bg-board p-1"
+      className="mx-auto box-border grid w-full gap-0.5 rounded-lg border-[1.5px] border-board-frame bg-board p-1"
       style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
     >
       {board.map((square, pos) => {
@@ -88,6 +88,9 @@ export function Board({
         const stagedHere = stagedAt.get(pos);
         const isLast = lastPositions?.includes(pos) ?? false;
         return (
+          // Flex-centered with leading-none and overflow clipping: iOS
+          // Safari lets inline label text (2L/3W) stretch an aspect-ratio
+          // button past square (feedback 2026-09-01).
           <button
             key={pos}
             type="button"
@@ -100,7 +103,7 @@ export function Board({
             onPointerDown={stagedHere !== undefined && onStagedPointerDown !== undefined
               ? (e) => { onStagedPointerDown(pos, e); }
               : undefined}
-            className={`aspect-square rounded-sm p-0 ${
+            className={`flex aspect-square items-center justify-center overflow-hidden rounded-sm p-0 leading-none ${
               premium !== null ? PREMIUM_CLASS[premium] : 'bg-board-cell text-board-cell-ink'
             }`}
             style={stagedHere !== undefined && onStagedPointerDown !== undefined ? { touchAction: 'none' } : undefined}
