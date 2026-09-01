@@ -42,6 +42,7 @@ function fakeIdentity(stored: RoomIdentity | null = null): IdentityStore & {
     clearIdentity: (roomId) => { current = null; cleared.push(roomId); },
     rememberedName: () => remembered,
     rememberName: (name) => { remembered = name; namesRemembered.push(name); },
+    listRooms: () => [],
   };
 }
 

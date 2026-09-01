@@ -31,10 +31,15 @@ export function JoinRoomCard({
 
   return (
     <LobbyCard
-      title="Join Room"
-      subtitle="Enter or paste code below"
+      title="Join room"
+      subtitle="Enter or paste the room code"
       code={code}
       onCodeChange={onCodeChange}
+      seatNote={(
+        <p className="text-center text-xs text-ink-ghost">
+          Already sat here before? The code takes you straight back in.
+        </p>
+      )}
       note={error}
       onLeave={onLeave}
       onSubmit={() => { if (ready && !busy) onSubmit(); }}
@@ -42,7 +47,7 @@ export function JoinRoomCard({
         <button
           type="submit"
           disabled={!ready || busy}
-          className="m-0 w-full rounded-lg bg-[var(--lobby-accent,#2563eb)] px-4 py-3 font-semibold text-[var(--lobby-on-accent,#ffffff)] hover:bg-[var(--lobby-accent-strong,#1d4ed8)] disabled:cursor-not-allowed disabled:bg-gray-300"
+          className="m-0 w-full rounded-xl bg-[var(--lobby-accent,#2563eb)] px-4 py-3 font-bold text-[var(--lobby-on-accent,#ffffff)] hover:bg-[var(--lobby-accent-strong,#1d4ed8)] disabled:cursor-not-allowed disabled:bg-chipbg disabled:text-ink-ghost"
         >
           {busy ? 'Joining…' : ready ? 'Join game' : 'Join'}
         </button>
@@ -57,7 +62,7 @@ export function JoinRoomCard({
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="Your name (optional)"
-          className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 font-semibold"
+          className="min-w-0 flex-1 rounded-lg border-[1.5px] border-line-strong bg-white px-2 py-1 font-semibold"
         />
       </SeatRow>
     </LobbyCard>

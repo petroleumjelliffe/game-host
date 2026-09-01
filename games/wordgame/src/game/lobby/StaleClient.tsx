@@ -20,13 +20,13 @@ export interface StaleClientProps {
 
 export function StaleClient({ onReload, onExit }: StaleClientProps) {
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-page p-6">
       <div
         data-testid="stale-client"
-        className="mx-auto max-w-md rounded-xl bg-white p-8 text-center shadow-xl"
+        className="mx-auto max-w-md rounded-xl bg-paper p-8 text-center shadow-xl"
       >
         <h1 className="mb-2 text-2xl font-bold">This version can&rsquo;t talk to the server</h1>
-        <p className="mb-6 text-sm text-gray-600">
+        <p className="mb-6 text-sm text-ink-soft">
           The app and the server are on different versions. Reloading usually
           settles it; if it does not, the server is the one still catching up.
         </p>
@@ -41,7 +41,7 @@ export function StaleClient({ onReload, onExit }: StaleClientProps) {
         <button
           type="button"
           onClick={onExit}
-          className="mt-2 w-full rounded-lg px-4 py-3 font-semibold text-gray-600 hover:bg-gray-100"
+          className="mt-2 w-full rounded-lg px-4 py-3 font-semibold text-ink-soft hover:bg-page/40"
         >
           Back to the lobby
         </button>

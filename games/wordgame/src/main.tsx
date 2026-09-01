@@ -3,6 +3,12 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { registerServiceWorker } from './pwa/register';
+import '@fontsource/outfit/400.css';
+import '@fontsource/outfit/500.css';
+import '@fontsource/outfit/600.css';
+import '@fontsource/outfit/700.css';
+import '@fontsource/bitter/600.css';
+import '@fontsource/bitter/700.css';
 import './styles/index.css';
 
 registerServiceWorker();

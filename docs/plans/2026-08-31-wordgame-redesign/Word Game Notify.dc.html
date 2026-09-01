@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#e9e5da;font-family:'Outfit',sans-serif;color:#2b2820}
+a{color:#2563eb}a:hover{color:#1d4ed8}
+</style></helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:28px 12px">
+<div style="width:398px;min-height:640px;border-radius:22px;background:rgba(30,38,32,.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+<div style="width:100%;background:#f7f4ec;border-radius:18px;padding:18px 16px;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:16px;box-sizing:border-box">
+
+<div style="display:flex;align-items:center"><span style="font-weight:700;font-size:17px;flex:1">🔔 Notifications</span><span style="color:#8a8271;font-size:16px">✕</span></div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-weight:700;font-size:14px">Push</div>
+<div style="font-size:13px;color:#7a7361">{{pushText}}</div>
+<div style="background:{{pbBg}};color:{{pbC}};border:{{pbBd}};border-radius:10px;min-height:42px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px">{{pushBtn}}</div>
+<div style="font-size:11.5px;color:#a39a85">On iPhone and iPad, push only works after adding this game to your Home Screen (Share → Add to Home Screen).</div>
+</div>
+
+<div style="height:1px;background:#e3ddcf"></div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-weight:700;font-size:14px">Email</div>
+<sc-if value="{{ showEmailStatus }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:13px;color:{{emailC}};background:{{emailBg}};border-radius:8px;padding:{{emailPad}}">{{emailText}}</div>
+</sc-if>
+<sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px">
+<div style="flex:1;font-size:14px;color:#2b2820;padding:8px 0">{{savedEmail}}</div>
+<div onClick="{{ onEdit }}" style="font-weight:600;font-size:14px;color:#2563eb;cursor:pointer;padding:8px 2px" style-hover="color:#1d4ed8">Edit</div>
+</div>
+</sc-if>
+<sc-if value="{{ editing }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;gap:8px">
+<input value="{{ draft }}" onChange="{{ onChange }}" placeholder="you@example.com" style="flex:1;min-width:0;border:{{fieldBd}};background:#fdfcf8;border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;color:#2b2820;outline:none;box-sizing:border-box">
+<div onClick="{{ onSave }}" style="border:1.5px solid #2563eb;background:#2563eb;border-radius:8px;padding:8px 14px;font-weight:600;font-size:14px;color:#fff;display:flex;align-items:center;cursor:pointer" style-hover="background:#1d4ed8">Save</div>
+</div>
+<sc-if value="{{ showError }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:12px;color:#b3341f">Enter a valid email address.</div>
+</sc-if>
+</sc-if>
+</div>
+
+<sc-if value="{{ confirmed }}" hint-placeholder-val="{{ false }}">
+<div style="background:#f0f5ff;border:1.5px solid #2563eb;border-radius:10px;padding:9px 12px;font-size:13px;color:#1d4ed8">✓ You're set — the 🔔 badge now shows on your profile</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;430&quot;,&quot;height&quot;:&quot;700&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;setup&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;setup&quot;,&quot;sent&quot;,&quot;on&quot;],&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  state = { editing: null, draft: '', saved: null, error: false };
+  renderVals() {
+    const state = this.props.state ?? 'setup';
+    const saved = this.state.saved ?? (state === 'setup' ? '' : 'pete@example.com');
+    const editing = this.state.editing === null ? !saved : this.state.editing;
+    const valid = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+    const pushOn = state !== 'setup';
+    return {
+      pushText: pushOn
+        ? 'This device will be notified when it’s your turn.'
+        : 'Get a notification on this device when it’s your turn.',
+      pushBtn: pushOn ? 'Turn off push' : 'Notify me when it’s my turn',
+      pbBg: pushOn ? '#ffffff' : '#2563eb',
+      pbC: pushOn ? '#5f5744' : '#ffffff',
+      pbBd: pushOn ? '1.5px solid #d8d0bd' : '1.5px solid #2563eb',
+      showEmailStatus: state !== 'setup',
+      emailText: state === 'sent'
+        ? 'Waiting for you to confirm pete@example.com — check your inbox; the link lasts 24 hours.'
+        : 'Turn emails go to pete@example.com.',
+      emailC: state === 'sent' ? '#8a5f10' : '#3f7a4d',
+      emailBg: state === 'sent' ? '#fdf3e0' : '#edf5ee',
+      emailPad: '8px 10px',
+      editing,
+      readOnly: !editing,
+      savedEmail: saved,
+      draft: this.state.draft,
+      showError: this.state.error,
+      fieldBd: this.state.error ? '1.5px solid #b3341f' : '1.5px solid #d8d0bd',
+      onEdit: () => this.setState({ editing: true, draft: saved, error: false }),
+      onChange: (e) => this.setState({ draft: e.target.value, error: false }),
+      onSave: () => valid(this.state.draft)
+        ? this.setState({ saved: this.state.draft.trim(), editing: false, error: false })
+        : this.setState({ error: true }),
+      confirmed: state === 'on',
+    };
+  }
+}
+</script>
+</body>
+</html>

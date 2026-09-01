@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#e9e5da;font-family:'Outfit',sans-serif;color:#2b2820}
+a{color:#2563eb}a:hover{color:#1d4ed8}
+</style></helmet>
+<div style="min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:28px 12px">
+<div style="width:398px;background:#f7f4ec;border-radius:22px;box-shadow:0 12px 40px rgba(31,41,26,.18);display:flex;flex-direction:column;overflow:hidden;padding:18px 16px 20px;gap:10px;box-sizing:border-box">
+
+<div style="display:flex;align-items:center"><span style="color:#2563eb;font-weight:600;font-size:15px">‹ Back</span><span style="flex:1"></span></div>
+<div style="text-align:center;font-weight:700;font-size:21px">{{title}}</div>
+<div style="text-align:center;font-size:13.5px;color:#8a8271;margin-top:-6px">{{subtitle}}</div>
+
+<div style="background:#ece7da;border:{{codeBd}};border-radius:14px;padding:16px 0;text-align:center;font-weight:700;font-size:30px;letter-spacing:.32em;text-indent:.32em;color:#2b2820">KTWQ</div>
+
+<sc-if value="{{ showSeats }}" hint-placeholder-val="{{ true }}">
+<sc-if value="{{ isNew }}" hint-placeholder-val="{{ true }}">
+<div style="border:1.5px solid #2563eb;color:#2563eb;background:#fff;border-radius:10px;min-height:40px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px">Share link</div>
+</sc-if>
+<div style="display:flex;flex-direction:column;gap:7px;margin-top:4px">
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:9px 12px"><span>🦊</span><span style="width:8px;height:8px;border-radius:50%;background:#3fa053;flex:none"></span><span style="flex:1;border:1.5px solid #d8d0bd;border-radius:8px;padding:5px 9px;font-weight:600;font-size:14px;background:#fdfcf8">Pete</span><span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#8a8271">HOST</span></div>
+<sc-if value="{{ showOthers }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:11px 12px"><span>🐙</span><span style="width:8px;height:8px;border-radius:50%;background:#3fa053;flex:none"></span><span style="flex:1;font-weight:600;font-size:14px">Maya</span></div>
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:11px 12px"><span>🦉</span><span style="width:8px;height:8px;border-radius:50%;background:#c7c0af;flex:none"></span><span style="flex:1;font-weight:600;font-size:14px;color:#7a7361">Sam</span><span style="font-size:11px;color:#a39a85">reconnecting…</span></div>
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:11px 12px"><span>🐸</span><span style="width:8px;height:8px;border-radius:50%;background:#3fa053;flex:none"></span><span style="flex:1;font-weight:600;font-size:14px">Ana</span></div>
+</sc-if>
+<sc-for list="{{ emptySeats }}" as="seat" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:9px;border:1.5px dashed #d8d0bd;border-radius:12px;padding:11px 12px;color:#a39a85"><span>·</span><span style="flex:1;font-style:italic;font-size:14px">Empty seat</span></div>
+</sc-for>
+</div>
+<div style="font-size:12px;color:#8a8271;text-align:center">{{seatNote}}</div>
+</sc-if>
+
+<sc-if value="{{ isJoin }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e0d9c8;border-radius:12px;padding:9px 12px;margin-top:4px"><span style="color:#c7c0af">·</span><span style="flex:1;border:1.5px solid #d8d0bd;border-radius:8px;padding:5px 9px;font-size:14px;color:#a39a85;background:#fdfcf8">Your name (optional)</span></div>
+<div style="font-size:12px;color:#a39a85;text-align:center">Already sat here before? The code takes you straight back in.</div>
+</sc-if>
+
+<div style="flex:1"></div>
+<sc-if value="{{ isWaiting }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fdf3e0;border:1.5px solid #e3c88a;border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:2px">
+<div style="font-weight:700;font-size:15px;color:#8a5f10">Waiting for Pete to start</div>
+<div style="font-size:12.5px;color:#a08a55">You'll get a nudge when the first turn is yours</div>
+</div>
+</sc-if>
+<sc-if value="{{ primaryOff }}" hint-placeholder-val="{{ false }}">
+<div style="background:#ded7c5;color:#a39a85;border-radius:12px;min-height:46px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">Start game</div>
+</sc-if>
+<sc-if value="{{ primaryOn }}" hint-placeholder-val="{{ true }}">
+<div style="background:#2563eb;color:#fff;border-radius:12px;min-height:46px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;box-shadow:0 2px 6px rgba(37,99,235,.35)">{{primary}}</div>
+</sc-if>
+<div style="border:1.5px solid #d8d0bd;background:#fff;color:#5f5744;border-radius:12px;min-height:42px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px">Leave</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;430&quot;,&quot;height&quot;:&quot;720&quot;},&quot;mode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;new&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;new&quot;,&quot;join&quot;,&quot;waiting&quot;],&quot;section&quot;:&quot;State&quot;},&quot;seats&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:4,&quot;min&quot;:1,&quot;max&quot;:4,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const mode = this.props.mode ?? 'new';
+    const isNew = mode === 'new';
+    const isWaiting = mode === 'waiting';
+    const seats = Number(this.props.seats ?? 4);
+    const empty = Math.max(0, 4 - seats);
+    return {
+      isNew, isWaiting, isJoin: mode === 'join',
+      showSeats: isNew || isWaiting,
+      showOthers: seats > 1,
+      emptySeats: Array.from({ length: empty }, (_, i) => i),
+      seatNote: empty === 0
+        ? (isWaiting ? 'All 4 seats filled' : 'All 4 seats filled — you can start')
+        : seats + ' of 4 seats — waiting for ' + empty + ' more',
+      primaryOff: isNew && empty > 0,
+      primaryOn: !isWaiting && !(isNew && empty > 0),
+      title: isNew ? 'New room' : (isWaiting ? 'Room KTWQ' : 'Join room'),
+      subtitle: isNew ? 'Share this code with other players'
+        : (isWaiting ? "You're in — the game starts when the host says go" : 'Enter or paste the room code'),
+      codeBd: mode === 'join' ? '2px dashed #b8ae98' : 'none',
+      primary: isNew ? 'Start game' : 'Join game',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -70,7 +70,7 @@ export function ShareRoomButton({ url, text = 'Join my game room' }: ShareRoomBu
     <button
       type="button"
       onClick={share}
-      className="m-0 w-full rounded-lg border border-[var(--lobby-accent,#2563eb)] px-4 py-2 font-semibold text-[var(--lobby-accent,#2563eb)] hover:bg-gray-50"
+      className="m-0 w-full rounded-lg border border-[var(--lobby-accent,#2563eb)] px-4 py-2 font-semibold text-[var(--lobby-accent,#2563eb)] hover:bg-page/40"
     >
       {copied ? 'Copied' : 'Share link'}
     </button>

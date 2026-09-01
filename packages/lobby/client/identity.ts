@@ -17,6 +17,7 @@ export interface IdentityStore {
   clearIdentity: (roomId: string) => void;
   rememberedName: () => string | null;
   rememberName: (name: string) => void;
+  listRooms: () => { roomId: string; identity: RoomIdentity }[];
 }
 
 /**
@@ -146,11 +147,35 @@ export function createIdentityStore(appId: string): IdentityStore {
     write(SHARED_NAME_KEY, name);
   }
 
+  /**
+   * Every room this browser holds a seat for, in this app's namespace.
+   * Enumerated from storage keys — the store never kept an index, and one
+   * would drift; corrupt entries are skipped the same way loadIdentity
+   * skips them.
+   */
+  function listRooms(): { roomId: string; identity: RoomIdentity }[] {
+    const prefix = `${appId}.room.`;
+    const rooms: { roomId: string; identity: RoomIdentity }[] = [];
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key === null || !key.startsWith(prefix)) continue;
+        const roomId = key.slice(prefix.length);
+        const identity = loadIdentity(roomId);
+        if (identity !== null) rooms.push({ roomId, identity });
+      }
+    } catch {
+      // Safari private mode: no storage, no rooms — same shrug as read().
+    }
+    return rooms;
+  }
+
   return {
     loadIdentity,
     saveIdentity,
     clearIdentity,
     rememberedName,
     rememberName,
+    listRooms,
   };
 }

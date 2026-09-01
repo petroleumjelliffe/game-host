@@ -122,4 +122,36 @@ describe('NotificationSettings', () => {
       await screen.findByText('Turn emails go to pete@example.com.'),
     ).toBeInTheDocument();
   });
+
+  it('shows a saved address read-only with an Edit affordance that seeds the input', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, settings({ email: { address: 'pete@example.com', status: 'confirmed' } })),
+    );
+    render(<NotificationSettings onClose={() => {}} />);
+    expect(await screen.findByText('pete@example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('textbox')).toHaveValue('pete@example.com');
+  });
+
+  it('rejects a malformed address client-side, without calling the API', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, settings()));
+    render(<NotificationSettings onClose={() => {}} />);
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'nope' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument();
+    // Only the initial settings fetch happened — the malformed address never
+    // reached /notify/email.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the confirmed banner when email is confirmed', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, settings({ email: { address: 'pete@example.com', status: 'confirmed' } })),
+    );
+    render(<NotificationSettings onClose={() => {}} />);
+    expect(
+      await screen.findByText(/the 🔔 badge now shows on your profile/),
+    ).toBeInTheDocument();
+  });
 });

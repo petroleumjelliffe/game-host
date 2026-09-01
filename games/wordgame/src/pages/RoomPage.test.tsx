@@ -82,6 +82,28 @@ function seatAndStart(fake: ReturnType<typeof fakeConnection>) {
   fake.sendState({ view: makeView(), reason: 'resume' });
 }
 
+// Two occupied seats out of the game's real capacity (6) — the seat note is
+// derived from `view.seats.length`, never a hardcoded 4, so this fixture
+// deliberately does not fill the room.
+function seatTwoOfSix(fake: ReturnType<typeof fakeConnection>) {
+  fake.sendJoined({ roomId: 'ABC123', playerId: 'me', token: 'tok' });
+  fake.sendRoster(lobbyRoster());
+}
+
+// Seated as the non-host: the guest sees the amber "waiting for the host"
+// banner rather than a Start button.
+function seatAsGuest(fake: ReturnType<typeof fakeConnection>) {
+  fake.sendJoined({ roomId: 'ABC123', playerId: 'me', token: 'tok' });
+  fake.sendRoster({
+    roomId: 'ABC123',
+    lifecycle: 'lobby',
+    players: [
+      { id: 'host', name: 'Pete', isHost: true, connected: true },
+      { id: 'me', name: 'Alice', isHost: false, connected: true },
+    ],
+  });
+}
+
 afterEach(() => {
   localStorage.clear();
 });
@@ -98,6 +120,23 @@ describe('RoomPage', () => {
     expect(screen.getByLabelText('Your name')).toHaveValue('Alice');
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument();
+  });
+
+  it('counts seats under the list', () => {
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    seatTwoOfSix(fake);
+
+    expect(screen.getByText('2 of 6 seats — waiting for 4 more')).toBeInTheDocument();
+  });
+
+  it('tells a guest they will be nudged when the game starts', () => {
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    seatAsGuest(fake);
+
+    expect(screen.getByText('Waiting for Pete to start')).toBeInTheDocument();
+    expect(screen.getByText(/You’ll get a nudge when the first turn is yours/)).toBeInTheDocument();
   });
 
   it('a state message turns the lobby into the game', () => {
@@ -133,8 +172,10 @@ describe('RoomPage', () => {
       message: 'QIZX is not a word.',
       words: ['QIZX'],
     } as RejectedMessage);
-    const note = screen.getByTestId('rejection-note');
-    expect(note).toHaveTextContent('Not in the dictionary: QIZX');
+    // invalidWord surfaces as the board's own overlay card, not the
+    // top-of-screen strip (Task 8: docs/plans/2026-08-31-wordgame-redesign).
+    const card = screen.getByTestId('invalid-card');
+    expect(card).toHaveTextContent('QIZX');
     // Still on the board — a refused move never tears the game down.
     expect(screen.getByTestId('game-screen')).toBeInTheDocument();
   });

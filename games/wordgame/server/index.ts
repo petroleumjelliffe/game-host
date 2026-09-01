@@ -37,6 +37,7 @@ import {
 } from '../session/protocol.js';
 import type { Delivery, GameRoom } from './room.js';
 import { createRoomRegistry, type RoomRegistry } from './rooms.js';
+import { summariesHandler } from './summaries.js';
 import { createFileStore, createNullStore, SAVE_VERSION, type RoomStore } from './store.js';
 
 /** How the menu names this game. Neutral by design — see the spec's non-goals. */
@@ -128,6 +129,12 @@ function build(
   // first server is built without an injected dictionary.
   const dictionary = options.dictionary ?? loadEnableDictionary();
   const rooms = createRoomRegistry(store, dictionary);
+
+  // The entry screen's game list — this game's only other REST route besides
+  // health. `express.json()` is scoped to this one route, never `app.use`
+  // global: global middleware in a shared process would land on the other
+  // games and the menu too (the composed-host rule the CORS removal found).
+  app.post(`${BASE_PATH}/api/summaries`, express.json(), summariesHandler(rooms));
 
   // Turn notifications, when the host runs the service. `moveCount` is the
   // turnKey: it increments on every applied move, so it is distinct per turn

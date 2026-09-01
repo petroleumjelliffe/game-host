@@ -12,7 +12,7 @@ export function GameOverPanel({ view }: GameOverPanelProps) {
   const winners = final.winnerIds.map((id) => names.get(id) ?? id);
 
   return (
-    <div data-testid="game-over" className="rounded-xl border border-yellow-400 bg-yellow-50 p-4">
+    <div data-testid="game-over" className="rounded-xl border border-line-strong bg-paper p-4">
       <h2 className="mb-1 text-center text-xl font-bold">Game over</h2>
       <p className="mb-3 text-center font-semibold">
         {winners.length === 1 ? `${winners[0]} wins!` : `Tied: ${winners.join(' and ')}`}
