@@ -29,14 +29,19 @@ export function useNotifyStatus(): { status: NotifyStatus; emailAddress: string 
       if (settings.email?.status === 'confirmed') { setStatus('on'); return; }
 
       // Push counts as "on" only when THIS browser holds a subscription the
-      // server knows — same check NotificationSettings makes.
+      // server knows — same check NotificationSettings makes. `.ready` would
+      // hang forever with no worker ever registered (the dev server only
+      // registers one in prod, see src/pwa/register.ts), so ask for whatever
+      // registration exists right now instead of waiting for one to arrive.
       if (settings.pushEnabled && pushSupported()) {
         try {
-          const registration = await navigator.serviceWorker.ready;
-          const sub = await registration.pushManager.getSubscription();
-          if (!cancelled && sub !== null && settings.pushEndpoints.includes(sub.endpoint)) {
-            setStatus('on');
-            return;
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (registration) {
+            const sub = await registration.pushManager.getSubscription();
+            if (!cancelled && sub !== null && settings.pushEndpoints.includes(sub.endpoint)) {
+              setStatus('on');
+              return;
+            }
           }
         } catch { /* no worker (dev): fall through */ }
       }

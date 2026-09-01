@@ -7,8 +7,14 @@ vi.mock('./api', async (importActual) => ({
   fetchSettings: (...args: unknown[]) => fetchSettings(...args),
 }));
 vi.mock('./playerKey', () => ({ getPlayerKey: () => 'k'.repeat(24) }));
-// jsdom has no PushManager: pushSupported() is false, so `on` must be
-// reachable through email alone in these tests.
+// jsdom has no PushManager, so pushSupported() is false by default here —
+// `on` is reached through email alone in most of these tests. One test below
+// forces pushSupported() true to exercise the getRegistration() branch.
+const pushSupportedMock = vi.fn(() => false);
+vi.mock('./push', async (importActual) => ({
+  ...(await importActual<typeof import('./push')>()),
+  pushSupported: () => pushSupportedMock(),
+}));
 
 import { useNotifyStatus } from './useNotifyStatus';
 
@@ -17,7 +23,11 @@ const settings = (email: { address: string; status: string } | null) => ({
   prefs: { push: true, email: true }, pushEndpoints: [], email,
 });
 
-beforeEach(() => { fetchSettings.mockReset(); });
+beforeEach(() => {
+  fetchSettings.mockReset();
+  pushSupportedMock.mockReset();
+  pushSupportedMock.mockReturnValue(false);
+});
 
 describe('useNotifyStatus', () => {
   it('unavailable when the service is absent', async () => {
@@ -42,5 +52,20 @@ describe('useNotifyStatus', () => {
     result.current.refresh(); rerender();
     await waitFor(() => { expect(result.current.status).toBe('on'); });
     expect(result.current.emailAddress).toBe('a@b.c');
+  });
+
+  it('resolves to off (not hung) when push is supported but no service worker is registered', async () => {
+    pushSupportedMock.mockReturnValue(true);
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: { getRegistration: () => Promise.resolve(null) },
+      configurable: true,
+    });
+    try {
+      fetchSettings.mockResolvedValue(settings(null));
+      const { result } = renderHook(() => useNotifyStatus());
+      await waitFor(() => { expect(result.current.status).toBe('off'); });
+    } finally {
+      Reflect.deleteProperty(navigator, 'serviceWorker');
+    }
   });
 });
