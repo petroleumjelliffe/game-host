@@ -9,6 +9,8 @@ delivery channel and depends on the token this spec introduces.
 [2026-09-02-friends.md](2026-09-02-friends.md) layers onto this spec's
 invite machinery: inviting a past co-player by name, delivered through
 their own notification settings, no address typed or exposed.
+[2026-09-02-invites-ui-checklist.md](2026-09-02-invites-ui-checklist.md)
+is the per-game UI checklist both specs share.
 
 ## The property being bought
 
