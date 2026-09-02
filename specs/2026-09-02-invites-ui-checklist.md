@@ -9,8 +9,12 @@ implementer second: the patterns are the same in every game regardless of
 visual treatment, so each pattern is described once, and each game gets a
 checklist of where it lands and what already exists there.
 
-**Pass & play is excluded** (Acquire's `PassAndPlayPage` and
-`PassAndPlayGamePage`). There are no seats to invite anyone to.
+**Scope, ruled 2026-09-02: the stock lobby kit only.** Acquire and
+Wordgame are the deliverable. Rail Baron and Marco Polo are surveyed
+below so the map is not lost, and marked deferred; nothing in them is
+owed until they are brought into scope. **Pass & play is excluded**
+(Acquire's `PassAndPlayPage` and `PassAndPlayGamePage`). There are no
+seats to invite anyone to.
 
 ## Four UI families
 
@@ -20,8 +24,8 @@ that rather than by game, because two games share one.
 | Family | Games | Where |
 | --- | --- | --- |
 | **The stock lobby kit** | Acquire, Wordgame | `games/<game>/src/game/lobby/`: `LobbyCard`, `SeatRow`, `RoomLobby`, `JoinRoomCard`, `ShareRoomButton`, `RoomGone`, `RoomRefused`, `StaleClient`, `ConnectionStrip`. **The same files, duplicated in both games.** |
-| **Rail Baron's board screens** | Rail Baron | `ScreenDef`s in `src/board/screens/online.ts` (`onlineLobby`, `joinRoom`, `roomGone`, `roomRefused`, `staleClient`), drawn by the board renderer from `OnlineApp.tsx`. |
-| **Marco Polo's pool** | Marco Polo | `client/src/screens/`: `LobbyPanel`, `HomeScreen`, `JoinScreen`, `RoomScreen`, `GameScreen`. Real-time, no turns. |
+| **Rail Baron's board screens** *(deferred)* | Rail Baron | `ScreenDef`s in `src/board/screens/online.ts` (`onlineLobby`, `joinRoom`, `roomGone`, `roomRefused`, `staleClient`), drawn by the board renderer from `OnlineApp.tsx`. |
+| **Marco Polo's pool** *(deferred)* | Marco Polo | `client/src/screens/`: `LobbyPanel`, `HomeScreen`, `JoinScreen`, `RoomScreen`, `GameScreen`. Real-time, no turns. |
 | **Wordgame's home** | Wordgame only | `HomePage` with the "my games" cards (`useMyGames`) and the only `NotificationSettings` panel in the repo. |
 
 **A decision to make before the kit work starts:** every stock-kit change
@@ -200,7 +204,9 @@ call in `RoomPage`, as Wordgame has). Wordgame has it.
       this device, so it cannot appear in "my games" until claimed, at
       which point the existing cards cover it.
 
-### Rail Baron
+### Rail Baron (deferred)
+
+Not in scope. Kept as the survey for when it is.
 
 Prerequisites: adopt the notify client (no bind call exists today), and
 a settings surface (none exists).
@@ -220,7 +226,9 @@ a settings surface (none exists).
 - [ ] P6 in-game: the reserved seat in the turn-order and standings
       display, the mid-game P2 entry point, the just-claimed moment.
 
-### Marco Polo
+### Marco Polo (deferred)
+
+Not in scope. Kept as the survey for when it is.
 
 Two prerequisites, one more than the others. Marco Polo does **not
 register with notify at all** (the other three servers do). Registering
@@ -253,4 +261,7 @@ optional. Then the notify client, as for Rail Baron.
    P1, P2, P3, P4, P6 on the kit, proving the patterns.
 3. Acquire: the same kit changes (or the kit extraction, then adoption),
    plus P5.
-4. Rail Baron, then Marco Polo, each with its prerequisites first.
+
+Rail Baron and Marco Polo follow when they are brought into scope, each
+with its prerequisites first; the deferred sections above are their
+starting point.
