@@ -128,6 +128,10 @@ notifications to matching-scope subscriptions. Without this, a wordgame
 turn delivered through acquire's worker would open the room inside
 acquire's app shell — precisely the isolation smear per-game apps exist to
 avoid. (This is the one change this spec makes inside `packages/notify`.)
+One deliberate exception: an *invite* prefers the target game's scope but
+falls back to any subscription, because an invite is a doorway rather than
+a turn and not arriving is the worse failure; see
+[2026-09-02-friends.md](2026-09-02-friends.md), section 4.
 
 ### iOS, and the seat-key interlock
 
