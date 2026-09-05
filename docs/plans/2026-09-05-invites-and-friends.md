@@ -3,7 +3,14 @@
 **Status:** planned 2026-09-05; adversarially reviewed against the source
 the same day and revised — the review's fifteen findings and their
 resolutions are folded in below, the load-bearing ones called out where
-they changed the design.
+they changed the design. **Implemented 2026-09-05**, same day, tasks 1–8
+in order; the deltas that emerged during the build are recorded in the
+"As built" sections of the two specs (the seat key became *derived*
+rather than stored-hashed, the invite token is stored plaintext so a
+resend reproduces the same link, and Remind gained its own by-seat
+endpoint because after a reload no client knows who is behind a reserved
+row). The artifact pass ran in a real Chromium against the built client:
+claim screen, `?invite=` stripped, seat live on the host's roster.
 **Implements:**
 [specs/2026-09-01-email-invites-and-seat-keys.md](../../specs/2026-09-01-email-invites-and-seat-keys.md)
 (all six sections),

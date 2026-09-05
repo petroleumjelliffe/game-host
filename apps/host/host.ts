@@ -13,6 +13,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
 import express from 'express';
 import type { HostContext, Mount, MountedGame } from '@game-host/host/contract.js';
+import type { NotifyChannels } from '@game-host/notify/channels.js';
 import { mount as mountAcquire } from '@game-host/acquire/server/index.js';
 import { mount as mountMarcoPolo } from '@game-host/marcopolo/server/app.js';
 import { mount as mountRailBaron } from '@game-host/railbaron/server/index.js';
@@ -59,6 +60,12 @@ export interface HostOptions {
    * missing.
    */
   dataDir: string;
+  /**
+   * Test-only: fake notification channels, so the end-to-end invite test
+   * can read what "sent". Production builds its channels from env inside
+   * the notify package and never passes this.
+   */
+  notifyChannels?: NotifyChannels;
 }
 
 export interface RunningHost {
@@ -132,7 +139,12 @@ export async function createHost(opts: HostOptions): Promise<RunningHost> {
   // seat bindings so a later deploy with keys picks up where this left off.
   const notifyDir = join(opts.dataDir, 'notifications');
   await mkdir(notifyDir, { recursive: true });
-  const notify = await createNotifyServiceFromEnv(notifyDir);
+  const notify = await createNotifyServiceFromEnv(
+    notifyDir,
+    process.env,
+    undefined,
+    opts.notifyChannels,
+  );
   app.use('/notify', createNotifyRouter(notify));
 
   for (const { mount, dataDir } of GAMES) {

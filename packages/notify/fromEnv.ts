@@ -13,6 +13,7 @@
 // held by construction: nothing in this package reads anything else.
 
 import { createNotifyService, DEFAULT_DEBOUNCE_MS, type NotifyService } from './service.js';
+import type { NotifyChannels } from './channels.js';
 import { emailSenderFromEnv } from './email.js';
 import { pushSenderFromEnv } from './webPush.js';
 
@@ -20,17 +21,30 @@ export async function createNotifyServiceFromEnv(
   dataDir: string,
   env: Record<string, string | undefined> = process.env,
   log: (line: string) => void = (line) => console.log(line),
+  /**
+   * Test-only channel injection: the composed host builds its service from
+   * env alone, which left the fake channels unreachable from the one test
+   * that proves an invite end to end. Given, it replaces the env-built
+   * channels entirely; production callers never pass it.
+   */
+  channels?: NotifyChannels,
 ): Promise<NotifyService> {
   const debounceRaw = Number(env.NOTIFY_DEBOUNCE_MS);
   const debounceMs =
     Number.isFinite(debounceRaw) && debounceRaw >= 0 ? debounceRaw : DEFAULT_DEBOUNCE_MS;
   const origin = env.NOTIFY_ORIGIN?.trim() || undefined;
-  const [push, email] = await Promise.all([
-    pushSenderFromEnv(env, log),
-    emailSenderFromEnv(env, log),
-  ]);
-  if (email && !origin) {
+  let built: NotifyChannels;
+  if (channels !== undefined) {
+    built = channels;
+  } else {
+    const [push, email] = await Promise.all([
+      pushSenderFromEnv(env, log),
+      emailSenderFromEnv(env, log),
+    ]);
+    built = { push, email };
+  }
+  if (built.email && !origin) {
     log('! SMTP is configured but NOTIFY_ORIGIN is not — email notifications stay off');
   }
-  return createNotifyService({ dataDir, debounceMs, origin, channels: { push, email }, log });
+  return createNotifyService({ dataDir, debounceMs, origin, channels: built, log });
 }
