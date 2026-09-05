@@ -747,3 +747,36 @@ describe('invite records on disk', () => {
     expect(service2.claimInvite(token, KIT_KEY)).toMatchObject({ playerId: 'p1' });
   });
 });
+
+describe('remind, addressed by seat', () => {
+  test('resends the live invite by pending seat, capped like any resend', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
+    f.service.bindSeat(HOST_KEY, 'testgame', 'ROOM1', 'p1', host.token, { name: 'Pete', phase: 'lobby' });
+    await f.service.invite({
+      playerKey: HOST_KEY, gameId: 'testgame', roomId: 'ROOM1',
+      playerId: 'p1', token: host.token, email: 'new@example.com',
+    });
+    await drain();
+    const firstUrl = f.email.sent.find((m) => m.kind === 'invite')!.url;
+
+    const remind = () =>
+      f.service.remind({
+        playerKey: HOST_KEY, gameId: 'testgame', roomId: 'ROOM1',
+        playerId: 'p1', token: host.token, targetPlayerId: 'p2',
+      });
+    expect(await remind()).toEqual({ ok: true, playerId: 'p2', resend: true });
+    await drain();
+    const mails = f.email.sent.filter((m) => m.kind === 'invite');
+    expect(mails).toHaveLength(2);
+    expect(mails[1]!.url).toBe(firstUrl); // the SAME link
+    // Creation + remind = 2 sends; one more allowed, then the cap.
+    expect(await remind()).toMatchObject({ ok: true });
+    expect(await remind()).toEqual({ ok: false, reason: 'rateLimited' });
+
+    // After revoke there is nothing to remind — one shaped refusal.
+    f.reporter.seatVacated!('ROOM1', 'p2');
+    expect(await remind()).toEqual({ ok: false, reason: 'noSuchContact' });
+  });
+});

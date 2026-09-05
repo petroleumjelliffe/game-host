@@ -70,10 +70,28 @@ export interface InviteArgs {
 }
 
 export async function sendInvite(args: InviteArgs): Promise<InviteOutcome> {
+  return postInvite('/invite', { ...args });
+}
+
+export interface RemindArgs {
+  game: string;
+  roomId: string;
+  playerId: string;
+  token: string;
+  /** The pending seat whose invite to resend. */
+  targetPlayerId: string;
+}
+
+/** The reserved row's Remind: resend by seat — the client never knows who is behind it. */
+export async function sendRemind(args: RemindArgs): Promise<InviteOutcome> {
+  return postInvite('/invite/remind', { ...args });
+}
+
+async function postInvite(path: string, args: Record<string, unknown>): Promise<InviteOutcome> {
   const playerKey = getPlayerKey();
   if (playerKey === null) return { ok: false, reason: 'failed' };
   try {
-    const res = await notifyPost('/invite', { playerKey, ...args });
+    const res = await notifyPost(path, { playerKey, ...args });
     const body: unknown = await res.json().catch(() => null);
     if (res.ok && typeof body === 'object' && body !== null) {
       const b = body as Record<string, unknown>;

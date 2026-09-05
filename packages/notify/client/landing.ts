@@ -25,6 +25,8 @@ export interface LandingCredentials {
   playerId: string;
   token: string;
   name: string;
+  /** On invite claims: who saved the seat, for the greeting. */
+  inviterName?: string | null;
 }
 
 function isCredentials(value: unknown): value is LandingCredentials {

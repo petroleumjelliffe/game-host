@@ -42,6 +42,21 @@ export interface SeatRowProps {
    * folded into the presence dot's color alone.
    */
   reconnecting?: boolean;
+  /**
+   * Reserved: invited, not yet claimed. Dashed amber, no presence dot
+   * (nothing is connected), never renameable — the design's third seat
+   * state, beside occupied and empty.
+   */
+  reserved?: boolean;
+  /**
+   * The six seconds after a reserved seat converts to a live one: a green
+   * ring so every phone in the lobby notices the arrival. Matched by seat
+   * id, never display index — with two reserved seats, the later one
+   * claiming first shifts the earlier one's index.
+   */
+  justClaimed?: boolean;
+  /** Trailing controls: the empty row's Invite, the reserved row's Remind/Revoke. */
+  actions?: ReactNode;
   /** The name: a plain span in the room, an input on your own row. */
   children: ReactNode;
 }
@@ -50,19 +65,24 @@ export interface SeatRowProps {
  *  is uncontrolled (committed on blur) and the join card's is controlled (read
  *  at submit) — one shared input would have to be both. */
 export function SeatRow({
-  emoji, connected, isHost, empty = false, reconnecting = false, children,
+  emoji, connected, isHost, empty = false, reconnecting = false,
+  reserved = false, justClaimed = false, actions, children,
 }: SeatRowProps) {
+  const shell = reserved
+    ? 'border-[1.5px] border-dashed border-[#c9a86a] bg-[#fbf9f3]'
+    : empty
+      ? 'border-[1.5px] border-dashed border-line-strong text-ink-ghost italic'
+      : justClaimed
+        ? 'border-[1.5px] border-[#3fa053] bg-white shadow-[0_0_0_3px_rgba(63,160,83,0.15)]'
+        : 'border-line bg-white';
   return (
     <li
       data-empty={empty ? '' : undefined}
-      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${
-        empty
-          ? 'border-[1.5px] border-dashed border-line-strong text-ink-ghost italic'
-          : 'border-line bg-white'
-      }`}
+      data-reserved={reserved ? '' : undefined}
+      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${shell}`}
     >
       <span aria-hidden className="flex-none text-base leading-none">{emoji ?? '·'}</span>
-      {!empty && connected !== null && (
+      {!empty && !reserved && connected !== null && (
         <span
           data-testid="presence-dot"
           aria-hidden
@@ -70,12 +90,16 @@ export function SeatRow({
         />
       )}
       {children}
+      {justClaimed && (
+        <span className="flex-none text-[11.5px] font-semibold text-[#3fa053]">just joined</span>
+      )}
       {reconnecting && (
         <span className="flex-none text-[11px] text-ink-ghost">reconnecting…</span>
       )}
       {isHost && (
         <span className="flex-none text-[10px] font-bold uppercase tracking-wide text-ink-faint">host</span>
       )}
+      {actions}
     </li>
   );
 }

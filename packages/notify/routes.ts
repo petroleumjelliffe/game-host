@@ -149,6 +149,37 @@ export function createNotifyRouter(service: NotifyService): Router {
       .catch(() => res.status(500).json({ error: 'internal' }));
   });
 
+  router.post('/invite/remind', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    const token = asString(b.token);
+    const targetPlayerId = asString(b.targetPlayerId);
+    if (!playerKey || !game || !roomId || !playerId || !token || !targetPlayerId) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    service
+      .remind({ playerKey, gameId: game, roomId, playerId, token, targetPlayerId })
+      .then((result) => {
+        if (result.ok) res.json(result);
+        else {
+          const status =
+            result.reason === 'seatRefused'
+              ? 403
+              : result.reason === 'rateLimited'
+                ? 429
+                : result.reason === 'noSuchGame'
+                  ? 404
+                  : 409;
+          res.status(status).json(result);
+        }
+      })
+      .catch(() => res.status(500).json({ error: 'internal' }));
+  });
+
   // Claim and key redemption answer one shape for every failure — an
   // invalid, revoked, spent, or fabricated credential is indistinguishable
   // from a room that never existed (the non-probe rule).

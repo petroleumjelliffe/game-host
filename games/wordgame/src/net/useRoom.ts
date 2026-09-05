@@ -49,6 +49,8 @@ export interface Room {
   begin(): void;
   rename(name: string): void;
   leaveSeat(): void;
+  /** Delete a reserved seat. Host-only; the server enforces it. */
+  revokeSeat(playerId: string): void;
 }
 
 /**
@@ -113,5 +115,6 @@ export function useRoom(roomId: string, connect: () => Connection = getConnectio
     begin: lobby.begin,
     rename: lobby.rename,
     leaveSeat: lobby.leaveSeat,
+    revokeSeat: connection.revokeSeat,
   };
 }

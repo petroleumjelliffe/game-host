@@ -151,6 +151,17 @@ export type InviteResult =
   | { ok: true; playerId: string; resend: boolean }
   | { ok: false; reason: InviteRefusal };
 
+export interface RemindRequest {
+  playerKey: string;
+  gameId: string;
+  roomId: string;
+  /** The reminder's own seat — proof, via verifySeat, that they are in the room. */
+  playerId: string;
+  token: string;
+  /** The pending seat whose invite to resend. */
+  targetPlayerId: string;
+}
+
 /** What a claim or key redemption hands the landing page: a whole identity. */
 export interface SeatCredentials {
   playerId: string;
@@ -172,8 +183,18 @@ export interface NotifyService extends TurnNotifier {
   contacts(playerKey: string, room?: { gameId: string; roomId: string }): ContactView[];
   /** Reserve a seat and deliver the invite — or resend a live one. */
   invite(request: InviteRequest): Promise<InviteResult>;
+  /**
+   * The reserved row's Remind: resend the live invite for a pending seat,
+   * addressed by the seat rather than the target — after a reload the
+   * inviter's client knows only the roster's pending row, never who is
+   * behind it (that is the privacy stance working). Same caps, same link.
+   */
+  remind(request: RemindRequest): Promise<InviteResult>;
   /** One shaped null for every failure: unknown, revoked, already claimed, dead room. */
-  claimInvite(inviteToken: string, playerKey?: string): SeatCredentials | null;
+  claimInvite(
+    inviteToken: string,
+    playerKey?: string,
+  ): (SeatCredentials & { inviterName: string | null }) | null;
   /** Redeem an emailed seat key. Same single refusal shape. */
   redeemSeatKey(key: string): SeatCredentials | null;
   /**
@@ -1010,7 +1031,38 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       return { ok: true, playerId, resend: false };
     },
 
-    claimInvite(inviteToken, playerKey): SeatCredentials | null {
+    async remind(request): Promise<InviteResult> {
+      const reg = games.get(request.gameId);
+      if (!reg || !ROOM_ID.test(request.roomId)) return { ok: false, reason: 'noSuchGame' };
+      if (!reg.verifySeat(request.roomId, request.playerId, request.token)) {
+        return { ok: false, reason: 'seatRefused' };
+      }
+      // Addressed by seat: the live (unclaimed, unrevoked) invite behind
+      // the pending row. A revoked or claimed seat has nothing to remind —
+      // the same shape as a seat that never had an invite.
+      const record = [...invites.values()].find(
+        (r) =>
+          r.gameId === request.gameId &&
+          r.roomId === request.roomId &&
+          r.playerId === request.targetPlayerId &&
+          r.claimedAt === undefined &&
+          r.revokedAt === undefined,
+      );
+      if (!record) return { ok: false, reason: 'noSuchContact' };
+      // The recipient's protection: the same per-record daily cap the
+      // invite path counts, whoever presses the button.
+      const day = utcDay(now());
+      const sentToday = record.sendDay === day ? (record.sendCount ?? 0) : 0;
+      if (sentToday >= MAX_INVITES_PER_TARGET_PER_DAY) return { ok: false, reason: 'rateLimited' };
+      record.sendCount = sentToday + 1;
+      record.sendDay = day;
+      saveInvite(record);
+      const reminderName = profiles.get(profileIdFor(request.playerKey))?.name ?? null;
+      track(deliverInvite(reg, record, reminderName));
+      return { ok: true, playerId: record.playerId, resend: true };
+    },
+
+    claimInvite(inviteToken, playerKey) {
       if (typeof inviteToken !== 'string' || inviteToken.length < 16) return null;
       const record = invites.get(sha256hex(inviteToken));
       // One shaped null: unknown, revoked, already claimed, dead room.
@@ -1053,7 +1105,9 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         }
         if (addBinding(room, creds.playerId, profile.profileId)) saveRoom(room);
       }
-      return creds;
+      // Who saved the seat, for the landing's greeting — a name the invite
+      // already showed, never anything more.
+      return { ...creds, inviterName: profiles.get(record.inviterProfileId)?.name ?? null };
     },
 
     redeemSeatKey(key): SeatCredentials | null {
