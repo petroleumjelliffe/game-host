@@ -169,3 +169,42 @@ test('prefs toggle over the wire', async () => {
   };
   expect(settings.prefs).toEqual({ push: false, email: true });
 });
+
+test('contacts answers the caller their own (empty) ledger', async () => {
+  const res = await post('/contacts', { playerKey: KEY });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ contacts: [] });
+});
+
+test('invite requires exactly one target shape', async () => {
+  const both = await post('/invite', {
+    playerKey: KEY, game: 'testgame', roomId: 'ROOM1', playerId: 'p1',
+    token: 'good-token', email: 'a@b.co', contactId: 'x',
+  });
+  expect(both.status).toBe(400);
+  const neither = await post('/invite', {
+    playerKey: KEY, game: 'testgame', roomId: 'ROOM1', playerId: 'p1', token: 'good-token',
+  });
+  expect(neither.status).toBe(400);
+});
+
+test('claim and key redemption answer one shape for every failure', async () => {
+  // Fabricated, expired-looking, and structurally fine tokens: identical.
+  const claim = await post('/invite/claim', { inviteToken: 'A'.repeat(32) });
+  expect(claim.status).toBe(404);
+  expect(await claim.json()).toEqual({ error: 'unavailable' });
+  const redeem = await post('/redeem-key', { key: 'A'.repeat(43) });
+  expect(redeem.status).toBe(404);
+  expect(await redeem.json()).toEqual({ error: 'unavailable' });
+});
+
+test('bind accepts and ignores unknown-phase payloads from odd clients', async () => {
+  // reporter is otherwise unused in this block; keep the reference honest.
+  void reporter;
+  const res = await post('/bind', {
+    playerKey: KEY, game: 'testgame', roomId: 'ROOM1', playerId: 'p1',
+    token: 'good-token', name: 'Pete', phase: 'weird',
+  });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ ok: true });
+});

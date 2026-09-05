@@ -75,12 +75,105 @@ export function createNotifyRouter(service: NotifyService): Router {
       res.status(400).json({ error: 'bad request' });
       return;
     }
-    const bound = service.bindSeat(playerKey, game, roomId, playerId, token);
+    // Both optional and both additive: clients built before they existed
+    // send neither, and bind exactly as they always did (phase 'playing').
+    const name = asString(b.name) ?? undefined;
+    const phase = b.phase === 'lobby' || b.phase === 'playing' ? b.phase : undefined;
+    const bound = service.bindSeat(playerKey, game, roomId, playerId, token, {
+      ...(name === undefined ? {} : { name }),
+      ...(phase === undefined ? {} : { phase }),
+    });
     if (!bound.ok) {
       res.status(bound.reason === 'seatRefused' ? 403 : 404).json({ error: bound.reason });
       return;
     }
     res.json({ ok: true });
+  });
+
+  router.post('/contacts', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    if (!playerKey) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const roomCtx = game !== null && roomId !== null ? { gameId: game, roomId } : undefined;
+    res.json({ contacts: service.contacts(playerKey, roomCtx) });
+  });
+
+  router.post('/invite', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    const token = asString(b.token);
+    const email = asString(b.email);
+    const contactId = asString(b.contactId);
+    // Exactly one target shape, never both, never neither.
+    if (!playerKey || !game || !roomId || !playerId || !token || (email === null) === (contactId === null)) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    service
+      .invite({
+        playerKey,
+        gameId: game,
+        roomId,
+        playerId,
+        token,
+        ...(email === null ? {} : { email }),
+        ...(contactId === null ? {} : { contactId }),
+      })
+      .then((result) => {
+        if (result.ok) {
+          res.json(result);
+          return;
+        }
+        const status =
+          result.reason === 'seatRefused'
+            ? 403
+            : result.reason === 'noSuchGame'
+              ? 404
+              : result.reason === 'rateLimited'
+                ? 429
+                : result.reason === 'emailUnavailable'
+                  ? 503
+                  : result.reason === 'invalidAddress' || result.reason === 'noSuchContact'
+                    ? 400
+                    : 409; // unreachable, alreadySeated, blocked, roomFull
+        res.status(status).json(result);
+      })
+      .catch(() => res.status(500).json({ error: 'internal' }));
+  });
+
+  // Claim and key redemption answer one shape for every failure — an
+  // invalid, revoked, spent, or fabricated credential is indistinguishable
+  // from a room that never existed (the non-probe rule).
+  router.post('/invite/claim', (req, res) => {
+    const b = body(req);
+    const inviteToken = asString(b.inviteToken);
+    const playerKey = playerKeyOf(req) ?? undefined;
+    if (inviteToken === null) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const creds = service.claimInvite(inviteToken, playerKey);
+    if (creds === null) res.status(404).json({ error: 'unavailable' });
+    else res.json(creds);
+  });
+
+  router.post('/redeem-key', (req, res) => {
+    const key = asString(body(req).key);
+    if (key === null) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const creds = service.redeemSeatKey(key);
+    if (creds === null) res.status(404).json({ error: 'unavailable' });
+    else res.json(creds);
   });
 
   router.post('/settings', (req, res) => {
