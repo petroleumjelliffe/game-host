@@ -22,9 +22,14 @@ export function RoomPage({ connect = getConnection }: RoomPageProps) {
   const navigate = useNavigate();
   const room = useRoom(roomId ?? '', connect);
 
-  // Whenever the room is playing and this device holds a seat, tell the
-  // notification service which seat is ours. Fire-and-forget.
-  useNotifyBind(roomId ?? '', room.phase === 'playing');
+  // Whenever this device holds a seat, tell the notification service which
+  // seat is ours — in the lobby too, since the invite picker's "already in
+  // this room" reads lobby bindings; only the playing bind writes the
+  // co-player ledger, server-side. Fire-and-forget.
+  useNotifyBind(
+    roomId ?? '',
+    room.phase === 'playing' ? 'playing' : room.phase === 'lobby' ? 'lobby' : null,
+  );
 
   // Leaving is a real disconnect: the socket this room depends on closes,
   // and `getConnection()` opens a fresh one wherever the player goes next.

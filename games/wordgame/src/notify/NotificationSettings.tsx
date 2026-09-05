@@ -4,9 +4,14 @@
 // /notify) or the browser lacks the machinery.
 
 import { useCallback, useEffect, useState } from 'react';
+import {
+  enrollPush,
+  syncSubscription,
+  unsubscribePush,
+} from '@game-host/notify/client/pushSubscription';
 import { fetchSettings, notifyPost, type NotifySettings } from './api';
 import { getPlayerKey } from './playerKey';
-import { pushSupported, urlBase64ToUint8Array } from './push';
+import { pushSupported } from './push';
 
 type Load =
   | { state: 'loading' }
@@ -67,34 +72,16 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
   }, [playerKey]);
 
   // Once settings are in: is this browser's subscription one the server
-  // knows? Re-register silently if the browser holds one the server lost.
+  // knows? The shared helper re-registers silently if the browser holds
+  // one the server lost.
   useEffect(() => {
     if (load.state !== 'ready' || !load.settings.pushEnabled || !pushSupported()) return;
     if (playerKey === null) return;
     const { pushEndpoints, vapidPublicKey } = load.settings;
     let cancelled = false;
-    void (async () => {
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        const sub = await registration.pushManager.getSubscription();
-        if (cancelled) return;
-        if (sub === null) {
-          setPushOn(false);
-          return;
-        }
-        if (pushEndpoints.includes(sub.endpoint)) {
-          setPushOn(true);
-          return;
-        }
-        // The browser has a subscription the server doesn't know about.
-        if (vapidPublicKey !== null) {
-          await notifyPost('/subscriptions', { playerKey, subscription: sub.toJSON() });
-          if (!cancelled) setPushOn(true);
-        }
-      } catch {
-        // No worker (dev), or the query failed: leave the toggle off.
-      }
-    })();
+    void syncSubscription(playerKey, pushEndpoints, vapidPublicKey).then((on) => {
+      if (!cancelled) setPushOn(on);
+    });
     return () => { cancelled = true; };
   }, [load, playerKey]);
 
@@ -104,45 +91,24 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
     if (key === null) return;
     setPushBusy(true);
     setPushError(null);
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        setPushError('Notifications are blocked for this site in your browser settings.');
-        return;
-      }
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key).buffer as ArrayBuffer,
-      });
-      const res = await notifyPost('/subscriptions', { playerKey, subscription: subscription.toJSON() });
-      if (!res.ok) throw new Error('subscription refused');
-      setPushOn(true);
-    } catch {
+    const result = await enrollPush(playerKey, key);
+    if (result === 'enabled') setPushOn(true);
+    else if (result === 'denied') {
+      setPushError('Notifications are blocked for this site in your browser settings.');
+    } else {
       setPushError('Could not set up push on this device.');
-    } finally {
-      setPushBusy(false);
     }
+    setPushBusy(false);
   }, [load, playerKey]);
 
   const disablePush = useCallback(async () => {
     if (playerKey === null) return;
     setPushBusy(true);
     setPushError(null);
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const sub = await registration.pushManager.getSubscription();
-      if (sub !== null) {
-        const endpoint = sub.endpoint;
-        await sub.unsubscribe();
-        await notifyPost('/subscriptions/remove', { playerKey, endpoint });
-      }
-      setPushOn(false);
-    } catch {
-      setPushError('Could not turn push off cleanly — it may already be off.');
-    } finally {
-      setPushBusy(false);
-    }
+    const clean = await unsubscribePush(playerKey);
+    if (clean) setPushOn(false);
+    else setPushError('Could not turn push off cleanly — it may already be off.');
+    setPushBusy(false);
   }, [playerKey]);
 
   const emailStatus = emailOverride ?? (load.state === 'ready' ? load.settings.email : null);
