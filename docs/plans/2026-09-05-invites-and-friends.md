@@ -49,7 +49,8 @@ Each of these is a deliberate refinement, not drift; the specs get an
   parent spec had `joinRoom` presenting the invite token; this plan
   instead gives the contract a `claimSeat` capability and lets the
   landing page POST the token to notify, which converts the pending seat
-  and answers with live `(playerId, token)`. That makes `?invite=` and
+  and answers with the live `(playerId, token, name)`. That makes
+  `?invite=` and
   `?key=` land through **one identical client path** (POST, save
   identity, strip param, ordinary join), gives notify the claim moment
   it needs anyway (stamp `claimedAt`, mint the seat key, confirm the
@@ -116,7 +117,7 @@ and the `--lobby-accent` custom-property seam in the stock kit.
 ## The work, in order
 
 Each task leaves `npm test`, `npm run typecheck`, and `npm run lint`
-green; nothing user-visible appears before task 6.
+green; nothing user-visible appears before task 7.
 
 ### 1. Host contract: three capabilities
 
@@ -125,11 +126,15 @@ Marco Polo and Rail Baron's registrations stay valid:
 
 ```ts
 reserveSeat?(roomId: string, tokenHash: string, name: string | null): string | null;
-claimSeat?(roomId: string, tokenHash: string): { playerId: string; token: string } | null;
-getSeatCredentials?(roomId: string, playerId: string): { playerId: string; token: string } | null;
+claimSeat?(roomId: string, tokenHash: string): { playerId: string; token: string; name: string } | null;
+getSeatCredentials?(roomId: string, playerId: string): { playerId: string; token: string; name: string } | null;
 ```
 
-Same-process trust, same shape as `verifySeat`. Update the contract
+Same-process trust, same shape as `verifySeat`. The seat's `name` rides
+along because the client must write a whole `RoomIdentity`
+(`{ playerId, token, name }`) into the identity store at the landing —
+without it the redeeming device has credentials but nothing to call
+itself. Update the contract
 comment naming the seat token as the only identity proof to name the
 seat key as its emailed proxy, per the parent spec. Notify treats a
 registration without these as a game that cannot host invites
@@ -148,7 +153,9 @@ registration without these as a game that cannot host invites
   `claimByHash(roomId, tokenHash)` converts a matching pending seat into
   a normal `seatPlayer`-shaped holder with a fresh `randomUUID()` token
   (null otherwise, one shape for absent room / absent hash / already
-  claimed), `revoke(roomId, playerId)` deletes a pending seat only.
+  claimed), `revoke(roomId, playerId)` deletes a pending seat only. A
+  null-named pending seat (an email invite) claims under the default
+  `Player N` name; the claimer renames in the lobby like anyone else.
 - `seatPlayer` and `join`'s lobby branch treat pending ids as taken;
   capacity counts them. The honor-system reclaim cannot match a pending
   seat (it matches on `!connected` *players*; pending seats are not
@@ -240,8 +247,12 @@ posture.
   whole mechanism); otherwise `reserveSeat`, mint the token
   (`newToken()`), store the record, deliver. Caps: 3 per (inviter,
   target) per UTC day, 20 per inviter per UTC day, counted the same way
-  the email-confirmation cap is; email targets also ride the existing
-  per-address counting. `roomFull` is `reserveSeat` returning null.
+  the email-confirmation cap is. An address-targeted invite also counts
+  per address per UTC day, tallied across that address's invite records
+  at send time — the existing per-address counter lives on a profile's
+  `EmailRecord`, and an invited address has no profile yet, so the
+  invites carry their own count. `roomFull` is `reserveSeat` returning
+  null.
 - **Delivery.** A new `InvitePayload` beside `TurnPayload` in
   `channels.ts`; `EmailSender` grows `sendInvite(to, payload, roomUrl)`
   (the invite mail is its own template beside turn and confirmation,
@@ -254,9 +265,9 @@ posture.
   no presence check — the spec's reasoning: an invitee has no room to be
   looking at), email deduped by address. The fake channels grow the
   matching recorder.
-- **`POST /notify/invite/claim { inviteToken, playerKey?, name? }`** →
-  look up by hash, `claimSeat` on the game, stamp `claimedAt`, mint the
-  seat key, answer `{ playerId, token }`. For an email-targeted invite,
+- **`POST /notify/invite/claim { inviteToken, playerKey? }`** → look up
+  by hash, `claimSeat` on the game, stamp `claimedAt`, mint the seat
+  key, answer `{ playerId, token, name }`. For an email-targeted invite,
   claiming **is** the double-opt-in: mark the address confirmed on the
   claiming profile and mint its unsubscribe token, per the parent spec.
   If a `playerKey` came along, bind it (`lobby` phase — the ledger
@@ -266,7 +277,8 @@ posture.
 - **`POST /notify/redeem-key { key }`** → hash, find the (room, seat)
   holding it, check the stored `seatTokenHash` still matches what
   `getSeatCredentials` returns (a rotated seat means the key is dead —
-  drop it), answer the live pair. Same single refusal shape. Seat keys
+  drop it), answer `{ playerId, token, name }`. Same single refusal
+  shape. Seat keys
   are minted lazily: at claim, and at the first email send about a seat
   that has none; every email link (turn, reminder, confirmation aside)
   carries `?key=`.
@@ -275,11 +287,15 @@ posture.
   today. This is parent-spec §5 finishing what `bindSeat` started.
 - **Auto-remind.** Not a naive 24-hour `setTimeout`: the process
   restarts on every deploy. `fire` records
-  `currentTurn = { playerId, turnKey, notifiedAt }`; a sweep on boot and
-  hourly re-checks rooms whose `currentTurn` is over 24h old with no
-  newer `turnChanged`, sends one reminder (same `turnKey`, subject
-  marked as a reminder, `remindedAt` written before the send), capped at
-  one per turn. The reminder carries the seat key like every mail.
+  `currentTurn = { playerId, turnKey, notifiedAt }`, and **`turnChanged`
+  clears any `currentTurn` whose `turnKey` it supersedes** (persisted) —
+  without that, a turn whose notification was skipped because the player
+  was present would leave the *previous* turn's entry standing and the
+  sweep would remind for a turn already taken. The sweep runs at boot
+  and hourly: any `currentTurn` over 24h old gets one reminder (same
+  `turnKey`, subject marked as a reminder, `remindedAt` written before
+  the send), capped at one per turn. The reminder carries the seat key
+  like every mail.
 
 ### 6. The notify client package
 
@@ -293,8 +309,11 @@ the template). Moves, minus wordgame's styling: `playerKey.ts`,
 currently inlined in `NotificationSettings.tsx`, extracted as hooks.
 New, headless: `useContacts(roomCtx?)`, `useInvite()` (send + resend,
 returning the refusal reasons as data), `redeemLanding(params)` (the one
-function that handles both `?invite=` and `?key=`: POST, save via the
-lobby identity store, `history.replaceState`), and `useEnrollPush()`
+function that handles both `?invite=` and `?key=`: it POSTs, resolves to
+`{ playerId, token, name }` or the refusal, and strips the param via
+`history.replaceState` — the **caller** writes the identity, because
+`createIdentityStore(appId)` is per-game and the shared package cannot
+know an `appId`), and `useEnrollPush()`
 (the P4 card's brain: `offer` / `enabled` / `declined`-and-remembered /
 `unsupported` / `needsInstall` on iOS-in-Safari). Wordgame re-imports
 everything; `NotificationSettings` refactors onto the shared hooks and
@@ -374,8 +393,12 @@ rather than at the end. Beyond them, the habits this repo holds:
 ## Out of scope, deliberately
 
 - **Mid-game invites and claims** (checklist P6, the parent spec's
-  rotation insertion and tray-on-claim) — the ruling above; the next
-  plan in this series.
+  rotation insertion and tray-on-claim) — the ruling above. Owner's
+  note, 2026-09-05: mid-game joining matters least for the board games
+  and most for real-time play — Marco Polo's pool, where a claim is a
+  swimmer diving in with no rotation to disturb — so the deferred plan
+  should probably arrive with Marco Polo's adoption rather than ahead
+  of it.
 - **Acquire adoption** and the kit-extraction decision the checklist
   flags; Rail Baron and Marco Polo remain deferred with their specs.
 - **PWA scope tags, per-game workers, install prompts** beyond the
