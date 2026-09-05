@@ -1,6 +1,9 @@
 # Invites and friends: the per-game UI checklist
 
-**Status:** handoff checklist, 2026-09-02. Companion to
+**Status:** handoff checklist, 2026-09-02. The Wordgame column is
+planned 2026-09-05 in
+[docs/plans/2026-09-05-invites-and-friends.md](../docs/plans/2026-09-05-invites-and-friends.md)
+(P6 deferred with mid-game claims). Companion to
 [2026-09-01-email-invites-and-seat-keys.md](2026-09-01-email-invites-and-seat-keys.md)
 and [2026-09-02-friends.md](2026-09-02-friends.md), covering the UI both
 owe together, because a friend picker cannot ship without the reserved

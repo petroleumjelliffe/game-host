@@ -1,6 +1,8 @@
 # Email invites and seat keys: identity without accounts
 
-**Status:** designed 2026-09-01, not yet planned.
+**Status:** designed 2026-09-01; planned 2026-09-05 in
+[docs/plans/2026-09-05-invites-and-friends.md](../docs/plans/2026-09-05-invites-and-friends.md)
+(all six sections; mid-game claim deferred by that plan's scope ruling).
 **Home:** this repo, because the design cuts across `packages/lobby`,
 `packages/notify`, and the host contract — no single game owns it. Written
 after a brainstorm on inviting specific people to games; the companion spec

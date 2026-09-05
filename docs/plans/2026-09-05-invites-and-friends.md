@@ -1,0 +1,387 @@
+# Invites and friends: the wordgame slice, planned
+
+**Status:** planned 2026-09-05, not yet implemented.
+**Implements:**
+[specs/2026-09-01-email-invites-and-seat-keys.md](../../specs/2026-09-01-email-invites-and-seat-keys.md)
+(all six sections),
+[specs/2026-09-02-friends.md](../../specs/2026-09-02-friends.md) (all five
+pieces), and the Wordgame column of
+[specs/2026-09-02-invites-ui-checklist.md](../../specs/2026-09-02-invites-ui-checklist.md).
+**Design source:** the Claude Design canvas "Word Game Invite Flow"
+(project *Word Game UI Updates*, `Word Game Invite Flow.dc.html`) — seven
+screens: the host's lobby with per-seat Invite buttons, the picker as a
+bottom sheet, the reserved seat row with Remind and Revoke, the claim
+moment, and the invitee's ping, landing screen, and waiting lobby.
+
+## Scope rulings, made 2026-09-05
+
+Four decisions were put to the owner before planning; their answers are
+the shape of this plan.
+
+1. **The whole parent spec ships**, seat keys and the 24-hour auto-remind
+   included — not just the pieces the lobby flow strictly needs.
+2. **Claims are lobby-only in this slice.** `beginGame` auto-revokes any
+   unclaimed reserved seat, so a pending seat never exists inside a
+   running game. The parent spec's mid-game claim (pending seat outside
+   the rotation, fresh tray, next-after-current insertion) and the UI
+   checklist's P6 are **deferred to a later plan** — that is the one
+   engine-touching chunk this plan deliberately does not open. The
+   parent spec's "a pending seat is outside the game" rule survives
+   trivially: no game ever begins with one.
+3. **Email invites ship now**, both picker tabs live. On the LAN deploy
+   (no SMTP) the email tab shows the `emailUnavailable` state, which is
+   "unconfigured means off, not broken" wearing UI.
+4. **The notify client is extracted to `packages/notify/client/` first**,
+   per the friends spec's prerequisite, so the new hooks are born shared
+   and Acquire adopts later with no churn. Wordgame is still the only
+   game with a surface in this slice.
+
+## Deltas from the specs and the design, recorded up front
+
+Each of these is a deliberate refinement, not drift; the specs get an
+"As built" note for them when this lands.
+
+- **Invite entry point** lives on each empty seat row (the design's
+  ruling: "inviting fills *this* seat"), not beside `ShareRoomButton` as
+  the checklist sketched. No mechanism changes — the lobby allocates the
+  next free seat id either way — but the affordance is per-seat.
+- **Claiming is an HTTP POST to notify, not a `joinRoom` variant.** The
+  parent spec had `joinRoom` presenting the invite token; this plan
+  instead gives the contract a `claimSeat` capability and lets the
+  landing page POST the token to notify, which converts the pending seat
+  and answers with live `(playerId, token)`. That makes `?invite=` and
+  `?key=` land through **one identical client path** (POST, save
+  identity, strip param, ordinary join), gives notify the claim moment
+  it needs anyway (stamp `claimedAt`, mint the seat key, confirm the
+  email, bind the profile), and keeps invite tokens out of the lobby
+  protocol entirely. The lobby still enforces the spec's real rule:
+  `seatPlayer` never hands a pending seat to an ordinary joiner.
+- **`reserveSeat` carries the token hash and a display name:**
+  `reserveSeat(roomId, tokenHash, name | null)`. The spec's indicative
+  signature had neither, but the pending seat must hold the hash (it is
+  what `claimSeat` matches) and the roster must show the contact's name
+  (or nothing, for email — the address never enters game state).
+- **Revoke rides the lobby socket, not a notify endpoint.** Host-ness
+  lives in the lobby (`SeatHolder.isHost`); notify's `verifySeat` cannot
+  see it. A new host-gated `revokeSeat` client event (same gate shape as
+  `beginGame`) deletes the pending seat and rebroadcasts. The
+  `InviteRecord` left behind is a token that can never claim —
+  `claimSeat` returns null — which is exactly the indistinguishable "no"
+  the non-probe rule wants; notify cleans it lazily and on
+  `roomRemoved`.
+- **Server-side, any verified seat can invite; host-only is UI.** The
+  design and checklist show invite controls to the host alone, and the
+  wordgame UI honours that. The invite endpoint itself accepts any
+  caller who proves a seat via `verifySeat`, because notify cannot check
+  host-ness without contract growth and the friends spec's structural
+  defense ("by name you can only invite people who sat with you")
+  doesn't need it to.
+- **Binding happens in the lobby too, but the ledger writes only on
+  play-phase binds.** The friends spec assumed bind fires at play phase
+  only; the design's picker needs "Lee — already in this room" *in the
+  lobby*, and that state is computed from `bindings`. So `useNotifyBind`
+  fires on seated (lobby and playing) and the bind request grows a
+  `phase: 'lobby' | 'playing'` field; contact-ledger entries are written
+  only for `playing` binds, preserving "the ledger records people you
+  actually played with". A lobby claim therefore does **not** write
+  ledger entries — the claimer's play-phase bind does, minutes later,
+  when the game starts. The phase field is client-reported and only
+  affects the reporter's own ledger timing, which is the same trust
+  level as the bind itself.
+- **Remind is the invite resend, surfaced.** The design gives the
+  reserved row a primary **Remind** action; mechanically it is the
+  parent flow's "a repeat within the caps is a resend, never a second
+  reservation", re-sent through the same channels, capped at 3 per
+  (inviter, target) per UTC day. The parent spec's "no manual nudge in
+  v1" ruling was about *turn* reminders and stands untouched.
+- **The PWA spec's scope-tagged subscriptions are not built here.** With
+  one game enrolled, every subscription is wordgame's, so the friends
+  spec's "prefer matching scope, fall back to any" ruling is satisfied
+  by construction. The fallback rule is written into the send code
+  anyway so scope tags can arrive later without touching invites.
+
+## Current state, in one paragraph
+
+Confirmed by survey 2026-09-05: none of this exists. No pending seat
+(`SeatHolder` is `{id, name, token, isHost, connected}` and the roster
+knows occupied or nothing), no invite record, no seat key, no profile
+display name, no contact ledger, no invite email template, and no
+landing states in `RoomPage`. What does exist and is load-bearing:
+wordgame's full notify client (`playerKey`, `api`, `useNotifyBind`,
+`NotificationSettings` with real Web Push subscribe, `public/sw.js`
+displaying `{title, body, url}` pushes generically — invite pushes need
+no worker change), the lobby conformance suite, notify's fake channels,
+and the `--lobby-accent` custom-property seam in the stock kit.
+
+## The work, in order
+
+Each task leaves `npm test`, `npm run typecheck`, and `npm run lint`
+green; nothing user-visible appears before task 6.
+
+### 1. Host contract: three capabilities
+
+`packages/host/contract.ts`, on `NotifyGameRegistration`, all optional so
+Marco Polo and Rail Baron's registrations stay valid:
+
+```ts
+reserveSeat?(roomId: string, tokenHash: string, name: string | null): string | null;
+claimSeat?(roomId: string, tokenHash: string): { playerId: string; token: string } | null;
+getSeatCredentials?(roomId: string, playerId: string): { playerId: string; token: string } | null;
+```
+
+Same-process trust, same shape as `verifySeat`. Update the contract
+comment naming the seat token as the only identity proof to name the
+seat key as its emailed proxy, per the parent spec. Notify treats a
+registration without these as a game that cannot host invites
+(`noSuchGame`-shaped refusal on the invite endpoint).
+
+### 2. Lobby: pending seats
+
+`packages/lobby/server/rooms.ts` and `handlers.ts`:
+
+- `PendingSeat { id: string; tokenHash: string; name: string | null; invitedAt: number }`.
+  `LobbyRoomLike` grows `pending?: PendingSeat[]` — optional, so the
+  generic-consumer tripwire (`genericConsumer.test.ts`) keeps compiling
+  and games without invites change nothing.
+- Registry methods: `reserve(roomId, tokenHash, name)` allocates the
+  first seat id free of both `players` and `pending` (null when none),
+  `claimByHash(roomId, tokenHash)` converts a matching pending seat into
+  a normal `seatPlayer`-shaped holder with a fresh `randomUUID()` token
+  (null otherwise, one shape for absent room / absent hash / already
+  claimed), `revoke(roomId, playerId)` deletes a pending seat only.
+- `seatPlayer` and `join`'s lobby branch treat pending ids as taken;
+  capacity counts them. The honor-system reclaim cannot match a pending
+  seat (it matches on `!connected` *players*; pending seats are not
+  players).
+- `beginGame` clears `room.pending` before `onBegin` — the auto-revoke
+  ruling — and the roster broadcast that follows shows the seats freed.
+- `RosterMessage` grows `pending: { id: string; name: string | null }[]`
+  (never the hash, never an address). New host-gated `revokeSeat` client
+  event, gated exactly as `beginGame` is, answering `notYourTurn` /
+  `wrongStage` by the same codes. Every roster/pending mutation fires
+  `onRosterChanged` so games persist it.
+- `client/view.ts`: `LobbySeat` grows `pending: boolean` and
+  `canRevoke: boolean` (you are host, seat is pending). `lobbyView`
+  orders occupied, then pending, then empty padding; pending rows have
+  `id`, a `name` that may be null (render "Invited"), no presence, never
+  renameable. `canBegin` ignores pending seats — they don't count toward
+  `minPlayers`, matching the design's "2 of 4 here · 1 seat reserved"
+  with Start still locked.
+- Conformance suite additions: reserve fills a seat ordinary joiners
+  can't take; claim mints a working seat token; revoke is host-only;
+  begin clears pending; roster carries pending rows without hashes.
+
+### 3. Wordgame server: implement the capabilities, persist the state
+
+- `server/room.ts` / `rooms.ts`: `GameRoom` carries `pending`;
+  `persist` writes it (`SavedRoom` grows optional `pending`, guarded in
+  `isSavedRoom`; old saves lack the field and load fine, so
+  `SAVE_VERSION` stays 1); `restore` adopts it back.
+- `server/index.ts` registration grows `reserveSeat` / `claimSeat` /
+  `getSeatCredentials` delegating to the registry and room map, each
+  followed by `save(room)` and `lobby.broadcastRoster(room)` so the
+  reserved row appears live on every phone in the lobby.
+- Bump `PROTOCOL_VERSION` in `session/protocol.ts` to 2 — the roster
+  shape changed and the stale-client machinery exists precisely for
+  this.
+
+### 4. Notify records and store
+
+`packages/notify/records.ts` and a third `jsonStore` directory:
+
+- `ProfileRecord` grows `name?: string` (trimmed, capped at 40 chars,
+  last-writer-wins) and `contacts?: ContactRecord[]` — the friends
+  spec's shape verbatim (`contactId` random per owner, `profileIds`
+  internal, `name`, `gameId`, `lastRoom`, `lastPlayedAt`,
+  `status: 'played' | 'pending' | 'accepted' | 'blocked'`), capped at
+  100, oldest-`lastPlayedAt` evicted.
+- `RoomRecord.bindings` becomes `Record<string, string[]>`. The guard
+  accepts the legacy scalar and normalizes to a one-element array on
+  load — records already exist on the Render disk and the LAN machine,
+  and the migration is a read-side shim, not a rewrite pass.
+- `RoomRecord` grows `seatKeys?: Record<playerId, { keyHash, seatTokenHash, mintedAt }>`
+  (the parent spec's one durable key per seat, hashed at rest; the seat
+  token's hash rides along so redemption can detect an honor-system
+  reclaim and refuse the stale key) and
+  `currentTurn?: { playerId, turnKey, notifiedAt, remindedAt? }` — the
+  reminder bookkeeping, written under the same marker-before-send
+  discipline as `lastNotified`.
+- `InviteRecord { tokenHash, target: { kind: 'email'; address } | { kind: 'profile'; profileIds: string[] }, gameId, roomId, playerId, inviterProfileId, createdAt, claimedAt?, sendDay?, sendCount?, inviterDay?, inviterDayCount? }`
+  in `DATA_DIR/notifications/invites/`, keyed by `tokenHash`
+  (`SAFE_KEY`-clean by construction).
+
+### 5. Notify service and routes
+
+The substance. All of it behind the existing "unconfigured means off"
+posture.
+
+- **Bind grows `name` and `phase`.** Name stamps the profile; a
+  `playing` bind appends the profile to the seat's binding *set* and
+  writes reciprocal contact entries per the friends spec's four rules
+  (same-seat profiles never pair; merge by `profileIds` overlap;
+  re-binds are no-ops unless `profileIds`, `name`, or `lastRoom`
+  changed; cap evicts oldest). A `lobby` bind writes the binding set
+  only.
+- **`POST /notify/contacts { playerKey, game?, roomId? }`** → rows of
+  `{ contactId, name, lastPlayedAt, gameTitle, reachable, alreadySeated? }`.
+  `reachable` = any enabled channel across the entry's profiles, prefs
+  respected; `gameTitle` falls back to the bare `gameId` for an
+  unmounted game; `alreadySeated` is computed against the room's binding
+  sets only when room context is given (which the lobby binds above make
+  meaningful). Never an address, never a `profileId`; a foreign or
+  fabricated `contactId` resolves to the same shaped nothing.
+- **`POST /notify/invite`** — both target shapes,
+  `{ playerKey, game, roomId, playerId, token, email }` or `{ …, contactId }`.
+  Order per the friends spec: verify the caller's seat, then refuse
+  `unreachable` / `alreadySeated` / `blocked` / `rateLimited` /
+  `emailUnavailable` / invalid address **before** reserving, so nothing
+  dangles; then an existing unclaimed invite for (room, target) is a
+  **resend** (never a second reservation — this is the Remind button's
+  whole mechanism); otherwise `reserveSeat`, mint the token
+  (`newToken()`), store the record, deliver. Caps: 3 per (inviter,
+  target) per UTC day, 20 per inviter per UTC day, counted the same way
+  the email-confirmation cap is; email targets also ride the existing
+  per-address counting. `roomFull` is `reserveSeat` returning null.
+- **Delivery.** A new `InvitePayload` beside `TurnPayload` in
+  `channels.ts`; `EmailSender` grows `sendInvite(to, payload, roomUrl)`
+  (the invite mail is its own template beside turn and confirmation,
+  carrying who invited you — the inviter's profile name — to which game
+  and room, one action, and the unsubscribe footer; the room URL carries
+  `?invite=<token>`). Push says the design's words — "Pete invited you
+  to a game in room KTWQ. Your seat is saved — tap to claim it." — and
+  needs no worker change. Profile-targeted invites fan out across the
+  entry's `profileIds` and their channels **immediately** (no debounce,
+  no presence check — the spec's reasoning: an invitee has no room to be
+  looking at), email deduped by address. The fake channels grow the
+  matching recorder.
+- **`POST /notify/invite/claim { inviteToken, playerKey?, name? }`** →
+  look up by hash, `claimSeat` on the game, stamp `claimedAt`, mint the
+  seat key, answer `{ playerId, token }`. For an email-targeted invite,
+  claiming **is** the double-opt-in: mark the address confirmed on the
+  claiming profile and mint its unsubscribe token, per the parent spec.
+  If a `playerKey` came along, bind it (`lobby` phase — the ledger
+  waits for the game to start, per the ruling above). Every failure —
+  unknown token, revoked seat, already claimed, dead room — is one
+  shaped refusal.
+- **`POST /notify/redeem-key { key }`** → hash, find the (room, seat)
+  holding it, check the stored `seatTokenHash` still matches what
+  `getSeatCredentials` returns (a rotated seat means the key is dead —
+  drop it), answer the live pair. Same single refusal shape. Seat keys
+  are minted lazily: at claim, and at the first email send about a seat
+  that has none; every email link (turn, reminder, confirmation aside)
+  carries `?key=`.
+- **Fan-out.** The send loop iterates the seat's binding set: email
+  deduped by address across profiles, dead push endpoints pruned as
+  today. This is parent-spec §5 finishing what `bindSeat` started.
+- **Auto-remind.** Not a naive 24-hour `setTimeout`: the process
+  restarts on every deploy. `fire` records
+  `currentTurn = { playerId, turnKey, notifiedAt }`; a sweep on boot and
+  hourly re-checks rooms whose `currentTurn` is over 24h old with no
+  newer `turnChanged`, sends one reminder (same `turnKey`, subject
+  marked as a reminder, `remindedAt` written before the send), capped at
+  one per turn. The reminder carries the seat key like every mail.
+
+### 6. The notify client package
+
+`packages/notify/client/`, mirroring the lobby's split and its
+`package.json` posture (`react` as a peer dependency, jsdom only in dev,
+an import-boundary test proving `client/` never imports `service.ts` or
+anything node-only — the lobby's `protocol/importBoundary.test.ts` is
+the template). Moves, minus wordgame's styling: `playerKey.ts`,
+`api.ts`, `push.ts`, `useNotifyBind.ts` (growing `phase` and `name`),
+`useNotifyStatus.ts`, and the subscribe/unsubscribe/re-register logic
+currently inlined in `NotificationSettings.tsx`, extracted as hooks.
+New, headless: `useContacts(roomCtx?)`, `useInvite()` (send + resend,
+returning the refusal reasons as data), `redeemLanding(params)` (the one
+function that handles both `?invite=` and `?key=`: POST, save via the
+lobby identity store, `history.replaceState`), and `useEnrollPush()`
+(the P4 card's brain: `offer` / `enabled` / `declined`-and-remembered /
+`unsupported` / `needsInstall` on iOS-in-Safari). Wordgame re-imports
+everything; `NotificationSettings` refactors onto the shared hooks and
+keeps its skin. Notify's vitest config gains the node/jsdom project
+split wordgame already models.
+
+### 7. Wordgame UI, to the design
+
+All in the stock kit and `RoomPage`, styled by the canvas:
+
+- **`SeatRow`**: empty rows gain an outlined **Invite** button (host
+  only, lobby only); a new reserved variant — dashed amber border, no
+  presence dot, "*Name* · invited, not here yet" (or "Invited" for
+  email), **Remind** outlined primary, **Revoke** as a text action that
+  asks twice (idle → confirming → done, per checklist P1). A
+  `justClaimed` flourish: the row that converts from reserved to live
+  wears a green ring for six seconds, "just joined".
+- **The picker**: a bottom sheet over the dimmed lobby (the room stays
+  visible behind it, per the design), two-mode segmented control —
+  "People you've played with" / "By email". Contact rows show name,
+  game title, and relative last-played; states per checklist P2:
+  reachable (Invite), sending, sent (row's seat goes reserved in the
+  roster behind the sheet, which can stay open for a second invite),
+  unreachable (visible, unpickable, "hasn't turned on notifications"),
+  already in this room. List states: loading, empty ("nobody yet — play
+  a game first"), no-profile-reads-as-empty. Email mode: field,
+  invalid, sending, sent, `rateLimited`, `emailUnavailable`, `roomFull`.
+  The sheet is wordgame's component over the shared hooks; if Acquire's
+  adoption later shows it is pixel-identical, extraction through
+  `--lobby-accent` is that plan's call, not this one's.
+- **`RoomLobby`**: renders pending rows and the seat note in the
+  design's voice ("2 of 4 here · 1 seat reserved"), wires Invite,
+  Remind (resend via `useInvite`), and Revoke (lobby socket event).
+- **Landing in `RoomPage`**: before the phase switch, `?invite=` or
+  `?key=` runs `redeemLanding`: a brief `redeeming` state, then the
+  design's claim screen — "You're in, *Sam* 🎉", "*Pete* saved you a
+  seat in room KTWQ. It's yours now — this device remembers it", **Go
+  to the room**, with the `useEnrollPush` card folded in ("Get a ping
+  when it's your turn?") — then the ordinary join. `refused` is one
+  screen for every bad token, offering "join as a new player" (the
+  normal join flow) or home; `alreadyHere` skips straight through
+  without ceremony. Declined enrollment is remembered and not re-asked
+  each landing.
+- **Home**: nothing. An unclaimed invite has no identity on this device,
+  so it cannot appear in "my games" until claimed, at which point the
+  existing cards cover it (checklist ruling).
+
+### 8. Composed-host proof
+
+`apps/host` needs no route changes (`/notify` is already mounted before
+the games). Add one end-to-end test beside `notifications.test.ts`:
+real room, invite by email through the fake mailer, claim through the
+real HTTP endpoint, assert the pending seat appeared in a roster
+broadcast and the claimed seat's token joins — and that the on-disk
+`InviteRecord` and binding set look right, in the file-reading style
+that test already uses.
+
+## Testing
+
+The specs' own test lists are the checklist; they land with their tasks
+rather than at the end. Beyond them, the habits this repo holds:
+
+- Wire shapes proved on serialized output, not intent: the contacts
+  response provably contains no address and no `profileId`; the roster
+  broadcast provably contains no token hash.
+- Every refusal path asserted to be one shape (claim, redeem, foreign
+  `contactId`) — the non-probe rule is a test, not a comment.
+- Restart tests: an invite and a half-elapsed reminder both survive a
+  service restart against the same data dir, in the style of
+  `service.test.ts`'s restart-without-duplicate case.
+- UI through `RoomPage.test.tsx`'s existing fake-connection pattern plus
+  a dedicated picker test; `NotificationSettings.test.tsx`'s
+  fetch-stubbing pattern covers the new hooks.
+- One artifact-level pass: a built client, a real `?invite=` URL, the
+  param stripped after redemption, the seat live.
+
+## Out of scope, deliberately
+
+- **Mid-game invites and claims** (checklist P6, the parent spec's
+  rotation insertion and tray-on-claim) — the ruling above; the next
+  plan in this series.
+- **Acquire adoption** and the kit-extraction decision the checklist
+  flags; Rail Baron and Marco Polo remain deferred with their specs.
+- **PWA scope tags, per-game workers, install prompts** beyond the
+  `needsInstall` copy — the PWA spec's own plan.
+- **Friend requests, accept/reject, blocking UI** — the `status` enum
+  ships with `'blocked'` enforced at the invite check and no way to
+  reach it, exactly as the friends spec's stub prescribes.
+- Everything both specs already rule out: forget-me, profile merging,
+  channel disclosure, presence, SMS.
