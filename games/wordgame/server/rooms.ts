@@ -33,7 +33,16 @@ export const ACTIVE_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
 export interface RoomRegistry extends LobbyRegistry<GameRoom> {
   persist(room: GameRoom): Promise<void>;
-  restore(now?: number): Promise<number>;
+  /**
+   * `onEvicted` fires for each aged-out room *after* its save is removed —
+   * the bridge to notify's `roomRemoved`, which nothing had ever called
+   * before invites landed (found 2026-09-05): notify's room records,
+   * invite records and reminder bookkeeping were immortal, and the
+   * reminder sweep would nudge for rooms that no longer exist. The
+   * protocol-skew skip stays silent on purpose: a skipped room may come
+   * back under a rollback, so its notify state must survive.
+   */
+  restore(now?: number, onEvicted?: (roomId: string) => void): Promise<number>;
   settled(): Promise<void>;
 }
 
@@ -61,11 +70,13 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
         // between "friends joined" and "host pressed start" must not eat the
         // room (2026-08-31, found in the first multi-day playtest).
         ...(state === null ? {} : { state }),
+        // Reserved seats are lobby-only facts; absent keeps old-save shape.
+        ...(room.pending.length === 0 ? {} : { pending: room.pending.map((p) => ({ ...p })) }),
       };
       await store.save(record);
     },
 
-    async restore(now = Date.now()): Promise<number> {
+    async restore(now = Date.now(), onEvicted?: (roomId: string) => void): Promise<number> {
       if (restored) {
         throw new Error(
           'restore() is boot-only: calling it on a serving registry would swap '
@@ -86,6 +97,7 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
           const maxAge = record.state?.stage === 'over' ? FINISHED_MAX_AGE_MS : ACTIVE_MAX_AGE_MS;
           if (now - record.savedAt > maxAge) {
             await store.remove(record.roomId);
+            onEvicted?.(record.roomId);
             continue;
           }
           // Skew is a skip, not a delete: the record outlives this build's
@@ -97,6 +109,7 @@ export function createRoomRegistry(store: RoomStore, dictionary: Dictionary): Ro
               record.players.map((p) => ({ ...p, connected: false })),
               dictionary,
               record.state ?? null,
+              record.pending?.map((p) => ({ ...p })) ?? [],
             ),
           );
           count += 1;

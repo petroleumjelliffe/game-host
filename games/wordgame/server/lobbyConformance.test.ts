@@ -27,4 +27,12 @@ describeLobbyConformance({
     await new Promise<void>((resolve) => handle?.httpServer.close(() => resolve()));
     handle = null;
   },
+  // In-process handles for machinery with no wire verb (reserving is a
+  // host-contract capability reached through notify's HTTP) — lending them
+  // is what runs the reserved-seat half of the contract against this game.
+  reserve: (roomId, tokenHash, name) => handle?.rooms.reserve(roomId, tokenHash, name) ?? null,
+  claim(roomId, tokenHash) {
+    const seated = handle?.rooms.claimByHash(roomId, tokenHash);
+    return seated ? { playerId: seated.player.id, token: seated.player.token } : null;
+  },
 });

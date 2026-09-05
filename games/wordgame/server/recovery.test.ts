@@ -245,3 +245,33 @@ test('eviction: finished rooms age out at 30 days, live ones at 60', async () =>
   // days — is exactly the multi-day case this game exists for.
   expect(ACTIVE_MAX_AGE_MS).toBeGreaterThan(39 * 24 * 60 * 60 * 1000);
 });
+
+test('reserved seats survive a restart, and eviction reports its rooms', async () => {
+  const store = createFileStore(dir);
+  const now = Date.now();
+  const first = createRoomRegistry(store, DICT);
+  const { room } = first.create('Ada');
+  expect(first.reserve(room.id, 'hash-1', 'Sam')).toBe('p2');
+  await first.persist(room);
+  await store.save({
+    roomId: 'OLDONE',
+    version: 1,
+    protocolVersion: PROTOCOL_VERSION,
+    savedAt: now - ACTIVE_MAX_AGE_MS - 60_000,
+    players: [{ id: 'p1', name: 'Ada', token: 't1', isHost: true, connected: false }],
+  });
+  await store.settled();
+
+  // A restart must bring the reservation back — an invite is a promise the
+  // deploy cycle must not eat — and name each room it evicts, because that
+  // callback is the only way notify's records ever stop being immortal.
+  const evicted: string[] = [];
+  const second = createRoomRegistry(createFileStore(dir), DICT);
+  await second.restore(now, (roomId) => evicted.push(roomId));
+  expect(second.get(room.id)?.pending).toEqual([
+    { id: 'p2', tokenHash: 'hash-1', name: 'Sam', invitedAt: expect.any(Number) },
+  ]);
+  expect(evicted).toEqual(['OLDONE']);
+  // And the revived reservation still claims.
+  expect(second.claimByHash(room.id, 'hash-1')?.player.id).toBe('p2');
+});

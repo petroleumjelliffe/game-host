@@ -3,7 +3,7 @@
 // room decides what happened (commit or rejection); the transport decides
 // who hears about it. Nothing here sends.
 
-import type { SeatHolder } from '@game-host/lobby/server/rooms.js';
+import type { PendingSeat, SeatHolder } from '@game-host/lobby/server/rooms.js';
 import type { Lifecycle } from '@game-host/lobby/protocol/protocol.js';
 import { getCurrentActor } from '../engine/actor.js';
 import type { Dictionary } from '../engine/dictionary.js';
@@ -21,6 +21,12 @@ export type Delivery =
 export interface GameRoom {
   id: string;
   players: SeatHolder[];
+  /**
+   * Reserved seats: invited, unclaimed. Always present on this game's rooms
+   * (the lobby type leaves it optional so games without invites need not
+   * carry it). Lobby-only by construction — `beginGame` clears it.
+   */
+  pending: PendingSeat[];
   lifecycle(): Lifecycle;
   /** The committed game, or null in the lobby. Never sent raw — see session/view.ts. */
   state(): GameState | null;
@@ -34,12 +40,14 @@ export function createGameRoom(
   players: SeatHolder[],
   dictionary: Dictionary,
   initial: GameState | null = null,
+  pending: PendingSeat[] = [],
 ): GameRoom {
   let state: GameState | null = initial;
 
   return {
     id,
     players,
+    pending,
     lifecycle(): Lifecycle {
       if (state === null) return 'lobby';
       return state.stage === 'over' ? 'over' : 'playing';
