@@ -59,6 +59,7 @@ function fakeConnection() {
     beginGame: () => { begins.push(1); },
     renamePlayer: (n) => { renames.push(n); },
     leaveSeat: () => { seatLeaves.push(1); },
+    revokeSeat: () => {},
     onJoined: (h) => { joinedHandlers.add(h); return () => { joinedHandlers.delete(h); }; },
     onRoster: (h) => { roster = h; return () => { roster = null; }; },
     onRejected: (h) => { rejectedHandlers.add(h); return () => { rejectedHandlers.delete(h); }; },

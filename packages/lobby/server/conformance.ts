@@ -27,6 +27,16 @@ export interface LobbyConformanceTarget {
   /** Boot the game on an ephemeral port; resolve its origin. */
   start(): Promise<{ url: string }>;
   stop(): Promise<void>;
+  /**
+   * In-process handles on the game's registry, for machinery that has no
+   * wire verb: reserving is a host-contract capability reached through
+   * notify's HTTP, not a socket event, so a wire-only target cannot create
+   * the pending seat the reserved-seat tests need. Optional: a game that
+   * does not host invites (Marco Polo) omits both and runs only the
+   * unconditional tests. Valid only after `start()` resolves.
+   */
+  reserve?(roomId: string, tokenHash: string, name: string | null): string | null;
+  claim?(roomId: string, tokenHash: string): { playerId: string; token: string } | null;
 }
 
 function once<T>(socket: Socket, event: string, timeoutMs = 4000): Promise<T> {
@@ -257,6 +267,94 @@ export function describeLobbyConformance(target: LobbyConformanceTarget): void {
       );
       // Presence, not removal: the seat waits for its player.
       expect(away.players).toHaveLength(2);
+    });
+
+    it('the roster names its reserved seats, empty when there are none', async () => {
+      const host = client();
+      const rosterAtCreate = once<RosterMessage>(host, 'roster');
+      await create(host, 'Ada');
+      expect((await rosterAtCreate).pending).toEqual([]);
+    });
+
+    // Reserved-seat behaviour needs a pending seat, and reserving has no
+    // wire verb (it is a host-contract capability reached through notify's
+    // HTTP) — so these run only for a target that lends its registry.
+    describe.runIf(target.reserve !== undefined)('reserved seats', () => {
+      it('a reserved seat shows in the roster, hash never, and joiners go elsewhere', async () => {
+        const host = client();
+        const seat = await create(host, 'Ada');
+        const reservedId = target.reserve!(seat.roomId, 'hash-a', 'Sam');
+        expect(reservedId).toBeTruthy();
+
+        const guest = client();
+        guest.emit('joinRoom', { roomId: seat.roomId, protocolVersion: target.protocolVersion });
+        const guestSeat = await once<JoinedMessage>(guest, 'joined');
+        // Ordinary seating never hands out the reserved seat.
+        expect(guestSeat.playerId).not.toBe(reservedId);
+
+        const withReserved = await rosterWhere(host, (r) =>
+          (r.pending ?? []).some((p) => p.id === reservedId),
+        );
+        expect(withReserved.pending).toEqual([{ id: reservedId, name: 'Sam' }]);
+        // The wire proof, not the intent: no hash anywhere in the broadcast.
+        expect(JSON.stringify(withReserved)).not.toContain('hash-a');
+      });
+
+      it('a claim mints a token that rejoins over the wire', async () => {
+        const host = client();
+        const seat = await create(host, 'Ada');
+        const reservedId = target.reserve!(seat.roomId, 'hash-b', 'Kit');
+        const claimed = target.claim!(seat.roomId, 'hash-b');
+        expect(claimed?.playerId).toBe(reservedId);
+        // Claimed is spent: the same hash never claims twice.
+        expect(target.claim!(seat.roomId, 'hash-b')).toBeNull();
+
+        const claimer = client();
+        claimer.emit('joinRoom', {
+          roomId: seat.roomId,
+          playerId: claimed!.playerId,
+          token: claimed!.token,
+          protocolVersion: target.protocolVersion,
+        });
+        const joined = await once<JoinedMessage>(claimer, 'joined');
+        expect(joined.playerId).toBe(reservedId);
+        const after = await rosterWhere(host, (r) =>
+          r.players.some((p) => p.id === reservedId && p.connected),
+        );
+        expect(after.pending).toEqual([]);
+        expect(after.players.find((p) => p.id === reservedId)?.name).toBe('Kit');
+      });
+
+      it('only the host may revoke, and revoking frees the seat', async () => {
+        const host = client();
+        const seat = await create(host, 'Ada');
+        const guest = client();
+        guest.emit('joinRoom', { roomId: seat.roomId, protocolVersion: target.protocolVersion });
+        await once<JoinedMessage>(guest, 'joined');
+        const reservedId = target.reserve!(seat.roomId, 'hash-c', 'Sam');
+
+        guest.emit('revokeSeat', { playerId: reservedId });
+        expect((await once<RejectedMessage>(guest, 'rejected')).code).toBe('notYourTurn');
+
+        host.emit('revokeSeat', { playerId: reservedId });
+        const after = await rosterWhere(host, (r) => (r.pending ?? []).length === 0);
+        expect(after.players).toHaveLength(2);
+      });
+
+      it('beginning the game clears every unclaimed reservation', async () => {
+        const host = client();
+        const seat = await create(host, 'Ada');
+        const guest = client();
+        guest.emit('joinRoom', { roomId: seat.roomId, protocolVersion: target.protocolVersion });
+        await once<JoinedMessage>(guest, 'joined');
+        target.reserve!(seat.roomId, 'hash-d', 'Sam');
+
+        host.emit('beginGame');
+        const begun = await rosterWhere(host, (r) => r.lifecycle !== 'lobby');
+        // Claims are lobby-only: an unclaimed seat must not enter the game.
+        expect(begun.pending).toEqual([]);
+        expect(begun.players).toHaveLength(2);
+      });
     });
   });
 }

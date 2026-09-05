@@ -40,6 +40,7 @@ function fakeConnection() {
     beginGame: () => {},
     renamePlayer: () => {},
     leaveSeat: () => {},
+    revokeSeat: () => {},
     onJoined: (h) => { joinedHandlers.add(h); return () => { joinedHandlers.delete(h); }; },
     onRoster: (h) => { roster = h; return () => { roster = null; }; },
     onRejected: (h) => { rejectedHandlers.add(h); return () => { rejectedHandlers.delete(h); }; },

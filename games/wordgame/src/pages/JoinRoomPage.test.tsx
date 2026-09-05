@@ -26,6 +26,7 @@ function fakeConnect(): Connection {
     beginGame: () => {},
     renamePlayer: () => {},
     leaveSeat: () => {},
+    revokeSeat: () => {},
     onJoined: (_h: (m: JoinedMessage) => void) => () => {},
     onRoster: () => () => {},
     onRejected: (_h: (m: RejectedMessage) => void) => () => {},

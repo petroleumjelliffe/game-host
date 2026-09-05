@@ -14,10 +14,30 @@ export interface SeatHolder {
   connected: boolean;
 }
 
-/** What the lobby needs a room to be. The game's room is a superset. */
+/**
+ * A seat held for someone who has not arrived: allocated by an invite,
+ * claimable only by the invite token whose hash this carries. Never the
+ * token itself, and never an email address — room records persist into
+ * game saves, and an address in game state is a privacy leak waiting to
+ * happen (addresses live only in notify's records).
+ */
+export interface PendingSeat {
+  id: string;
+  tokenHash: string;
+  /** The invited contact's display name, or null for an email invite. */
+  name: string | null;
+  invitedAt: number;
+}
+
+/**
+ * What the lobby needs a room to be. The game's room is a superset.
+ * `pending` is optional so a game without invites changes nothing — the
+ * registry creates the array on first reserve.
+ */
 export interface LobbyRoomLike {
   id: string;
   players: SeatHolder[];
+  pending?: PendingSeat[];
   lifecycle(): Lifecycle;
 }
 
@@ -28,6 +48,22 @@ export interface LobbyRegistry<R extends LobbyRoomLike> {
   join(roomId: string, name?: string, playerId?: string, token?: string): Seated<R> | null;
   get(roomId: string): R | undefined;
   all(): R[];
+  /**
+   * Allocate a pending seat for an invite: the first seat id free of both
+   * players and pending. Null when the room is full, gone, or past its
+   * lobby — one shape for every refusal.
+   */
+  reserve(roomId: string, tokenHash: string, name: string | null): string | null;
+  /**
+   * Convert the pending seat matching this invite-token hash into a held
+   * seat with a fresh token. `connected: false` — the claim is an HTTP
+   * POST; the claimer's socket join is what flips presence. Null for
+   * absent room, absent hash, already claimed: indistinguishable, so the
+   * claim endpoint cannot be a probe.
+   */
+  claimByHash(roomId: string, tokenHash: string): Seated<R> | null;
+  /** Delete a pending seat (never an occupied one). True when one matched. */
+  revoke(roomId: string, playerId: string): boolean;
   /**
    * Seats a prepared room directly, replacing whatever holds its id.
    * For restore-at-boot and test seeding; the caller owns the "nothing is
@@ -77,13 +113,21 @@ export interface SeatSpace {
  *
  * Returns null when every seat is taken. `join` already returns null for a
  * refusal, so capacity needs no new path through the handlers.
+ *
+ * `reservedIds` are pending seats: excluded from allocation, but a separate
+ * argument rather than folded into `taken`, because `isHost` must stay
+ * "players only". Folding them in would seat the next joiner of an
+ * emptied-but-reserved room as a non-host, leaving a room where nobody can
+ * begin *or* revoke — bricked until eviction. As written, the first person
+ * to join such a room is host and can do both.
  */
 export function seatPlayer(
   space: SeatSpace,
   taken: readonly SeatHolder[],
   name?: string,
+  reservedIds: readonly string[] = [],
 ): SeatHolder | null {
-  const held = new Set(taken.map((p) => p.id));
+  const held = new Set([...taken.map((p) => p.id), ...reservedIds]);
   const index = space.ids.findIndex((id) => !held.has(id));
   if (index === -1) return null;
 
@@ -159,7 +203,7 @@ export function createLobbyRegistry<R extends LobbyRoomLike>(
         abandoned.connected = true;
         return { room, player: abandoned };
       }
-      const player = seatPlayer(space, room.players, name);
+      const player = seatPlayer(space, room.players, name, reservedIds(room));
       if (!player) return null; // every seat is taken
       room.players.push(player);
       return { room, player };
@@ -168,5 +212,62 @@ export function createLobbyRegistry<R extends LobbyRoomLike>(
     get: (roomId) => rooms.get(roomId),
     all: () => [...rooms.values()],
     adopt(room) { rooms.set(room.id, room); },
+
+    reserve(roomId, tokenHash, name) {
+      const room = rooms.get(roomId);
+      // Lobby-only in this slice: `beginGame` clears pending seats, so a
+      // reservation after begin would be a seat nothing can ever claim.
+      if (!room || room.lifecycle() !== 'lobby') return null;
+      const pending = (room.pending ??= []);
+      const held = new Set([...room.players.map((p) => p.id), ...pending.map((p) => p.id)]);
+      const index = space.ids.findIndex((id) => !held.has(id));
+      if (index === -1) return null;
+      const given = name?.trim();
+      pending.push({
+        id: space.ids[index]!,
+        tokenHash,
+        name: given ? given : null,
+        invitedAt: Date.now(),
+      });
+      return space.ids[index]!;
+    },
+
+    claimByHash(roomId, tokenHash) {
+      const room = rooms.get(roomId);
+      const pending = room?.pending;
+      if (!room || !pending) return null;
+      const at = pending.findIndex((p) => p.tokenHash === tokenHash);
+      if (at === -1) return null;
+      const [reserved] = pending.splice(at, 1);
+      const index = space.ids.indexOf(reserved!.id);
+      const player: SeatHolder = {
+        id: reserved!.id,
+        // An email invite has no name; the claimer arrives under the seat
+        // default and renames in the lobby like anyone else.
+        name: reserved!.name ?? (space.defaultName?.(index) ?? `Player ${index + 1}`),
+        token: randomUUID(),
+        // Players only, same rule as seatPlayer: a claimer into an
+        // emptied-but-reserved room is its first player, and its host.
+        isHost: room.players.length === 0,
+        // The claim is an HTTP POST with no socket behind it; presence
+        // flips when the claimer's joinRoom lands.
+        connected: false,
+      };
+      room.players.push(player);
+      return { room, player };
+    },
+
+    revoke(roomId, playerId) {
+      const pending = rooms.get(roomId)?.pending;
+      if (!pending) return false;
+      const at = pending.findIndex((p) => p.id === playerId);
+      if (at === -1) return false;
+      pending.splice(at, 1);
+      return true;
+    },
   };
+}
+
+function reservedIds(room: LobbyRoomLike): readonly string[] {
+  return room.pending?.map((p) => p.id) ?? [];
 }

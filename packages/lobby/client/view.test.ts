@@ -134,3 +134,49 @@ describe('connection and terminal state', () => {
     expect(view.code).toBe('');
   });
 });
+
+describe('pending seats', () => {
+  const withPending = (playerId: string | null = 'p1'): LobbySnapshot =>
+    base({
+      playerId,
+      roster: {
+        roomId: 'ABC123',
+        lifecycle: 'lobby',
+        players: [
+          { id: 'p1', name: 'Ada', isHost: true, connected: true },
+          { id: 'p2', name: 'Margo', isHost: false, connected: true },
+        ],
+        pending: [
+          { id: 'p3', name: 'Sam' },
+          { id: 'p4', name: null },
+        ],
+      },
+    });
+
+  it('orders occupied, then pending, then empties', () => {
+    const view = lobbyView(withPending(), LIMITS);
+    expect(view.seats.map((s) => s.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    expect(view.seats.map((s) => s.pending)).toEqual([false, false, true, true]);
+  });
+
+  it('a pending seat has a name (or not), no presence, no rename', () => {
+    const view = lobbyView(withPending(), LIMITS);
+    expect(view.seats[2]).toMatchObject({
+      id: 'p3', name: 'Sam', connected: false, canRename: false, isYou: false,
+    });
+    // An email invite carries no name; the UI renders a neutral "Invited".
+    expect(view.seats[3]!.name).toBeNull();
+  });
+
+  it('only the host may revoke, and only in the lobby', () => {
+    expect(lobbyView(withPending('p1'), LIMITS).seats[2]!.canRevoke).toBe(true);
+    expect(lobbyView(withPending('p2'), LIMITS).seats[2]!.canRevoke).toBe(false);
+  });
+
+  it('pending seats do not count toward canBegin', () => {
+    // Two players seated, two reserved: the host can begin — a reservation
+    // is not a person.
+    const view = lobbyView(withPending('p1'), LIMITS);
+    expect(view.canBegin).toBe(true);
+  });
+});
