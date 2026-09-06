@@ -130,7 +130,7 @@ async function makeFixture(dir?: string): Promise<Fixture> {
   const fixture = { dir: dataDir, service, push, email, game, reporter, clock };
   cleanups.push(async () => {
     await service.close();
-    await rm(dataDir, { recursive: true, force: true });
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
   return fixture;
 }
@@ -493,7 +493,7 @@ describe('invite by email', () => {
     });
     cleanups.push(async () => {
       await service.close();
-      await rm(dataDir, { recursive: true, force: true });
+      await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     });
     const game = fakeGame();
     service.registerGame(game.registration);
@@ -586,7 +586,7 @@ describe('the legacy bindings migration', () => {
     });
     cleanups.push(async () => {
       await service.close();
-      await rm(dataDir, { recursive: true, force: true });
+      await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     });
     const reporter = service.registerGame(game.registration);
     game.addRoom('ROOM1');
@@ -778,5 +778,123 @@ describe('remind, addressed by seat', () => {
     // After revoke there is nothing to remind — one shaped refusal.
     f.reporter.seatVacated!('ROOM1', 'p2');
     expect(await remind()).toEqual({ ok: false, reason: 'noSuchContact' });
+  });
+});
+
+describe('room-scoped sign-in ("That\'s me")', () => {
+  test('an occupied seat mails its bound confirmed address the key link', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    seatAndBind(f, SAM_KEY, 'ROOM1', 'p2', 'Sam');
+    await f.service.submitEmail(SAM_KEY, 'sam@example.com');
+    f.service.confirmEmail(f.email.sent[0]!.url.split('token=')[1]!);
+
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('sent');
+    await drain();
+    const mail = f.email.sent.find((m) => m.kind === 'signin')!;
+    expect(mail.to).toBe('sam@example.com');
+    expect(mail.url).toContain('?key=');
+    // The mailed key is live: it redeems to the seat.
+    const key = mail.url.split('key=')[1]!;
+    expect(f.service.redeemSeatKey(key)).toMatchObject({ playerId: 'p2' });
+    // And the recovery mail respects unsubscribe state but not prefs:
+    // turn-notification prefs off must not lock someone out of their seat.
+    f.service.setPrefs(SAM_KEY, { email: false });
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('sent');
+    await drain();
+    expect(f.email.sent.filter((m) => m.kind === 'signin')).toHaveLength(2);
+  });
+
+  test('a reserved seat resends its live invite to the original target', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
+    await f.service.invite({
+      playerKey: HOST_KEY, gameId: 'testgame', roomId: 'ROOM1',
+      playerId: 'p1', token: host.token, email: 'sam@example.com',
+    });
+    await drain();
+    const firstUrl = f.email.sent.find((m) => m.kind === 'invite')!.url;
+
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('sent');
+    await drain();
+    const mails = f.email.sent.filter((m) => m.kind === 'invite');
+    expect(mails).toHaveLength(2);
+    expect(mails[1]!.url).toBe(firstUrl); // the SAME claim link, same mailbox
+  });
+
+  test('the cooldown counts attempts, not sends — no probe by rate limit', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    // A seat with NO email anywhere: three vague answers, then cooldown —
+    // exactly what a seat WITH email answers, so the cap reveals nothing.
+    f.game.seat('ROOM1', 'p2');
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('sent');
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('sent');
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('sent');
+    expect(f.service.seatSignin('testgame', 'ROOM1', 'p2')).toBe('cooldown');
+    // Unknown room, unknown game: same shapes.
+    expect(f.service.seatSignin('testgame', 'NOROOM', 'p9')).toBe('sent');
+    expect(f.service.seatSignin('ghostgame', 'ROOM1', 'p2')).toBe('sent');
+    expect(f.email.sent.filter((m) => m.kind === 'signin')).toHaveLength(0);
+  });
+});
+
+describe('refreshing a dead invite link', () => {
+  async function invited(f: Fixture): Promise<string> {
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
+    await f.service.invite({
+      playerKey: HOST_KEY, gameId: 'testgame', roomId: 'ROOM1',
+      playerId: 'p1', token: host.token, email: 'sam@example.com',
+    });
+    await drain();
+    return f.email.sent.find((m) => m.kind === 'invite')!.url.split('invite=')[1]!;
+  }
+
+  test('a live invite resends the same link', async () => {
+    const f = await makeFixture();
+    const token = await invited(f);
+    expect(f.service.refreshInvite(token)).toBe('sent');
+    await drain();
+    const mails = f.email.sent.filter((m) => m.kind === 'invite');
+    expect(mails).toHaveLength(2);
+    expect(mails[1]!.url).toContain(token);
+  });
+
+  test('a claimed invite mails a sign-in link to the original target', async () => {
+    const f = await makeFixture();
+    const token = await invited(f);
+    // Sam claims on device A; device B clicks the same dead link.
+    expect(f.service.claimInvite(token, SAM_KEY)).toMatchObject({ playerId: 'p2' });
+    expect(f.service.refreshInvite(token)).toBe('sent');
+    await drain();
+    const mail = f.email.sent.find((m) => m.kind === 'signin')!;
+    expect(mail.to).toBe('sam@example.com');
+    // The link is the seat's key, live for the claimed seat.
+    expect(f.service.redeemSeatKey(mail.url.split('key=')[1]!)).toMatchObject({
+      playerId: 'p2',
+    });
+  });
+
+  test('a revoked invite sends nothing and says sent anyway', async () => {
+    const f = await makeFixture();
+    const token = await invited(f);
+    f.reporter.seatVacated!('ROOM1', 'p2');
+    const before = f.email.sent.length;
+    expect(f.service.refreshInvite(token)).toBe('sent');
+    await drain();
+    expect(f.email.sent).toHaveLength(before);
+    // Unknown tokens: same shape.
+    expect(f.service.refreshInvite('A'.repeat(32))).toBe('sent');
+  });
+
+  test('resends count against the invite cap', async () => {
+    const f = await makeFixture();
+    const token = await invited(f);
+    // Creation was send 1; two refreshes reach the cap of 3.
+    expect(f.service.refreshInvite(token)).toBe('sent');
+    expect(f.service.refreshInvite(token)).toBe('sent');
+    expect(f.service.refreshInvite(token)).toBe('cooldown');
   });
 });

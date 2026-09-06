@@ -130,5 +130,41 @@ export async function emailSenderFromEnv(
           : { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } }),
       });
     },
+
+    async sendSeatSignin(
+      to: string,
+      payload: TurnPayload,
+      roomUrl: string,
+      unsubscribeUrl?: string,
+    ): Promise<void> {
+      const footerText =
+        unsubscribeUrl === undefined ? '' : `\n\nStop game emails: ${unsubscribeUrl}`;
+      const footerHtml =
+        unsubscribeUrl === undefined
+          ? ''
+          : `<p style="color:#666;font-size:0.85em"><a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a> from game emails.</p>`;
+      await transport.sendMail({
+        from,
+        to,
+        subject: `Your sign-in link for ${payload.gameTitle} (room ${payload.roomId})`,
+        text:
+          `Someone asked for a sign-in link to your seat in ${payload.gameTitle}, ` +
+          `room ${payload.roomId} — probably you, on a new device.\n\n` +
+          `Open it on that device to get back into your seat:\n${roomUrl}\n\n` +
+          `Your other devices stay signed in. If this wasn't you, ignore this ` +
+          `email — your seat is safe and nothing changes.${footerText}`,
+        html:
+          `<p>Someone asked for a sign-in link to your seat in ` +
+          `<strong>${escapeHtml(payload.gameTitle)}</strong>, room ${escapeHtml(payload.roomId)} ` +
+          `— probably you, on a new device.</p>` +
+          `<p><a href="${escapeHtml(roomUrl)}">Open your seat on this device</a></p>` +
+          `<p>Your other devices stay signed in. If this wasn't you, ignore this ` +
+          `email — your seat is safe and nothing changes.</p>` +
+          footerHtml,
+        ...(unsubscribeUrl === undefined
+          ? {}
+          : { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } }),
+      });
+    },
   };
 }

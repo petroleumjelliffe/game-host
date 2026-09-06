@@ -195,6 +195,24 @@ export interface NotifyService extends TurnNotifier {
     inviteToken: string,
     playerKey?: string,
   ): (SeatCredentials & { inviterName: string | null }) | null;
+  /**
+   * "That's me" on the pre-join chooser: mail the address already on a seat
+   * a way back in. An occupied seat gets its derived sign-in (`?key=`) link;
+   * a reserved seat gets its live invite resent to the original target; an
+   * unknown anything gets nothing. The answer never says which — `'sent'`
+   * for all of them, and `'cooldown'` counts *attempts* (3 per seat per UTC
+   * day, in memory), not successful sends, so rate limiting cannot be used
+   * to probe which seats have email.
+   */
+  seatSignin(gameId: string, roomId: string, playerId: string): 'sent' | 'cooldown';
+  /**
+   * The dead-link screen's "Email me a new link", keyed by the dead token
+   * the visitor already holds. Live invite: resent, same link. Claimed: the
+   * seat is taken (possibly by you on another device), so the sign-in link
+   * goes to the invite's original target. Revoked: nothing — the host's
+   * decision is not resurrectable. Unknown: nothing. All `'sent'`.
+   */
+  refreshInvite(inviteToken: string): 'sent' | 'cooldown';
   /** Redeem an emailed seat key. Same single refusal shape. */
   redeemSeatKey(key: string): SeatCredentials | null;
   /**
@@ -259,6 +277,8 @@ const ROOM_ID = /^[A-Za-z0-9-]{1,32}$/;
 const MAX_INVITES_PER_TARGET_PER_DAY = 3;
 const MAX_INVITES_PER_INVITER_PER_DAY = 20;
 const MAX_INVITES_PER_ADDRESS_PER_DAY = 3;
+const MAX_SIGNIN_REQUESTS_PER_SEAT_PER_DAY = 3;
+const PLAYER_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const REMINDER_DELAY_MS = 24 * 60 * 60 * 1000;
 const REMINDER_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -331,6 +351,11 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
   })();
 
   const games = new Map<string, NotifyGameRegistration>();
+  // Sign-in attempt counting, in memory on purpose: it counts *attempts*
+  // (success or not, seat or no seat — the non-probe rule), so persisting it
+  // would mean writing a record for every probe of a room that never
+  // existed. A soft cap that resets on restart is the right size.
+  const signinAttempts = new Map<string, { day: string; count: number }>();
   const pendingTimers = new Map<string, NodeJS.Timeout>();
   const inFlightSends = new Set<Promise<void>>();
   let reminderTimer: NodeJS.Timeout | null = null;
@@ -540,6 +565,93 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, room.roomId, marker.playerId)}`;
       track(sendToSeat(targets, payload, emailUrl, 'reminder'));
     }
+  }
+
+  /** Counts an attempt against the daily cap. False means over the cap. */
+  function underSigninCap(key: string): boolean {
+    const day = utcDay(now());
+    const entry = signinAttempts.get(key);
+    const count = entry?.day === day ? entry.count : 0;
+    if (count >= MAX_SIGNIN_REQUESTS_PER_SEAT_PER_DAY) return false;
+    signinAttempts.set(key, { day, count: count + 1 });
+    return true;
+  }
+
+  /** The confirmed addresses across a set of profiles, deduped, lowercased key. */
+  function confirmedAddresses(profileIds: readonly string[]): { address: string; unsubscribeToken?: string }[] {
+    const seen = new Set<string>();
+    const out: { address: string; unsubscribeToken?: string }[] = [];
+    for (const id of profileIds) {
+      const record = profiles.get(id)?.email;
+      // Confirmed only, and `disabled` (unsubscribed) excluded — but
+      // `prefs.email` is deliberately NOT consulted: sign-in is
+      // user-initiated account recovery, not a notification.
+      if (!record || record.status !== 'confirmed') continue;
+      const key = record.address.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        address: record.address,
+        ...(record.unsubscribeToken === undefined ? {} : { unsubscribeToken: record.unsubscribeToken }),
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The sign-in target for an email-addressed invite. Usually a profile
+   * carries the address (the claim confirmed it); a claim made with no
+   * playerKey left none, and the address still gets the mail — it IS the
+   * identity anchor this whole flow trusts. An address any profile has
+   * `disabled` (unsubscribed) gets nothing: they said stop.
+   */
+  function confirmedTargetsForAddress(
+    address: string,
+  ): { address: string; unsubscribeToken?: string }[] {
+    const wanted = address.toLowerCase();
+    for (const profile of profiles.values()) {
+      const record = profile.email;
+      if (!record || record.address.toLowerCase() !== wanted) continue;
+      if (record.status === 'disabled') return [];
+      if (record.status === 'confirmed') {
+        return [{
+          address: record.address,
+          ...(record.unsubscribeToken === undefined ? {} : { unsubscribeToken: record.unsubscribeToken }),
+        }];
+      }
+    }
+    return [{ address }];
+  }
+
+  /** Mail a seat's sign-in link to a list of addresses. */
+  async function sendSigninMail(
+    reg: NotifyGameRegistration,
+    roomId: string,
+    playerId: string,
+    targets: { address: string; unsubscribeToken?: string }[],
+  ): Promise<void> {
+    if (!email || !emailUsable || targets.length === 0) return;
+    const payload: TurnPayload = {
+      gameTitle: reg.title,
+      roomId,
+      url: reg.roomPath(roomId),
+    };
+    const roomUrl = `${origin ?? ''}${seatEmailUrl(reg, roomId, playerId)}`;
+    const jobs = targets.map((target) =>
+      email
+        .sendSeatSignin(
+          target.address,
+          payload,
+          roomUrl,
+          target.unsubscribeToken === undefined
+            ? undefined
+            : `${origin ?? ''}/notify/unsubscribe?token=${target.unsubscribeToken}`,
+        )
+        .catch((error: unknown) => {
+          log(`! Sign-in email failed: ${String(error)}`);
+        }),
+    );
+    await Promise.allSettled(jobs);
   }
 
   /** Delivery for invites: immediate — no debounce, no presence check. */
@@ -1108,6 +1220,90 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       // Who saved the seat, for the landing's greeting — a name the invite
       // already showed, never anything more.
       return { ...creds, inviterName: profiles.get(record.inviterProfileId)?.name ?? null };
+    },
+
+    seatSignin(gameId, roomId, playerId): 'sent' | 'cooldown' {
+      if (!GAME_ID.test(gameId) || !ROOM_ID.test(roomId) || !PLAYER_ID.test(playerId)) {
+        return 'sent';
+      }
+      // The attempt is counted BEFORE anything is looked up, and counted
+      // whether or not anything exists: a cooldown that only appeared for
+      // real seats-with-email would be a probe.
+      if (!underSigninCap(`seat:${gameId}--${roomId}--${playerId}`)) return 'cooldown';
+      const reg = games.get(gameId);
+      if (!reg) return 'sent';
+
+      // Occupied seat: mail every bound profile's confirmed address the
+      // seat's derived sign-in link.
+      const creds = reg.getSeatCredentials?.(roomId, playerId) ?? null;
+      if (creds !== null) {
+        const bound = rooms.get(roomKey(gameId, roomId))?.bindings[playerId] ?? [];
+        track(sendSigninMail(reg, roomId, playerId, confirmedAddresses(bound)));
+        return 'sent';
+      }
+
+      // Reserved seat: resend the live invite to its original target — the
+      // invitee who lost the email and arrived by the shared URL. A
+      // forwardee clicking this re-pings the real invitee, harmlessly.
+      const record = [...invites.values()].find(
+        (r) =>
+          r.gameId === gameId &&
+          r.roomId === roomId &&
+          r.playerId === playerId &&
+          r.claimedAt === undefined &&
+          r.revokedAt === undefined,
+      );
+      if (record) {
+        const day = utcDay(now());
+        record.sendCount = record.sendDay === day ? (record.sendCount ?? 0) + 1 : 1;
+        record.sendDay = day;
+        saveInvite(record);
+        const inviterName = profiles.get(record.inviterProfileId)?.name ?? null;
+        track(deliverInvite(reg, record, inviterName));
+      }
+      return 'sent';
+    },
+
+    refreshInvite(inviteToken): 'sent' | 'cooldown' {
+      if (typeof inviteToken !== 'string' || inviteToken.length < 16 || inviteToken.length > 128) {
+        return 'sent';
+      }
+      const record = invites.get(sha256hex(inviteToken));
+      // Unknown token: nothing to do, and nothing revealed by saying 'sent'.
+      if (!record) return 'sent';
+      // A 429 only ever appears for a real record — fine, because holding
+      // the token already proves the invite was real.
+      const day = utcDay(now());
+      const sentToday = record.sendDay === day ? (record.sendCount ?? 0) : 0;
+      if (sentToday >= MAX_INVITES_PER_TARGET_PER_DAY) return 'cooldown';
+      // Revoked is the host's decision and stays revoked — no send, but the
+      // same 'sent' shape as everything else.
+      if (record.revokedAt !== undefined) return 'sent';
+      const reg = games.get(record.gameId);
+      if (!reg) return 'sent';
+
+      record.sendCount = sentToday + 1;
+      record.sendDay = day;
+      saveInvite(record);
+
+      if (record.claimedAt === undefined) {
+        // Still live: a straight resend, same link.
+        const inviterName = profiles.get(record.inviterProfileId)?.name ?? null;
+        track(deliverInvite(reg, record, inviterName));
+        return 'sent';
+      }
+
+      // Claimed: the seat is taken — possibly by this very person on their
+      // other device — so the way back in is a sign-in link, mailed to the
+      // invite's original target and nobody else.
+      const creds = reg.getSeatCredentials?.(record.roomId, record.playerId) ?? null;
+      if (creds === null) return 'sent';
+      const targets =
+        record.target.kind === 'email'
+          ? confirmedTargetsForAddress(record.target.address)
+          : confirmedAddresses(record.target.profileIds);
+      track(sendSigninMail(reg, record.roomId, record.playerId, targets));
+      return 'sent';
     },
 
     redeemSeatKey(key): SeatCredentials | null {

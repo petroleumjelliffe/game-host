@@ -36,7 +36,7 @@ export function fakePushSender(): FakePushSender {
 }
 
 export interface RecordedEmail {
-  kind: 'confirmation' | 'turn' | 'reminder' | 'invite';
+  kind: 'confirmation' | 'turn' | 'reminder' | 'invite' | 'signin';
   to: string;
   url: string;
   unsubscribeUrl?: string;
@@ -66,6 +66,12 @@ export function fakeEmailSender(): FakeEmailSender {
     },
     sendInvite(to: string, payload: InvitePayload, roomUrl: string, unsubscribeUrl?: string) {
       const record: RecordedEmail = { kind: 'invite', to, url: roomUrl, inviterName: payload.inviterName };
+      if (unsubscribeUrl !== undefined) record.unsubscribeUrl = unsubscribeUrl;
+      sent.push(record);
+      return Promise.resolve();
+    },
+    sendSeatSignin(to: string, _payload: TurnPayload, roomUrl: string, unsubscribeUrl?: string) {
+      const record: RecordedEmail = { kind: 'signin', to, url: roomUrl };
       if (unsubscribeUrl !== undefined) record.unsubscribeUrl = unsubscribeUrl;
       sent.push(record);
       return Promise.resolve();

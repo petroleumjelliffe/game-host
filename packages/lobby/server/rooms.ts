@@ -187,21 +187,18 @@ export function createLobbyRegistry<R extends LobbyRoomLike>(
       }
 
       if (room.lifecycle() !== 'lobby') {
-        // The honor-system reclaim (owner ruling, 2026-08-08): same name,
-        // same room code takes the seat back — but only a seat nobody is
-        // sitting in. A token is still the seamless path; this is for the
-        // player whose browser forgot theirs, and it matches the name the
-        // way a human retypes it. Rotated token, because the seat changed
-        // hands and the old key should die with the handover.
-        const given = name?.trim().toLowerCase();
-        if (!given) return null;
-        const abandoned = room.players.find(
-          (p) => !p.connected && p.name.trim().toLowerCase() === given,
-        );
-        if (!abandoned) return null;
-        abandoned.token = randomUUID();
-        abandoned.connected = true;
-        return { room, player: abandoned };
+        // No token, game already running: refused. The honor-system
+        // name-match reclaim that used to live here (owner ruling
+        // 2026-08-08) was retired 2026-09-06: it was the one seat transfer
+        // that proved nothing — any device that had ever set the shared
+        // lobby.name could silently take over a same-named disconnected
+        // seat and rotate its token, logging the real owner out. Its
+        // recovery job belongs to the emailed sign-in link now (notify's
+        // seat-signin, which proves mailbox possession); its rotation job
+        // is retired with it, so a leaked emailed link lives until its
+        // room dies — recorded in docs/plans/2026-09-06-prejoin-and-room-signin.md
+        // rather than left silent.
+        return null;
       }
       const player = seatPlayer(space, room.players, name, reservedIds(room));
       if (!player) return null; // every seat is taken

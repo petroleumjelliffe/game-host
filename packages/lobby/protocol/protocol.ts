@@ -84,6 +84,8 @@ export interface JoinRoomMessage {
 export interface RenamePlayerMessage { name: string }
 /** Host-only: delete the reserved (pending) seat with this id. */
 export interface RevokeSeatMessage { playerId: string }
+/** Watch a room's roster without taking a seat — the pre-join chooser's data. */
+export interface ViewRoomMessage { roomId: string; protocolVersion: number }
 
 export const LOBBY_CLIENT_EVENTS = {
   createRoom: 'createRoom',
@@ -113,6 +115,16 @@ export const LOBBY_CLIENT_EVENTS = {
    * game's `onSeatVacated` hook is how notify hears and marks it dead.
    */
   revokeSeat: 'revokeSeat',
+  /**
+   * Receive a room's roster, and its future updates, without being seated.
+   * What the pre-join chooser renders: names and seat states are exactly as
+   * public as the table already is (the invite specs' privacy stance), and
+   * nothing game-shaped ever reaches an unseated socket — game sends go
+   * through the seat bindings, which a viewer does not have. Joining is a
+   * separate, explicit act from here ("Sit here"), which is what retired
+   * the silent auto-join and its accidental double seats.
+   */
+  viewRoom: 'viewRoom',
 } as const;
 
 export const LOBBY_SERVER_EVENTS = {

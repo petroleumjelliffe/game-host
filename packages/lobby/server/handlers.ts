@@ -13,6 +13,7 @@ import {
   type RenamePlayerMessage,
   type RevokeSeatMessage,
   type RosterMessage,
+  type ViewRoomMessage,
 } from '../protocol/protocol.js';
 import type { LobbyRegistry, LobbyRoomLike, Seated } from './rooms.js';
 
@@ -292,6 +293,32 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
       io.to(room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(room));
       hooks.onRosterChanged?.(room);
       hooks.onSeatVacated?.(room, bound.playerId);
+    });
+
+    socket.on(LOBBY_CLIENT_EVENTS.viewRoom, (msg: ViewRoomMessage) => {
+      // Version check first, same reasoning as joinRoom: a stale client is
+      // told it is stale, not sent hunting for a room that is fine.
+      if (!speaksOurProtocol(msg?.protocolVersion)) return;
+      if (typeof msg?.roomId !== 'string') {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'unknownIntent',
+          message: 'viewRoom requires a roomId',
+        });
+        return;
+      }
+      const room = registry.get(msg.roomId);
+      if (!room) {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'noSuchRoom',
+          message: `Room ${msg.roomId} is no longer available`,
+        });
+        return;
+      }
+      // Into the socket.io room — for roster rebroadcasts — but with NO seat
+      // binding, which is the whole point: rosters reach viewers, game state
+      // does not (every game send routes through socketsFor, binding-keyed).
+      void socket.join(room.id);
+      socket.emit(LOBBY_SERVER_EVENTS.roster, roster(room));
     });
 
     socket.on(LOBBY_CLIENT_EVENTS.revokeSeat, (msg: RevokeSeatMessage) => {

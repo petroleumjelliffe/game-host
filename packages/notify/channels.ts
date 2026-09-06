@@ -71,6 +71,18 @@ export interface EmailSender {
     roomUrl: string,
     unsubscribeUrl?: string,
   ): Promise<void>;
+  /**
+   * The room-scoped sign-in mail ("That's me" / a dead link's refresh): a
+   * seat's derived `?key=` link, sent to the address already on the seat.
+   * Anyone viewing a room can trigger it, so the copy must carry its own
+   * out: "if this wasn't you, ignore this — your seat is safe."
+   */
+  sendSeatSignin(
+    to: string,
+    payload: TurnPayload,
+    roomUrl: string,
+    unsubscribeUrl?: string,
+  ): Promise<void>;
 }
 
 export interface NotifyChannels {

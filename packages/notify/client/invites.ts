@@ -87,6 +87,37 @@ export async function sendRemind(args: RemindArgs): Promise<InviteOutcome> {
   return postInvite('/invite/remind', { ...args });
 }
 
+/**
+ * 'sent' or 'cooldown' — the only two states the design shows, and the only
+ * two the server admits to. Transport failures read as 'sent': the copy
+ * already hedges ("if that seat's email is set up…"), and an honest
+ * "network error" here would be the one response that leaks nothing anyway.
+ */
+export type SigninOutcome = 'sent' | 'cooldown';
+
+/** "That's me": mail the address already on a seat a way back in. */
+export async function requestSeatSignin(args: {
+  game: string;
+  roomId: string;
+  playerId: string;
+}): Promise<SigninOutcome> {
+  return vagueSend('/seat-signin', { ...args });
+}
+
+/** The dead-link screen's button: a fresh link, keyed by the dead token. */
+export async function refreshInvite(inviteToken: string): Promise<SigninOutcome> {
+  return vagueSend('/invite/refresh', { inviteToken });
+}
+
+async function vagueSend(path: string, body: Record<string, unknown>): Promise<SigninOutcome> {
+  try {
+    const res = await notifyPost(path, body);
+    return res.status === 429 ? 'cooldown' : 'sent';
+  } catch {
+    return 'sent';
+  }
+}
+
 async function postInvite(path: string, args: Record<string, unknown>): Promise<InviteOutcome> {
   const playerKey = getPlayerKey();
   if (playerKey === null) return { ok: false, reason: 'failed' };

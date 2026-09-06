@@ -169,3 +169,35 @@ describe('reserved (pending) seats', () => {
     expect(r.join(room.id, 'Margo')?.player.id).toBe(id);
   });
 });
+
+describe('mid-game joins after the name-match retirement (2026-09-06)', () => {
+  // The honor-system reclaim is gone: the emailed sign-in link (notify's
+  // seat-signin) is the only way onto a new device now, because it proves
+  // mailbox possession where the name match proved nothing.
+  function midGame() {
+    const r = registry();
+    const { room } = r.create('Ada');
+    r.join(room.id, 'Sam');
+    room.stage = 'playing';
+    return { r, room };
+  }
+
+  it('refuses a tokenless join even with a disconnected seat’s exact name', () => {
+    const { r, room } = midGame();
+    room.players[1]!.connected = false;
+    expect(r.join(room.id, 'Sam')).toBeNull();
+    expect(r.join(room.id, '  sam ')).toBeNull();
+    expect(room.players).toHaveLength(2);
+  });
+
+  it('keeps the token as the one working mid-game path, unrotated', () => {
+    const { r, room } = midGame();
+    const seat = room.players[1]!;
+    seat.connected = false;
+    const before = seat.token;
+    const back = r.join(room.id, undefined, seat.id, seat.token);
+    expect(back?.player.id).toBe(seat.id);
+    // No handover happened, so nothing rotates — both devices stay valid.
+    expect(back?.player.token).toBe(before);
+  });
+});

@@ -180,6 +180,37 @@ export function createNotifyRouter(service: NotifyService): Router {
       .catch(() => res.status(500).json({ error: 'internal' }));
   });
 
+  // The two send-me-a-link endpoints. No playerKey — a visitor who holds
+  // nothing yet is exactly who they are for — and one vague answer for
+  // every case (the mail goes only to the address already on the seat or
+  // invite, so the visitor learns nothing they could not learn by asking
+  // the table). 429 is the only other shape: an attempt cap, counted
+  // whether or not anything exists.
+  router.post('/seat-signin', (req, res) => {
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    if (!game || !roomId || !playerId) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const result = service.seatSignin(game, roomId, playerId);
+    if (result === 'cooldown') res.status(429).json({ ok: false, reason: 'rateLimited' });
+    else res.json({ ok: true });
+  });
+
+  router.post('/invite/refresh', (req, res) => {
+    const inviteToken = asString(body(req).inviteToken);
+    if (!inviteToken) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const result = service.refreshInvite(inviteToken);
+    if (result === 'cooldown') res.status(429).json({ ok: false, reason: 'rateLimited' });
+    else res.json({ ok: true });
+  });
+
   // Claim and key redemption answer one shape for every failure — an
   // invalid, revoked, spent, or fabricated credential is indistinguishable
   // from a room that never existed (the non-probe rule).

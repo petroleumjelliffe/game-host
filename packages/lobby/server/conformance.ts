@@ -269,6 +269,33 @@ export function describeLobbyConformance(target: LobbyConformanceTarget): void {
       expect(away.players).toHaveLength(2);
     });
 
+    it('a viewer sees the roster and its updates without ever taking a seat', async () => {
+      const host = client();
+      const seat = await create(host, 'Ada');
+
+      // The pre-join chooser's data: viewRoom answers with the roster and
+      // keeps the updates coming — and never a `joined`, because nothing
+      // was seated.
+      const viewer = client();
+      let seated = false;
+      viewer.once('joined', () => { seated = true; });
+      const first = once<RosterMessage>(viewer, 'roster');
+      viewer.emit('viewRoom', { roomId: seat.roomId, protocolVersion: target.protocolVersion });
+      expect((await first).players).toHaveLength(1);
+
+      host.emit('renamePlayer', { name: 'Grace' });
+      const renamed = await rosterWhere(viewer, (r) =>
+        r.players.some((p) => p.name === 'Grace'),
+      );
+      // Watched, not joined: the roster still holds one player.
+      expect(renamed.players).toHaveLength(1);
+      expect(seated).toBe(false);
+
+      const gone = client();
+      gone.emit('viewRoom', { roomId: 'ZZZZZZ', protocolVersion: target.protocolVersion });
+      expect((await once<RejectedMessage>(gone, 'rejected')).code).toBe('noSuchRoom');
+    });
+
     it('the roster names its reserved seats, empty when there are none', async () => {
       const host = client();
       const rosterAtCreate = once<RosterMessage>(host, 'roster');
