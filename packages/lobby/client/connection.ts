@@ -5,6 +5,8 @@ import {
   type CreateRoomMessage,
   type JoinRoomMessage,
   type RenamePlayerMessage,
+  type RevokeSeatMessage,
+  type ViewRoomMessage,
   type JoinedMessage,
   type RosterMessage,
   type RejectedMessage,
@@ -44,6 +46,10 @@ export interface LobbyConnection {
   renamePlayer(name: string): void;
   /** Give up your own seat. Lobby-only; mid-game leaving is a disconnect. */
   leaveSeat(): void;
+  /** Delete a reserved (pending) seat. Host-only; the server enforces it. */
+  revokeSeat(playerId: string): void;
+  /** Watch a room's roster without taking a seat — the pre-join chooser. */
+  viewRoom(roomId: string): void;
   onJoined(handler: (msg: JoinedMessage) => void): () => void;
   onRoster(handler: (msg: RosterMessage) => void): () => void;
   /**
@@ -122,6 +128,14 @@ export function createLobbyConnection(opts: LobbyConnectionOptions): LobbyConnec
       socket.emit(LOBBY_CLIENT_EVENTS.renamePlayer, msg);
     },
     leaveSeat() { socket.emit(LOBBY_CLIENT_EVENTS.leaveSeat); },
+    revokeSeat(playerId) {
+      const msg: RevokeSeatMessage = { playerId };
+      socket.emit(LOBBY_CLIENT_EVENTS.revokeSeat, msg);
+    },
+    viewRoom(roomId) {
+      const msg: ViewRoomMessage = { roomId, protocolVersion: opts.protocolVersion };
+      socket.emit(LOBBY_CLIENT_EVENTS.viewRoom, msg);
+    },
     onJoined(handler) {
       socket.on(LOBBY_SERVER_EVENTS.joined, handler);
       return () => { socket.off(LOBBY_SERVER_EVENTS.joined, handler); };

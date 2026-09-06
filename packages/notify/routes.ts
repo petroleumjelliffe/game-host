@@ -75,12 +75,167 @@ export function createNotifyRouter(service: NotifyService): Router {
       res.status(400).json({ error: 'bad request' });
       return;
     }
-    const bound = service.bindSeat(playerKey, game, roomId, playerId, token);
+    // Both optional and both additive: clients built before they existed
+    // send neither, and bind exactly as they always did (phase 'playing').
+    const name = asString(b.name) ?? undefined;
+    const phase = b.phase === 'lobby' || b.phase === 'playing' ? b.phase : undefined;
+    const bound = service.bindSeat(playerKey, game, roomId, playerId, token, {
+      ...(name === undefined ? {} : { name }),
+      ...(phase === undefined ? {} : { phase }),
+    });
     if (!bound.ok) {
       res.status(bound.reason === 'seatRefused' ? 403 : 404).json({ error: bound.reason });
       return;
     }
     res.json({ ok: true });
+  });
+
+  router.post('/contacts', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    if (!playerKey) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const roomCtx = game !== null && roomId !== null ? { gameId: game, roomId } : undefined;
+    res.json({ contacts: service.contacts(playerKey, roomCtx) });
+  });
+
+  router.post('/invite', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    const token = asString(b.token);
+    const email = asString(b.email);
+    const contactId = asString(b.contactId);
+    // Exactly one target shape, never both, never neither.
+    if (!playerKey || !game || !roomId || !playerId || !token || (email === null) === (contactId === null)) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    service
+      .invite({
+        playerKey,
+        gameId: game,
+        roomId,
+        playerId,
+        token,
+        ...(email === null ? {} : { email }),
+        ...(contactId === null ? {} : { contactId }),
+      })
+      .then((result) => {
+        if (result.ok) {
+          res.json(result);
+          return;
+        }
+        const status =
+          result.reason === 'seatRefused'
+            ? 403
+            : result.reason === 'noSuchGame'
+              ? 404
+              : result.reason === 'rateLimited'
+                ? 429
+                : result.reason === 'emailUnavailable'
+                  ? 503
+                  : result.reason === 'invalidAddress' || result.reason === 'noSuchContact'
+                    ? 400
+                    : 409; // unreachable, alreadySeated, blocked, roomFull
+        res.status(status).json(result);
+      })
+      .catch(() => res.status(500).json({ error: 'internal' }));
+  });
+
+  router.post('/invite/remind', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    const token = asString(b.token);
+    const targetPlayerId = asString(b.targetPlayerId);
+    if (!playerKey || !game || !roomId || !playerId || !token || !targetPlayerId) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    service
+      .remind({ playerKey, gameId: game, roomId, playerId, token, targetPlayerId })
+      .then((result) => {
+        if (result.ok) res.json(result);
+        else {
+          const status =
+            result.reason === 'seatRefused'
+              ? 403
+              : result.reason === 'rateLimited'
+                ? 429
+                : result.reason === 'noSuchGame'
+                  ? 404
+                  : 409;
+          res.status(status).json(result);
+        }
+      })
+      .catch(() => res.status(500).json({ error: 'internal' }));
+  });
+
+  // The two send-me-a-link endpoints. No playerKey — a visitor who holds
+  // nothing yet is exactly who they are for — and one vague answer for
+  // every case (the mail goes only to the address already on the seat or
+  // invite, so the visitor learns nothing they could not learn by asking
+  // the table). 429 is the only other shape: an attempt cap, counted
+  // whether or not anything exists.
+  router.post('/seat-signin', (req, res) => {
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    if (!game || !roomId || !playerId) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const result = service.seatSignin(game, roomId, playerId);
+    if (result === 'cooldown') res.status(429).json({ ok: false, reason: 'rateLimited' });
+    else res.json({ ok: true });
+  });
+
+  router.post('/invite/refresh', (req, res) => {
+    const inviteToken = asString(body(req).inviteToken);
+    if (!inviteToken) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const result = service.refreshInvite(inviteToken);
+    if (result === 'cooldown') res.status(429).json({ ok: false, reason: 'rateLimited' });
+    else res.json({ ok: true });
+  });
+
+  // Claim and key redemption answer one shape for every failure — an
+  // invalid, revoked, spent, or fabricated credential is indistinguishable
+  // from a room that never existed (the non-probe rule).
+  router.post('/invite/claim', (req, res) => {
+    const b = body(req);
+    const inviteToken = asString(b.inviteToken);
+    const playerKey = playerKeyOf(req) ?? undefined;
+    if (inviteToken === null) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const creds = service.claimInvite(inviteToken, playerKey);
+    if (creds === null) res.status(404).json({ error: 'unavailable' });
+    else res.json(creds);
+  });
+
+  router.post('/redeem-key', (req, res) => {
+    const key = asString(body(req).key);
+    if (key === null) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const creds = service.redeemSeatKey(key);
+    if (creds === null) res.status(404).json({ error: 'unavailable' });
+    else res.json(creds);
   });
 
   router.post('/settings', (req, res) => {

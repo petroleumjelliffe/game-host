@@ -31,10 +31,19 @@ export interface LobbySeat {
   connected: boolean;
   /** Your own seat, and only while the room is still a lobby. */
   canRename: boolean;
+  /**
+   * Reserved: invited, not yet claimed. Has an `id` but no presence and no
+   * rename; `name` is null for an email invite (render a neutral
+   * "Invited"). Anything counting occupied seats must test
+   * `id !== null && !pending`, not `id !== null` alone.
+   */
+  pending: boolean;
+  /** You are host, this seat is pending, the room is still a lobby. */
+  canRevoke: boolean;
 }
 
 export interface LobbyView {
-  /** Exactly `limits.capacity` entries: the occupied ones, then empties. */
+  /** Exactly `limits.capacity` entries: occupied, then pending, then empties. */
   seats: LobbySeat[];
   you: LobbySeat | null;
   /** The room code. The *game* builds any URL from it — base paths are per-repo. */
@@ -64,6 +73,8 @@ const emptySeat = (index: number): LobbySeat => ({
   isYou: false,
   connected: false,
   canRename: false,
+  pending: false,
+  canRevoke: false,
 });
 
 /**
@@ -80,21 +91,45 @@ const emptySeat = (index: number): LobbySeat => ({
  */
 export function lobbyView(state: LobbySnapshot, limits: LobbyLimits): LobbyView {
   const players = state.roster?.players ?? [];
+  const pending = state.roster?.pending ?? [];
   const lifecycle = state.roster?.lifecycle ?? 'lobby';
+  const youAreHost = players.some((p) => p.id === state.playerId && p.isHost);
 
+  // Occupied, then pending, then empty padding. Rows are addressed by seat
+  // id where it matters (React keys, the just-claimed flourish) — the
+  // display index shifts as seats claim and revoke, exactly as it always
+  // has when someone leaves.
   const seats: LobbySeat[] = Array.from({ length: limits.capacity }, (_, index) => {
     const player = players[index];
-    if (!player) return emptySeat(index);
-    const isYou = player.id === state.playerId;
-    return {
-      id: player.id,
-      index,
-      name: player.name,
-      isHost: player.isHost,
-      isYou,
-      connected: player.connected,
-      canRename: isYou && lifecycle === 'lobby',
-    };
+    if (player) {
+      const isYou = player.id === state.playerId;
+      return {
+        id: player.id,
+        index,
+        name: player.name,
+        isHost: player.isHost,
+        isYou,
+        connected: player.connected,
+        canRename: isYou && lifecycle === 'lobby',
+        pending: false,
+        canRevoke: false,
+      };
+    }
+    const reserved = pending[index - players.length];
+    if (reserved) {
+      return {
+        id: reserved.id,
+        index,
+        name: reserved.name,
+        isHost: false,
+        isYou: false,
+        connected: false,
+        canRename: false,
+        pending: true,
+        canRevoke: youAreHost && lifecycle === 'lobby',
+      };
+    }
+    return emptySeat(index);
   });
 
   const you = seats.find((seat) => seat.isYou) ?? null;

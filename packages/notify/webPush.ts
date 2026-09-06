@@ -9,9 +9,31 @@
 // VAPID_PRIVATE_KEY (and VAPID_SUBJECT, a mailto: or https: contact URI —
 // push services use it to reach whoever runs this if the traffic misbehaves).
 
-import type { PushSender, TurnPayload } from './channels.js';
+import type { PushPayload, PushSender } from './channels.js';
 import { PushSubscriptionGoneError } from './channels.js';
 import type { PushSubscriptionRecord } from './records.js';
+
+/**
+ * The wire copy per payload kind. The worker (each game's sw.js) renders
+ * `{title, body, url}` generically, so new kinds need no worker change.
+ * Invite copy is the design's: "Pete invited you to a game in room KTWQ.
+ * Your seat is saved — tap to claim it."
+ */
+function wireContent(payload: PushPayload): { title: string; body: string; url: string } {
+  if ('kind' in payload) {
+    const who = payload.inviterName ?? 'A friend';
+    return {
+      title: payload.gameTitle,
+      body: `${who} invited you to a game in room ${payload.roomId}. Your seat is saved — tap to claim it.`,
+      url: payload.url,
+    };
+  }
+  return {
+    title: `${payload.gameTitle} — your turn`,
+    body: `Room ${payload.roomId} is waiting on you.`,
+    url: payload.url,
+  };
+}
 
 export async function pushSenderFromEnv(
   env: Record<string, string | undefined>,
@@ -29,15 +51,11 @@ export async function pushSenderFromEnv(
 
   return {
     publicKey,
-    async send(subscription: PushSubscriptionRecord, payload: TurnPayload): Promise<void> {
+    async send(subscription: PushSubscriptionRecord, payload: PushPayload): Promise<void> {
       try {
         await webpush.sendNotification(
           { endpoint: subscription.endpoint, keys: subscription.keys },
-          JSON.stringify({
-            title: `${payload.gameTitle} — your turn`,
-            body: `Room ${payload.roomId} is waiting on you.`,
-            url: payload.url,
-          }),
+          JSON.stringify(wireContent(payload)),
           { TTL: 24 * 60 * 60 },
         );
       } catch (error) {

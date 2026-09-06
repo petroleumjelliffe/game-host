@@ -23,3 +23,18 @@ test('a record with a state is held to the full state guard', () => {
   expect(isSavedRoom({ ...envelope, state: twoPlayerState() })).toBe(true);
   expect(isSavedRoom({ ...envelope, state: { stage: 'nonsense' } })).toBe(false);
 });
+
+test('a pre-invite record — no pending field — is a valid save', () => {
+  // The no-bump pin: invites added an optional field, not a version. A
+  // record written before they existed loads untouched, and the next
+  // protocol change re-fights this consciously.
+  expect(isSavedRoom({ ...envelope })).toBe(true);
+});
+
+test('a record with reserved seats is held to their shape', () => {
+  const reserved = { id: 'p2', tokenHash: 'abc', name: 'Sam', invitedAt: 123 };
+  expect(isSavedRoom({ ...envelope, pending: [reserved] })).toBe(true);
+  expect(isSavedRoom({ ...envelope, pending: [{ ...reserved, name: null }] })).toBe(true);
+  expect(isSavedRoom({ ...envelope, pending: [{ id: 'p2' }] })).toBe(false);
+  expect(isSavedRoom({ ...envelope, pending: 'p2' })).toBe(false);
+});

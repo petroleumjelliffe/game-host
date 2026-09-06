@@ -8,6 +8,8 @@ import { wordgameIdentity } from './identity';
 export type RoomPhase =
   | 'connecting'
   | 'joining'
+  /** Viewing the roster with no seat — the pre-join chooser (opt-in below). */
+  | 'preview'
   | 'lobby'
   | 'playing'
   | 'error'
@@ -49,6 +51,8 @@ export interface Room {
   begin(): void;
   rename(name: string): void;
   leaveSeat(): void;
+  /** Delete a reserved seat. Host-only; the server enforces it. */
+  revokeSeat(playerId: string): void;
 }
 
 /**
@@ -61,7 +65,9 @@ export interface Room {
  */
 export function useRoom(roomId: string, connect: () => Connection = getConnection): Room {
   const connection = useMemo(() => connect(), [connect]);
-  const lobby = useLobbyRoom(roomId, connection, wordgameIdentity);
+  // Preview mode: a visitor with no stored seat sees the chooser instead of
+  // being silently seated — the ruling that retired accidental double joins.
+  const lobby = useLobbyRoom(roomId, connection, wordgameIdentity, { preview: true });
 
   const [view, setView] = useState<GameView | null>(null);
   const [rejection, setRejection] = useState<MoveRejectedMessage | null>(null);
@@ -113,5 +119,6 @@ export function useRoom(roomId: string, connect: () => Connection = getConnectio
     begin: lobby.begin,
     rename: lobby.rename,
     leaveSeat: lobby.leaveSeat,
+    revokeSeat: connection.revokeSeat,
   };
 }

@@ -1,6 +1,74 @@
 # Email invites and seat keys: identity without accounts
 
-**Status:** designed 2026-09-01, not yet planned.
+**Status:** designed 2026-09-01; planned and implemented 2026-09-05 via
+[docs/plans/2026-09-05-invites-and-friends.md](../docs/plans/2026-09-05-invites-and-friends.md)
+(all six sections; mid-game claim deferred by that plan's scope ruling).
+See "As built", below.
+
+## As built (2026-09-05)
+
+The design held; six deltas, each argued in the plan:
+
+- **Claiming is a POST to notify** (`/notify/invite/claim`), not a
+  `joinRoom` variant: the contract gained `claimSeat(roomId, tokenHash)`,
+  so `?invite=` and `?key=` land through one identical client path and
+  notify owns the claim moment (claimedAt, the double-opt-in, the bind).
+  The lobby still enforces §2's real rule — ordinary seating never hands
+  out a pending seat — and `reserveSeat` grew the token hash and a
+  display name.
+- **The seat key is derived, not stored:** HMAC(persisted server secret,
+  game/room/seat/current seat token), recomputed per send and per
+  redemption. §1 said "stored hashed", but a stored hash cannot rebuild
+  the key for the *next* email; derivation gives every email the same key
+  for as long as the seat token stands, makes the honor-system reclaim
+  rotate it with no bookkeeping, and stores nothing at all — strictly
+  stronger. Redemption is recomputation over bound seats.
+- **The invite token is stored plaintext** in the invite record (its
+  hash is still the store key and what the lobby holds): a resend must
+  reproduce the *same* link, and one-outstanding-invite-per-(room,target)
+  forbids a sibling. Single-claim, dead on revoke, and the directory
+  already holds addresses in plaintext.
+- **Revoke rides the lobby socket** (host-ness lives there); the game
+  reports it — and begin's auto-revoke, and lobby leavers — through a new
+  `GameTurnReporter.seatVacated`, which kills the invite and drops the
+  seat's stale bindings.
+- **§6's reminder is a persisted marker plus a sweep** (boot-after-mounts
+  and hourly), not a 24h timer — the process restarts on every deploy.
+  `turnChanged` clears a superseded marker so a skipped-send turn cannot
+  leave a stale reminder armed. Eviction in wordgame now actually calls
+  `roomRemoved`, which nothing had ever called.
+- **Claims are lobby-only in this slice**: `beginGame` auto-revokes
+  unclaimed reservations. §2's mid-game claim (rotation insertion,
+  tray-on-claim) is the deferred follow-up, likeliest to arrive with
+  Marco Polo's real-time pool.
+
+## As built, second slice (2026-09-06)
+
+The pre-join / room-sign-in work
+([docs/plans/2026-09-06-prejoin-and-room-signin.md](../docs/plans/2026-09-06-prejoin-and-room-signin.md))
+touched this spec's ground twice:
+
+- **The honor-system reclaim is retired** (owner ruling 2026-09-06,
+  superseding the 2026-08-08 ruling that created it). Its recovery job —
+  a browser that forgot its token — belongs to notify's `seat-signin`
+  now, which proves mailbox possession where the name match proved
+  nothing. Its rotation job retires with it: **nothing rotates a seat
+  token any more**, so a leaked emailed key link lives until its room
+  dies. Accepted for casual games; an explicit rotate operation is the
+  future fix if it ever bites. "Rotation also happens automatically if
+  the underlying seat token rotates" (§1) is now vacuously true.
+- **The seat key gained user-triggerable sends**: `seat-signin` (the
+  chooser's "That's me" — occupied seats mail their bound confirmed
+  addresses the `?key=` link; reserved seats resend their live invite)
+  and `invite/refresh` (the dead-link screen — live invites resend the
+  same link, claimed ones mail the sign-in link to the original target,
+  revoked ones stay dead). Both answer one vague shape, and the cooldown
+  counts attempts rather than sends so the rate limit cannot probe which
+  seats have email. Wordgame also stopped auto-seating visitors: opening
+  a room URL lands on a pre-join chooser (`viewRoom` + the lobby hook's
+  opt-in preview mode), which is what makes "second click of a used
+  invite link" safe — it can no longer double-join.
+
 **Home:** this repo, because the design cuts across `packages/lobby`,
 `packages/notify`, and the host contract — no single game owns it. Written
 after a brainstorm on inviting specific people to games; the companion spec

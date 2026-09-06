@@ -253,3 +253,56 @@ describe('seat management', () => {
     expect(identity.cleared).toEqual(['ABC123']);
   });
 });
+
+describe('preview mode (the pre-join chooser)', () => {
+  it('views instead of auto-joining when no seat is stored', () => {
+    const fake = createFakeLobbyConnection({ status: 'open' });
+    const { result } = renderHook(() =>
+      useLobbyRoom('ABC123', fake.connection, fakeIdentity(), { preview: true }));
+
+    // No silent seat-taking — that is the whole point of the mode.
+    expect(fake.calls.joinRoom).toEqual([]);
+    expect(fake.calls.viewRoom).toEqual(['ABC123']);
+
+    act(() => {
+      fake.roster({
+        roomId: 'ABC123',
+        lifecycle: 'lobby',
+        players: [{ id: 'p1', name: 'Ada', isHost: true, connected: true }],
+      });
+    });
+    expect(result.current.phase).toBe('preview');
+    expect(result.current.playerId).toBeNull();
+  });
+
+  it('join() is the explicit Sit here, and seats the viewer normally', () => {
+    const fake = createFakeLobbyConnection({ status: 'open' });
+    const { result } = renderHook(() =>
+      useLobbyRoom('ABC123', fake.connection, fakeIdentity(), { preview: true }));
+
+    act(() => { result.current.join(); });
+    expect(fake.calls.joinRoom).toEqual([{ roomId: 'ABC123' }]);
+    act(() => { fake.joined({ roomId: 'ABC123', playerId: 'p2', token: 't' }); });
+    act(() => {
+      fake.roster({
+        roomId: 'ABC123',
+        lifecycle: 'lobby',
+        players: [
+          { id: 'p1', name: 'Ada', isHost: true, connected: true },
+          { id: 'p2', name: 'Player 2', isHost: false, connected: true },
+        ],
+      });
+    });
+    expect(result.current.phase).toBe('lobby');
+  });
+
+  it('a stored seat rejoins as always — the chooser never shows', () => {
+    const fake = createFakeLobbyConnection({ status: 'open' });
+    const { result } = renderHook(() =>
+      useLobbyRoom('ABC123', fake.connection, fakeIdentity(SEAT), { preview: true }));
+
+    expect(fake.calls.viewRoom).toEqual([]);
+    expect(fake.calls.joinRoom).toHaveLength(1);
+    void result;
+  });
+});

@@ -90,3 +90,114 @@ describe('seating from a fixed id space', () => {
     expect(seatPlayer({ ids: [] }, [], 'Ada')).toBeNull();
   });
 });
+
+describe('reserved (pending) seats', () => {
+  it('reserves the first free id and keeps it from ordinary joiners', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    expect(r.reserve(room.id, 'hash-1', 'Sam')).toBe('p2');
+    // The next joiner routes around the reservation.
+    expect(r.join(room.id, 'Margo')?.player.id).toBe('p3');
+    expect(room.pending).toEqual([
+      { id: 'p2', tokenHash: 'hash-1', name: 'Sam', invitedAt: expect.any(Number) },
+    ]);
+  });
+
+  it('counts reservations toward capacity', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    r.reserve(room.id, 'h1', 'Sam');
+    r.reserve(room.id, 'h2', null);
+    expect(r.reserve(room.id, 'h3', 'Kit')).toBeNull(); // full
+    expect(r.join(room.id, 'Margo')).toBeNull(); // and so is joining
+  });
+
+  it('refuses to reserve outside the lobby', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    room.stage = 'playing';
+    expect(r.reserve(room.id, 'h1', 'Sam')).toBeNull();
+  });
+
+  it('claims by hash exactly once, minting a token and no presence', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    const id = r.reserve(room.id, 'hash-1', 'Sam');
+    const claimed = r.claimByHash(room.id, 'hash-1');
+    expect(claimed?.player).toMatchObject({
+      id, name: 'Sam', isHost: false, connected: false,
+    });
+    expect(claimed?.player.token).toBeTruthy();
+    expect(room.pending).toEqual([]);
+    // Spent: absent room, absent hash and already-claimed all read alike.
+    expect(r.claimByHash(room.id, 'hash-1')).toBeNull();
+    expect(r.claimByHash('ZZZZZZ', 'hash-1')).toBeNull();
+  });
+
+  it('claims an email reservation (no name) under the seat default', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    r.reserve(room.id, 'hash-1', null);
+    expect(r.claimByHash(room.id, 'hash-1')?.player.name).toBe('Player 2');
+  });
+
+  it('a claimer into an emptied room is its first player, and its host', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    r.reserve(room.id, 'hash-1', 'Sam');
+    room.players.splice(0, 1); // the host left; only the reservation remains
+    expect(r.claimByHash(room.id, 'hash-1')?.player.isHost).toBe(true);
+  });
+
+  it('a joiner into an emptied-but-reserved room is host, not stranded', () => {
+    // isHost is "players only": folding pending ids into `taken` would seat
+    // this joiner as a non-host in a room where nobody could begin or revoke.
+    const r = registry();
+    const { room } = r.create('Ada');
+    r.reserve(room.id, 'hash-1', 'Sam');
+    room.players.splice(0, 1);
+    expect(r.join(room.id, 'Margo')?.player.isHost).toBe(true);
+  });
+
+  it('revokes pending seats only, freeing the id', () => {
+    const r = registry();
+    const { room } = r.create('Ada');
+    const id = r.reserve(room.id, 'hash-1', 'Sam')!;
+    expect(r.revoke(room.id, 'p1')).toBe(false); // occupied, never
+    expect(r.revoke(room.id, id)).toBe(true);
+    expect(r.revoke(room.id, id)).toBe(false); // already gone
+    expect(r.join(room.id, 'Margo')?.player.id).toBe(id);
+  });
+});
+
+describe('mid-game joins after the name-match retirement (2026-09-06)', () => {
+  // The honor-system reclaim is gone: the emailed sign-in link (notify's
+  // seat-signin) is the only way onto a new device now, because it proves
+  // mailbox possession where the name match proved nothing.
+  function midGame() {
+    const r = registry();
+    const { room } = r.create('Ada');
+    r.join(room.id, 'Sam');
+    room.stage = 'playing';
+    return { r, room };
+  }
+
+  it('refuses a tokenless join even with a disconnected seat’s exact name', () => {
+    const { r, room } = midGame();
+    room.players[1]!.connected = false;
+    expect(r.join(room.id, 'Sam')).toBeNull();
+    expect(r.join(room.id, '  sam ')).toBeNull();
+    expect(room.players).toHaveLength(2);
+  });
+
+  it('keeps the token as the one working mid-game path, unrotated', () => {
+    const { r, room } = midGame();
+    const seat = room.players[1]!;
+    seat.connected = false;
+    const before = seat.token;
+    const back = r.join(room.id, undefined, seat.id, seat.token);
+    expect(back?.player.id).toBe(seat.id);
+    // No handover happened, so nothing rotates — both devices stay valid.
+    expect(back?.player.token).toBe(before);
+  });
+});

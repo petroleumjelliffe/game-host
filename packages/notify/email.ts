@@ -8,7 +8,7 @@
 // email carries absolute links (confirm, the room, unsubscribe), and a mail
 // client has no origin to be relative to.
 
-import type { EmailSender, TurnPayload } from './channels.js';
+import type { EmailSender, InvitePayload, TurnPayload } from './channels.js';
 
 function escapeHtml(text: string): string {
   return text
@@ -68,6 +68,102 @@ export async function emailSenderFromEnv(
           `<p><a href="${escapeHtml(roomUrl)}">Take your turn</a></p>` +
           `<p style="color:#666;font-size:0.85em"><a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a> from turn emails.</p>`,
         headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+      });
+    },
+
+    async sendTurnReminder(
+      to: string,
+      payload: TurnPayload,
+      roomUrl: string,
+      unsubscribeUrl: string,
+    ): Promise<void> {
+      // Same content as the turn mail — it IS the turn mail, sent again —
+      // with the subject saying so, per the parent spec's §6.
+      await transport.sendMail({
+        from,
+        to,
+        subject: `Reminder: still your turn in ${payload.gameTitle} (room ${payload.roomId})`,
+        text:
+          `It's still your turn in ${payload.gameTitle}, room ${payload.roomId}.\n\n` +
+          `Take it: ${roomUrl}\n\n` +
+          `Stop these emails: ${unsubscribeUrl}`,
+        html:
+          `<p>It's still your turn in <strong>${escapeHtml(payload.gameTitle)}</strong>, room ${escapeHtml(payload.roomId)}.</p>` +
+          `<p><a href="${escapeHtml(roomUrl)}">Take your turn</a></p>` +
+          `<p style="color:#666;font-size:0.85em"><a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a> from turn emails.</p>`,
+        headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+      });
+    },
+
+    async sendInvite(
+      to: string,
+      payload: InvitePayload,
+      roomUrl: string,
+      unsubscribeUrl?: string,
+    ): Promise<void> {
+      const who = payload.inviterName ?? 'A friend';
+      // Two footers, honestly different: first contact has no unsubscribe
+      // token yet (it is minted when claiming confirms the address), so the
+      // out is "ignore this" — backed by the per-address daily cap.
+      const footerText =
+        unsubscribeUrl === undefined
+          ? `If you don't want this, ignore this email and nothing more will be sent.`
+          : `Stop these emails: ${unsubscribeUrl}`;
+      const footerHtml =
+        unsubscribeUrl === undefined
+          ? `<p style="color:#666;font-size:0.85em">If you don't want this, ignore this email and nothing more will be sent.</p>`
+          : `<p style="color:#666;font-size:0.85em"><a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a> from these emails.</p>`;
+      await transport.sendMail({
+        from,
+        to,
+        subject: `${who} invited you to ${payload.gameTitle} (room ${payload.roomId})`,
+        text:
+          `${who} invited you to a game of ${payload.gameTitle} in room ${payload.roomId}.\n` +
+          `Your seat is saved — claim it here:\n${roomUrl}\n\n${footerText}`,
+        html:
+          `<p><strong>${escapeHtml(who)}</strong> invited you to a game of ` +
+          `<strong>${escapeHtml(payload.gameTitle)}</strong> in room ${escapeHtml(payload.roomId)}.</p>` +
+          `<p>Your seat is saved — <a href="${escapeHtml(roomUrl)}">claim it</a>.</p>` +
+          footerHtml,
+        ...(unsubscribeUrl === undefined
+          ? {}
+          : { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } }),
+      });
+    },
+
+    async sendSeatSignin(
+      to: string,
+      payload: TurnPayload,
+      roomUrl: string,
+      unsubscribeUrl?: string,
+    ): Promise<void> {
+      const footerText =
+        unsubscribeUrl === undefined ? '' : `\n\nStop game emails: ${unsubscribeUrl}`;
+      const footerHtml =
+        unsubscribeUrl === undefined
+          ? ''
+          : `<p style="color:#666;font-size:0.85em"><a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe</a> from game emails.</p>`;
+      await transport.sendMail({
+        from,
+        to,
+        subject: `Your sign-in link for ${payload.gameTitle} (room ${payload.roomId})`,
+        text:
+          `Someone asked for a sign-in link to your seat in ${payload.gameTitle}, ` +
+          `room ${payload.roomId} — probably you, on a new device.\n\n` +
+          `Open it on that device to get back into your seat:\n${roomUrl}\n\n` +
+          `Your other devices stay signed in. If this wasn't you, ignore this ` +
+          `email — your seat is safe and nothing changes.${footerText}`,
+        html:
+          `<p>Someone asked for a sign-in link to your seat in ` +
+          `<strong>${escapeHtml(payload.gameTitle)}</strong>, room ${escapeHtml(payload.roomId)} ` +
+          `— probably you, on a new device.</p>` +
+          `<p><a href="${escapeHtml(roomUrl)}">Open your seat on this device</a></p>` +
+          `<p>Your other devices stay signed in. If this wasn't you, ignore this ` +
+          `email — your seat is safe and nothing changes.</p>` +
+          footerHtml,
+        ...(unsubscribeUrl === undefined
+          ? {}
+          : { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` } }),
       });
     },
   };

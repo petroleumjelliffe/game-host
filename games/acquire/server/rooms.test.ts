@@ -133,45 +133,27 @@ describe('the registry', () => {
 });
 
 /**
- * The honor-system reclaim (owner ruling, 2026-08-08): same name, same room
- * code takes the seat back. Nothing sensitive rides on a seat here, and the
- * alternative — a player locked out of their own game because their browser
- * forgot a token — was found by hand. The token is what makes a rejoin
- * *seamless*; the name is what makes it *possible*.
+ * The honor-system reclaim (owner ruling 2026-08-08) was retired 2026-09-06:
+ * matching a name proved nothing, and any device that had ever set the
+ * shared lobby.name could silently take over a same-named disconnected seat
+ * and rotate its token, logging the real owner out. Recovery on a new
+ * device is the emailed sign-in link now (notify's seat-signin, which
+ * proves mailbox possession). These tests pin the refusal.
  */
-describe('reclaiming a mid-game seat by name', () => {
+describe('mid-game joins after the name-match retirement', () => {
   function midGame() {
     const rooms = createRoomRegistry();
     const room = rooms.fromState('golden-1', ['Alex', 'Sam'], fixture());
     return { rooms, room };
   }
 
-  it('hands a disconnected seat back to a tokenless joiner with the same name', () => {
-    const { rooms, room } = midGame();
-    const before = room.players[1]!.token;
-    room.players[1]!.connected = false;
-
-    const seat = rooms.join('golden-1', 'Sam');
-
-    expect(seat?.player.id).toBe('p2');
-    // Reclaimed, not re-seated: the roster did not grow.
-    expect(room.players).toHaveLength(2);
-    // Rotated: the seat changed hands, so the old device's token dies with
-    // the handover rather than leaving two keys to one chair.
-    expect(seat!.player.token).not.toBe(before);
-  });
-
-  it('matches the name the way a human retypes it — case and spacing forgiven', () => {
+  it('refuses a tokenless joiner even with a disconnected seat’s name', () => {
     const { rooms, room } = midGame();
     room.players[1]!.connected = false;
-
-    expect(rooms.join('golden-1', '  sam ')?.player.id).toBe('p2');
-  });
-
-  it('never hands over a seat whose player is still connected', () => {
-    const { rooms } = midGame();
 
     expect(rooms.join('golden-1', 'Sam')).toBeNull();
+    expect(rooms.join('golden-1', '  sam ')).toBeNull();
+    expect(room.players).toHaveLength(2);
   });
 
   it('still refuses a tokenless stranger mid-game', () => {
@@ -181,6 +163,18 @@ describe('reclaiming a mid-game seat by name', () => {
     expect(rooms.join('golden-1', 'Jordan')).toBeNull();
     expect(rooms.join('golden-1')).toBeNull();
     expect(room.players).toHaveLength(2);
+  });
+
+  it('keeps the token as the one working mid-game path, unrotated', () => {
+    const { rooms, room } = midGame();
+    const seat = room.players[1]!;
+    seat.connected = false;
+    const before = seat.token;
+
+    const back = rooms.join('golden-1', undefined, seat.id, seat.token);
+    expect(back?.player.id).toBe('p2');
+    // No handover happened, so nothing rotates — both devices stay valid.
+    expect(back?.player.token).toBe(before);
   });
 });
 

@@ -3,13 +3,13 @@
 // arrays the tests read, and fail only when told to — the service's pruning
 // and error posture is what's under test, never these.
 
-import type { EmailSender, PushSender, TurnPayload } from './channels.js';
+import type { EmailSender, InvitePayload, PushPayload, PushSender, TurnPayload } from './channels.js';
 import { PushSubscriptionGoneError } from './channels.js';
 import type { PushSubscriptionRecord } from './records.js';
 
 export interface RecordedPush {
   endpoint: string;
-  payload: TurnPayload;
+  payload: PushPayload;
 }
 
 export interface FakePushSender extends PushSender {
@@ -25,7 +25,7 @@ export function fakePushSender(): FakePushSender {
     publicKey: 'test-vapid-public-key',
     sent,
     gone,
-    send(subscription: PushSubscriptionRecord, payload: TurnPayload) {
+    send(subscription: PushSubscriptionRecord, payload: PushPayload) {
       if (gone.has(subscription.endpoint)) {
         return Promise.reject(new PushSubscriptionGoneError(subscription.endpoint));
       }
@@ -36,10 +36,12 @@ export function fakePushSender(): FakePushSender {
 }
 
 export interface RecordedEmail {
-  kind: 'confirmation' | 'turn';
+  kind: 'confirmation' | 'turn' | 'reminder' | 'invite' | 'signin';
   to: string;
   url: string;
   unsubscribeUrl?: string;
+  /** Present on invite mails: who the mail says asked. */
+  inviterName?: string | null;
 }
 
 export interface FakeEmailSender extends EmailSender {
@@ -56,6 +58,22 @@ export function fakeEmailSender(): FakeEmailSender {
     },
     sendTurn(to: string, _payload: TurnPayload, roomUrl: string, unsubscribeUrl: string) {
       sent.push({ kind: 'turn', to, url: roomUrl, unsubscribeUrl });
+      return Promise.resolve();
+    },
+    sendTurnReminder(to: string, _payload: TurnPayload, roomUrl: string, unsubscribeUrl: string) {
+      sent.push({ kind: 'reminder', to, url: roomUrl, unsubscribeUrl });
+      return Promise.resolve();
+    },
+    sendInvite(to: string, payload: InvitePayload, roomUrl: string, unsubscribeUrl?: string) {
+      const record: RecordedEmail = { kind: 'invite', to, url: roomUrl, inviterName: payload.inviterName };
+      if (unsubscribeUrl !== undefined) record.unsubscribeUrl = unsubscribeUrl;
+      sent.push(record);
+      return Promise.resolve();
+    },
+    sendSeatSignin(to: string, _payload: TurnPayload, roomUrl: string, unsubscribeUrl?: string) {
+      const record: RecordedEmail = { kind: 'signin', to, url: roomUrl };
+      if (unsubscribeUrl !== undefined) record.unsubscribeUrl = unsubscribeUrl;
+      sent.push(record);
       return Promise.resolve();
     },
   };

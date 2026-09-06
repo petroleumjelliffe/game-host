@@ -102,7 +102,11 @@ export function useRoom(roomId: string, connect: () => Connection = getConnectio
     lobby.stale ? 'stale'
       : lobby.gone ? 'gone'
         : session !== null ? 'playing'
-          : lobby.phase;
+          // 'preview' is the pre-join chooser's phase, and only a game that
+          // opts into it (wordgame does, this game does not) can produce it —
+          // the narrowing is for the type, not a reachable state.
+          : lobby.phase === 'preview' ? 'joining'
+            : lobby.phase;
 
   return {
     phase,

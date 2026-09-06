@@ -41,6 +41,8 @@ function fakeConnection() {
     beginGame: () => {},
     renamePlayer: () => {},
     leaveSeat: () => {},
+    revokeSeat: () => {},
+    viewRoom: () => {},
     onJoined: (h) => { joined = h; return () => { joined = null; }; },
     onRoster: () => () => {},
     onRejected: (h) => { rejectedHandlers.add(h); return () => { rejectedHandlers.delete(h); }; },

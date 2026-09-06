@@ -36,9 +36,34 @@ export interface NotifyGameRegistration {
   /**
    * Whether this token is the seat's rejoin token. Binding a notification
    * profile to a seat must prove the seat is yours, and the token the lobby
-   * minted at seating is the only proof of identity that exists.
+   * minted at seating is the only proof of identity that exists — with the
+   * seat key (below, `getSeatCredentials`) as its emailed proxy: notify may
+   * hand these credentials to whoever presents a valid emailed key.
    */
   verifySeat(roomId: string, playerId: string, token: string): boolean;
+  /**
+   * Allocate a pending seat for an invite, or refuse (room full, room gone,
+   * game past its lobby). The hash is the invite token's — the lobby stores
+   * only the hash, never the token and never an address. `name` is the
+   * invited contact's display name for the roster, or null for an email
+   * invite, where no name may appear. Optional: a game without it cannot
+   * host invites, and notify refuses accordingly.
+   */
+  reserveSeat?(roomId: string, tokenHash: string, name: string | null): string | null;
+  /**
+   * Convert the pending seat matching this invite-token hash into a held
+   * seat with a freshly minted token. One shaped `null` for every failure —
+   * absent room, absent hash, already claimed — so the claim endpoint
+   * cannot be a probe. The seat's name rides along because the claiming
+   * client must write a whole identity record.
+   */
+  claimSeat?(roomId: string, tokenHash: string): { playerId: string; token: string; name: string } | null;
+  /**
+   * The seat's live credentials, for seat-key redemption: notify hands them
+   * to whoever presents a valid emailed key. A pure read — no side effects,
+   * it runs on every emailed-link click.
+   */
+  getSeatCredentials?(roomId: string, playerId: string): { playerId: string; token: string; name: string } | null;
 }
 
 /** What a registered game calls back into. */
@@ -50,6 +75,14 @@ export interface GameTurnReporter {
    * pending notification (game over, room reset).
    */
   turnChanged(roomId: string, currentPlayerId: string | null, turnKey: string): void;
+  /**
+   * A seat emptied outside normal disconnect: a revoked invite, a pending
+   * seat cleared when the game began, a lobby leaver. Notify drops the
+   * seat's profile bindings (seat ids are reused, and a stale binding would
+   * union strangers into one seat) and marks the seat's unclaimed invites
+   * dead, so a re-invite reserves fresh instead of re-mailing a dead token.
+   */
+  seatVacated?(roomId: string, playerId: string): void;
   /** The room is gone; drop its bindings and markers. */
   roomRemoved(roomId: string): void;
 }

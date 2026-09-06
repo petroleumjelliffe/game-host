@@ -50,6 +50,16 @@ export interface RosterMessage {
   roomId: string;
   lifecycle: Lifecycle;
   players: { id: string; name: string; isHost: boolean; connected: boolean }[];
+  /**
+   * Reserved seats: invited, not yet claimed. Optional and additive — absent
+   * reads as none — deliberately, so that no game's protocol version moves:
+   * an old client ignores the extra key, and a version bump here would orphan
+   * every persisted room in a game whose restore skips on protocol skew.
+   * `name` is the invited contact's display name, or null for an email
+   * invite, where no address (and so no name) may appear. Never the invite
+   * token or its hash.
+   */
+  pending?: { id: string; name: string | null }[];
 }
 
 /**
@@ -72,6 +82,10 @@ export interface JoinRoomMessage {
   protocolVersion: number;
 }
 export interface RenamePlayerMessage { name: string }
+/** Host-only: delete the reserved (pending) seat with this id. */
+export interface RevokeSeatMessage { playerId: string }
+/** Watch a room's roster without taking a seat — the pre-join chooser's data. */
+export interface ViewRoomMessage { roomId: string; protocolVersion: number }
 
 export const LOBBY_CLIENT_EVENTS = {
   createRoom: 'createRoom',
@@ -92,6 +106,25 @@ export const LOBBY_CLIENT_EVENTS = {
    * one gives it up.
    */
   leaveSeat: 'leaveSeat',
+  /**
+   * Host-only, lobby-only: delete a reserved seat that nobody has claimed.
+   * Rides the lobby socket rather than a notify endpoint because host-ness
+   * lives here (`SeatHolder.isHost`) and notify cannot see it. The invite
+   * record left behind in notify becomes a token that can never claim, which
+   * is exactly the indistinguishable refusal the non-probe rule wants; the
+   * game's `onSeatVacated` hook is how notify hears and marks it dead.
+   */
+  revokeSeat: 'revokeSeat',
+  /**
+   * Receive a room's roster, and its future updates, without being seated.
+   * What the pre-join chooser renders: names and seat states are exactly as
+   * public as the table already is (the invite specs' privacy stance), and
+   * nothing game-shaped ever reaches an unseated socket — game sends go
+   * through the seat bindings, which a viewer does not have. Joining is a
+   * separate, explicit act from here ("Sit here"), which is what retired
+   * the silent auto-join and its accidental double seats.
+   */
+  viewRoom: 'viewRoom',
 } as const;
 
 export const LOBBY_SERVER_EVENTS = {

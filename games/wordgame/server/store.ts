@@ -14,6 +14,7 @@ import {
   type RoomStore as GenericRoomStore,
   type SavedRoomEnvelope,
 } from '@game-host/room-store/store.js';
+import type { PendingSeat } from '@game-host/lobby/server/rooms.js';
 import { isGameState, type GameState } from '../engine/gameTypes.js';
 
 export const SAVE_VERSION = 1;
@@ -25,6 +26,23 @@ export interface SavedRoom extends SavedRoomEnvelope {
    * there is no game yet to record. Present from `begin` onward.
    */
   state?: GameState;
+  /**
+   * Reserved seats, present only while some exist — which means only in a
+   * lobby record, since begin clears them. Optional and additive, so every
+   * pre-invite save loads untouched and SAVE_VERSION stays 1.
+   */
+  pending?: PendingSeat[];
+}
+
+function isPendingSeat(value: unknown): value is PendingSeat {
+  if (typeof value !== 'object' || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return (
+    typeof p.id === 'string'
+    && typeof p.tokenHash === 'string'
+    && (p.name === null || typeof p.name === 'string')
+    && typeof p.invitedAt === 'number'
+  );
 }
 
 export type RoomStore = GenericRoomStore<SavedRoom>;
@@ -38,7 +56,9 @@ export type RoomStore = GenericRoomStore<SavedRoom>;
 export function isSavedRoom(value: unknown): value is SavedRoom {
   if (!hasEnvelope(value, SAVE_VERSION)) return false;
   const state = (value as { state?: unknown }).state;
-  return state === undefined || isGameState(state);
+  if (state !== undefined && !isGameState(state)) return false;
+  const pending = (value as { pending?: unknown }).pending;
+  return pending === undefined || (Array.isArray(pending) && pending.every(isPendingSeat));
 }
 
 export function createFileStore(dir: string): RoomStore {

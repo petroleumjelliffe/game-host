@@ -1,6 +1,13 @@
 # Invites and friends: the per-game UI checklist
 
-**Status:** handoff checklist, 2026-09-02. Companion to
+**Status:** handoff checklist, 2026-09-02. The Wordgame column is
+**built** 2026-09-05 via
+[docs/plans/2026-09-05-invites-and-friends.md](../docs/plans/2026-09-05-invites-and-friends.md):
+P1–P4 live on the kit (P2's entry moved onto the empty seat row itself,
+per the design; the reserved row also carries a primary **Remind**), the
+shared notify client exists at `packages/notify/client/`, and P6 is
+deferred with mid-game claims. Acquire's *(x2)* half and its P5 are the
+next step. Companion to
 [2026-09-01-email-invites-and-seat-keys.md](2026-09-01-email-invites-and-seat-keys.md)
 and [2026-09-02-friends.md](2026-09-02-friends.md), covering the UI both
 owe together, because a friend picker cannot ship without the reserved

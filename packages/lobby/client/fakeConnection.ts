@@ -36,6 +36,8 @@ export interface FakeLobbyConnection {
     beginGame: number;
     renamePlayer: string[];
     leaveSeat: number;
+    revokeSeat: string[];
+    viewRoom: string[];
     close: number;
   };
   /** Move the socket and tell every subscriber, the way a real one would. */
@@ -69,6 +71,8 @@ export function createFakeLobbyConnection(
     beginGame: 0,
     renamePlayer: [],
     leaveSeat: 0,
+    revokeSeat: [],
+    viewRoom: [],
     close: 0,
   };
 
@@ -95,6 +99,8 @@ export function createFakeLobbyConnection(
     beginGame() { calls.beginGame += 1; },
     renamePlayer(name) { calls.renamePlayer.push(name); },
     leaveSeat() { calls.leaveSeat += 1; },
+    revokeSeat(playerId) { calls.revokeSeat.push(playerId); },
+    viewRoom(roomId) { calls.viewRoom.push(roomId); },
     onJoined(handler) {
       joinedHandlers.add(handler);
       return () => { joinedHandlers.delete(handler); };

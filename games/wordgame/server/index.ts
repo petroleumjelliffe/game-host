@@ -148,6 +148,33 @@ function build(
       const seat = rooms.get(roomId)?.players.find((p) => p.id === playerId);
       return seat !== undefined && seat.token === token;
     },
+    // The invite capabilities. Each mutation saves and rebroadcasts so the
+    // reserved row appears live on every phone in the lobby; credentials
+    // reads are pure — they run on every emailed-link click.
+    reserveSeat: (roomId, tokenHash, name) => {
+      const id = rooms.reserve(roomId, tokenHash, name);
+      const room = rooms.get(roomId);
+      if (id !== null && room) {
+        save(room);
+        lobby.broadcastRoster(room);
+      }
+      return id;
+    },
+    claimSeat: (roomId, tokenHash) => {
+      const seated = rooms.claimByHash(roomId, tokenHash);
+      if (!seated) return null;
+      save(seated.room);
+      lobby.broadcastRoster(seated.room);
+      return {
+        playerId: seated.player.id,
+        token: seated.player.token,
+        name: seated.player.name,
+      };
+    },
+    getSeatCredentials: (roomId, playerId) => {
+      const seat = rooms.get(roomId)?.players.find((p) => p.id === playerId);
+      return seat ? { playerId: seat.id, token: seat.token, name: seat.name } : null;
+    },
   });
 
   const lobby = createLobbyHandlers<GameRoom>(io, rooms, {
@@ -168,6 +195,10 @@ function build(
     // "friends joined by the shared link" and "host pressed start" cannot
     // eat the room — the lobby's version of one-move-apart.
     onRosterChanged: (room) => save(room),
+    // Revoke, begin's auto-revoke, and lobby leavers: notify drops the
+    // seat's stale bindings and marks its unclaimed invites dead, so a
+    // re-invite reserves fresh. The save rides onRosterChanged.
+    onSeatVacated: (room, playerId) => notifier?.seatVacated?.(room.id, playerId),
   });
 
   function save(room: GameRoom): void {
@@ -250,7 +281,14 @@ function build(
   });
 
   return {
-    rooms,
+    // `restore` re-bound so eviction reaches notify's `roomRemoved` — the
+    // registry cannot see the notifier, and before this nothing in the repo
+    // ever called roomRemoved at all (notify's records were immortal).
+    rooms: {
+      ...rooms,
+      restore: (now?: number) =>
+        rooms.restore(now, (roomId) => notifier?.roomRemoved(roomId)),
+    },
     game: {
       basePath: BASE_PATH,
       title: TITLE,

@@ -27,6 +27,12 @@ export interface RoomRegistry {
   create(hostName?: string): Seat;
   join(roomId: string, name?: string, playerId?: string, token?: string): Seat | null;
   get(roomId: string): GameRoom | undefined;
+  /**
+   * Reserved-seat pass-through — the lobby handlers' registry `Pick` names
+   * `revoke` now that `revokeSeat` is a lobby event. Acquire hosts no
+   * invites yet (nothing here reserves), so this only ever answers false.
+   */
+  revoke(roomId: string, playerId: string): boolean;
   /** Seats a prepared state directly. Tests use this; no socket event reaches it. */
   fromState(roomId: string, names: string[], state: GameState): GameRoom;
   all(): GameRoom[];
@@ -71,6 +77,8 @@ export function createRoomRegistry(store: RoomStore = createNullStore()): RoomRe
     join: (roomId, name, playerId, token) => lobby.join(roomId, name, playerId, token),
 
     get: (roomId) => lobby.get(roomId),
+
+    revoke: (roomId, playerId) => lobby.revoke(roomId, playerId),
 
     fromState(roomId, names, state) {
       // Seated cumulatively, because each seat is chosen against the ones

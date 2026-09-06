@@ -36,6 +36,10 @@ const identity = createIdentityStore('railbaron');
  */
 export function rankPhase(lobbyPhase: LobbyPhase, logHasStarted: boolean): RoomPhase {
   if (lobbyPhase === 'stale' || lobbyPhase === 'gone') return lobbyPhase;
+  // 'preview' is the pre-join chooser's phase, and only a game that opts
+  // into it (wordgame does, this game does not) can produce it — the
+  // narrowing is for the type, not a reachable state.
+  if (lobbyPhase === 'preview') return logHasStarted ? 'playing' : 'joining';
   return logHasStarted ? 'playing' : lobbyPhase;
 }
 

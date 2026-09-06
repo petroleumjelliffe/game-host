@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // The /notify wire, pinned at the URL level. Every consumer of this module
 // mocks it, so nothing else ever asserts what these functions actually
 // fetch — and an unasserted URL is exactly how the entry list shipped

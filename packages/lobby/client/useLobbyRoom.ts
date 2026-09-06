@@ -3,7 +3,31 @@ import type { RosterMessage } from '../protocol/protocol';
 import type { LobbyConnection, ConnectionStatus } from './connection';
 import type { IdentityStore } from './identity';
 
-export type LobbyPhase = 'connecting' | 'joining' | 'lobby' | 'error' | 'gone' | 'stale';
+export type LobbyPhase =
+  | 'connecting'
+  | 'joining'
+  /**
+   * Preview mode only: the roster is visible but this device holds no seat.
+   * The pre-join chooser's phase — `join()` is the explicit "Sit here".
+   */
+  | 'preview'
+  | 'lobby'
+  | 'error'
+  | 'gone'
+  | 'stale';
+
+export interface LobbyRoomOptions {
+  /**
+   * Opt-in (wordgame passes it; other games keep the old behaviour): with no
+   * stored identity, *view* the room instead of auto-joining. Viewing sends
+   * `viewRoom` — roster and live updates, no seat — and the hook reports
+   * phase `'preview'` until `join()` is called explicitly. This is what
+   * retired the silent auto-join and its accidental double seats: opening a
+   * shared room URL no longer takes a chair. A device that already holds a
+   * seat rejoins exactly as before and never sees the preview.
+   */
+  preview?: boolean;
+}
 
 export interface LobbyRoomState {
   phase: LobbyPhase;
@@ -41,7 +65,9 @@ export function useLobbyRoom(
   roomId: string,
   connection: LobbyConnection,
   identity: IdentityStore,
+  opts: LobbyRoomOptions = {},
 ): LobbyRoomState {
+  const preview = opts.preview === true;
   const [status, setStatus] = useState<ConnectionStatus>(() => connection.status());
   const [roster, setRoster] = useState<RosterMessage | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -171,6 +197,16 @@ export function useLobbyRoom(
       return;
     }
 
+    // No stored seat. In preview mode this is the chooser's moment: view the
+    // room (roster, live updates, no seat) and wait for an explicit `join()`.
+    // `sent` still guards it, and still resets on a drop, so a reconnect
+    // re-views the same way a rejoin re-joins.
+    if (preview) {
+      sent.current = true;
+      connection.viewRoom(roomId);
+      return;
+    }
+
     // No stored seat: a first join. Whatever this player last called
     // themselves, if anything — and if nothing, no name at all, which asks the
     // server to name the seat. There is no longer a case where the socket is
@@ -181,7 +217,7 @@ export function useLobbyRoom(
       roomId,
       ...(remembered === null ? {} : { name: remembered }),
     });
-  }, [connection, roomId, status, identity]);
+  }, [connection, roomId, status, identity, preview]);
 
   const join = useCallback((name?: string) => {
     if (name !== undefined) identity.rememberName(name);
@@ -223,7 +259,10 @@ export function useLobbyRoom(
   const phase: LobbyPhase =
     stale ? 'stale'
       : gone ? 'gone'
-        : roster !== null ? 'lobby'
+        // A roster with no playerId is a *view*: this device watched the room
+        // without taking a seat. Only preview mode can produce it — every
+        // other path joins before any roster can arrive.
+        : roster !== null ? (playerId === null && preview ? 'preview' : 'lobby')
           : message !== null ? 'error'
             // Everything below a live socket is `joining`, because an open
             // socket in a room with no roster and no refusal *is* joining:

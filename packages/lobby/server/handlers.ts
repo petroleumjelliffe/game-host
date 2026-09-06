@@ -11,7 +11,9 @@ import {
   type JoinRoomMessage,
   type JoinedMessage,
   type RenamePlayerMessage,
+  type RevokeSeatMessage,
   type RosterMessage,
+  type ViewRoomMessage,
 } from '../protocol/protocol.js';
 import type { LobbyRegistry, LobbyRoomLike, Seated } from './rooms.js';
 
@@ -43,6 +45,14 @@ export interface LobbyHooks<R extends LobbyRoomLike> {
    * process knew is a seat lost at the next restart.
    */
   onRosterChanged?(room: R): void;
+  /**
+   * A seat emptied outside normal disconnect: a revoked pending seat, a
+   * pending seat cleared when the game began, or a lobby leaver. The bridge
+   * to notify's `seatVacated` — which drops the seat's stale profile
+   * bindings (seat ids are reused) and marks its unclaimed invites dead so
+   * a re-invite reserves fresh instead of re-mailing a dead token.
+   */
+  onSeatVacated?(room: R, playerId: string): void;
 }
 
 export interface LobbyWiring<R extends LobbyRoomLike> {
@@ -55,7 +65,7 @@ export interface LobbyWiring<R extends LobbyRoomLike> {
 
 export function createLobbyHandlers<R extends LobbyRoomLike>(
   io: SocketServer,
-  registry: Pick<LobbyRegistry<R>, 'create' | 'join' | 'get'>,
+  registry: Pick<LobbyRegistry<R>, 'create' | 'join' | 'get' | 'revoke'>,
   hooks: LobbyHooks<R>,
 ): LobbyWiring<R> {
   const bindings = new Map<string, SeatBinding>();
@@ -77,6 +87,8 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
         isHost: p.isHost,
         connected: p.connected,
       })),
+      // Id and name only — the tokenHash stays server-side, always.
+      pending: (room.pending ?? []).map((p) => ({ id: p.id, name: p.name })),
     };
   }
 
@@ -280,6 +292,75 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
       void socket.leave(room.id);
       io.to(room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(room));
       hooks.onRosterChanged?.(room);
+      hooks.onSeatVacated?.(room, bound.playerId);
+    });
+
+    socket.on(LOBBY_CLIENT_EVENTS.viewRoom, (msg: ViewRoomMessage) => {
+      // Version check first, same reasoning as joinRoom: a stale client is
+      // told it is stale, not sent hunting for a room that is fine.
+      if (!speaksOurProtocol(msg?.protocolVersion)) return;
+      if (typeof msg?.roomId !== 'string') {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'unknownIntent',
+          message: 'viewRoom requires a roomId',
+        });
+        return;
+      }
+      const room = registry.get(msg.roomId);
+      if (!room) {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'noSuchRoom',
+          message: `Room ${msg.roomId} is no longer available`,
+        });
+        return;
+      }
+      // Into the socket.io room — for roster rebroadcasts — but with NO seat
+      // binding, which is the whole point: rosters reach viewers, game state
+      // does not (every game send routes through socketsFor, binding-keyed).
+      void socket.join(room.id);
+      socket.emit(LOBBY_SERVER_EVENTS.roster, roster(room));
+    });
+
+    socket.on(LOBBY_CLIENT_EVENTS.revokeSeat, (msg: RevokeSeatMessage) => {
+      const bound = bindings.get(socket.id);
+      const room = bound && registry.get(bound.roomId);
+      if (!bound || !room) {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'notConnected',
+          message: 'No seat — join a room first',
+        });
+        return;
+      }
+      // Same gate as beginGame: revoking someone's held seat is a host call.
+      const host = room.players.find((p) => p.isHost);
+      if (host?.id !== bound.playerId) {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'notYourTurn',
+          message: 'only the host may revoke an invite',
+        });
+        return;
+      }
+      // Pending seats exist only in the lobby (begin clears them), so this
+      // is unreachable in practice — but the guard keeps the answer honest
+      // rather than a silent no-op if that ever changes.
+      if (room.lifecycle() !== 'lobby') {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'wrongStage',
+          message: 'the game has already begun',
+        });
+        return;
+      }
+      // Same shape hazard as every handler: the payload is untyped wishes.
+      if (typeof msg?.playerId !== 'string' || !registry.revoke(room.id, msg.playerId)) {
+        socket.emit(LOBBY_SERVER_EVENTS.rejected, {
+          code: 'unknownIntent',
+          message: 'no reserved seat to revoke there',
+        });
+        return;
+      }
+      io.to(room.id).emit(LOBBY_SERVER_EVENTS.roster, roster(room));
+      hooks.onRosterChanged?.(room);
+      hooks.onSeatVacated?.(room, msg.playerId);
     });
 
     socket.on(LOBBY_CLIENT_EVENTS.beginGame, () => {
@@ -310,6 +391,13 @@ export function createLobbyHandlers<R extends LobbyRoomLike>(
         });
         return;
       }
+
+      // Auto-revoke: claims are lobby-only in this slice, so an unclaimed
+      // reserved seat must not survive into a running game — the game would
+      // otherwise carry a seat nothing can ever fill. Vacated first, so the
+      // invites die even before the game broadcasts its opening state.
+      const cleared = room.pending?.splice(0) ?? [];
+      for (const p of cleared) hooks.onSeatVacated?.(room, p.id);
 
       hooks.onBegin(room);
     });

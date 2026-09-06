@@ -29,9 +29,14 @@ export interface TestHost {
  * `keepDataDir` leaves the directory behind so a second host can be booted
  * against it — the restart case in saves.test.ts.
  */
-export async function startTestHost(opts: { dataDir?: string } = {}): Promise<TestHost> {
+export async function startTestHost(
+  opts: { dataDir?: string; notifyChannels?: import('@game-host/notify/channels.js').NotifyChannels } = {},
+): Promise<TestHost> {
   const dataDir = opts.dataDir ?? await mkdtemp(join(tmpdir(), 'game-host-'));
-  const host = await createHost({ dataDir });
+  const host = await createHost({
+    dataDir,
+    ...(opts.notifyChannels === undefined ? {} : { notifyChannels: opts.notifyChannels }),
+  });
   await new Promise<void>((resolve) => host.httpServer.listen(0, resolve));
   const port = (host.httpServer.address() as AddressInfo).port;
   const url = `http://localhost:${port}`;
