@@ -27,6 +27,7 @@ function fakeConnect(): Connection {
     renamePlayer: () => {},
     leaveSeat: () => {},
     revokeSeat: () => {},
+    viewRoom: () => {},
     onJoined: (_h: (m: JoinedMessage) => void) => () => {},
     onRoster: () => () => {},
     onRejected: (_h: (m: RejectedMessage) => void) => () => {},

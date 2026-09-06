@@ -82,7 +82,8 @@ describe('a room across a restart', () => {
     // A Rail Baron room with one real move in it.
     const rb1 = await first.client(RAILBARON);
     const rb2 = await first.client(RAILBARON);
-    const { roomId } = await createRoom(rb1, RB_PROTOCOL_VERSION, 'ADA');
+    const ada = await createRoom(rb1, RB_PROTOCOL_VERSION, 'ADA');
+    const { roomId } = ada;
     await joinRoom(rb2, roomId, RB_PROTOCOL_VERSION, 'BEN');
     const begun = next<{ events: unknown[] }>(rb1, RB_SERVER.log);
     rb1.emit('beginGame');
@@ -102,7 +103,15 @@ describe('a room across a restart', () => {
     const second = await boot(dir);
     const rejoined = await second.client(RAILBARON);
     const back = next<{ events: unknown[] }>(rejoined, RB_SERVER.log);
-    rejoined.emit('joinRoom', { roomId, protocolVersion: RB_PROTOCOL_VERSION, name: 'ADA' });
+    // The token, not the name: seat tokens persist verbatim across a
+    // restart, and — since the name-match reclaim's retirement (2026-09-06)
+    // — presenting one is the only way back into a running game.
+    rejoined.emit('joinRoom', {
+      roomId,
+      playerId: ada.playerId,
+      token: (ada as { token?: string }).token,
+      protocolVersion: RB_PROTOCOL_VERSION,
+    });
 
     // The log is the wire: a restored room hands a joiner the game so far.
     const events = (await back).events;

@@ -43,6 +43,7 @@ function fakeConnection() {
     renamePlayer: () => {},
     leaveSeat: () => {},
     revokeSeat: (playerId) => { revokes.push(playerId); },
+    viewRoom: () => {},
     onJoined: (h) => { joinedHandlers.add(h); return () => { joinedHandlers.delete(h); }; },
     onRoster: (h) => { rosterHandlers.add(h); return () => { rosterHandlers.delete(h); }; },
     onRejected: (h) => { rejectedHandlers.add(h); return () => { rejectedHandlers.delete(h); }; },
@@ -279,9 +280,10 @@ describe('landing on a link', () => {
     expect(fake.joins[0]).toMatchObject({ roomId: 'ABC123', playerId: 'p3', token: 'minted' });
   });
 
-  it('one refusal screen, with joining fresh as the way forward', async () => {
+  it('one refusal screen: a fresh link by email, or the chooser — never a silent join', async () => {
     stubNotify({
       '/notify/invite/claim': () => Promise.resolve(jsonResponse(404, { error: 'unavailable' })),
+      '/notify/invite/refresh': () => Promise.resolve(jsonResponse(200, { ok: true })),
     });
     window.history.replaceState(null, '', '/room/ABC123?invite=tok-dead');
     const fake = fakeConnection();
@@ -289,8 +291,65 @@ describe('landing on a link', () => {
 
     await waitFor(() => { expect(screen.getByText('That link didn’t work')).toBeInTheDocument(); });
     expect(fake.joins).toEqual([]);
-    fireEvent.click(screen.getByRole('button', { name: 'Join as a new player' }));
-    await waitFor(() => { expect(fake.joins).toHaveLength(1); });
+
+    // "Email me a new link" refreshes by the dead token the visitor already
+    // holds — the server decides invite-vs-signin behind the vague state.
+    fireEvent.click(screen.getByRole('button', { name: 'Email me a new link' }));
+    await waitFor(() => { expect(screen.getByText('Check your inbox')).toBeInTheDocument(); });
+    const refresh = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith('/notify/invite/refresh'),
+    );
+    expect(JSON.parse(String((refresh![1] as RequestInit).body))).toEqual({
+      inviteToken: 'tok-dead',
+    });
+
+    // "Continue to the room" lands on the pre-join chooser — still no join.
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to the room' }));
+    fake.sendRoster(rosterWithReserved());
+    expect(screen.getByText('Pick your seat to join')).toBeInTheDocument();
+    expect(fake.joins).toEqual([]);
+
+    // Joining is the explicit act now.
+    fireEvent.click(screen.getByRole('button', { name: 'Sit here' }));
+    expect(fake.joins).toHaveLength(1);
+  });
+
+  it('the chooser claims a seat by email — occupied and reserved rows alike', async () => {
+    stubNotify({
+      '/notify/seat-signin': () => Promise.resolve(jsonResponse(200, { ok: true })),
+    });
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    fake.sendRoster(rosterWithReserved());
+
+    // A visitor with no identity: the chooser, not a seat.
+    expect(screen.getByText('Pick your seat to join')).toBeInTheDocument();
+    expect(fake.joins).toEqual([]);
+
+    // "That's me" on the reserved row resends the invite to its original
+    // target — the invitee who lost the email, or a second device.
+    fireEvent.click(screen.getAllByRole('button', { name: 'That’s me' })[2]!);
+    expect(screen.getByRole('dialog', { name: 'Resend Sam’s invite' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Resend the invite' }));
+    await waitFor(() => { expect(screen.getByText('Check your inbox')).toBeInTheDocument(); });
+    const signin = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith('/notify/seat-signin'),
+    );
+    expect(JSON.parse(String((signin![1] as RequestInit).body))).toEqual({
+      game: 'wordgame',
+      roomId: 'ABC123',
+      playerId: 'p3',
+    });
+  });
+
+  it('mid-game the chooser offers only That’s me — no seats to sit in', () => {
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    fake.sendRoster({ ...rosterWithReserved(), lifecycle: 'playing', pending: [] });
+
+    expect(screen.getByText('This game is in progress')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sit here' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'That’s me' })).toHaveLength(2);
   });
 
   it('a key redemption passes through silently to the room', async () => {

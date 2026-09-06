@@ -18,11 +18,12 @@ import {
   type LandingCredentials,
   type LandingParam,
 } from '@game-host/notify/client/landing';
-import { sendRemind } from '@game-host/notify/client/invites';
+import { refreshInvite, sendRemind, type SigninOutcome } from '@game-host/notify/client/invites';
 import { useEnrollPush } from '@game-host/notify/client/useEnrollPush';
 import { GameScreen } from '../game/GameScreen';
 import { RoomLobby } from '../game/lobby/RoomLobby';
 import { InvitePicker } from '../game/lobby/InvitePicker';
+import { PreJoin } from '../game/lobby/PreJoin';
 import { RoomGone } from '../game/lobby/RoomGone';
 import { StaleClient } from '../game/lobby/StaleClient';
 import { ConnectionStrip } from '../game/lobby/ConnectionStrip';
@@ -92,29 +93,12 @@ export function RoomPage({ connect = getConnection }: RoomPageProps) {
 
   if (landing.state === 'refused') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-page px-3 py-7">
-        <div className="mx-auto w-full max-w-[398px] rounded-[22px] bg-paper p-6 text-center shadow-xl">
-          <h1 className="mb-2 text-[19px] font-bold">That link didn’t work</h1>
-          <p className="mx-auto mb-4 max-w-[300px] text-[13.5px] leading-relaxed text-ink-soft">
-            It may have been used already, or the invite was taken back. You
-            can still join the room as a new player.
-          </p>
-          <button
-            type="button"
-            onClick={() => { setLanding({ state: 'none' }); }}
-            className="m-0 w-full rounded-xl bg-[var(--lobby-accent,#2563eb)] px-4 py-3 font-bold text-white"
-          >
-            Join as a new player
-          </button>
-          <button
-            type="button"
-            onClick={() => { navigate('/'); }}
-            className="m-0 mt-3 w-full rounded-xl border-[1.5px] border-line-strong bg-white px-4 py-2.5 font-semibold text-ink-soft"
-          >
-            Go home
-          </button>
-        </div>
-      </div>
+      <DeadLink
+        roomId={roomId ?? ''}
+        inviteToken={param?.kind === 'invite' ? param.token : null}
+        onContinue={() => { setLanding({ state: 'none' }); }}
+        onHome={() => { navigate('/'); }}
+      />
     );
   }
 
@@ -129,6 +113,82 @@ export function RoomPage({ connect = getConnection }: RoomPageProps) {
   }
 
   return <RoomView roomId={roomId} connect={connect} />;
+}
+
+/**
+ * The dead-link view (design screen B1), kept IN the room deliberately: the
+ * sign-in it offers is scoped to this room, and routing home would imply a
+ * login that gets all your games back — which does not exist. One copy for
+ * used, revoked, and invalid; "Email me a new link" lets the server decide
+ * (resend the invite, or a sign-in link for the claimed seat) behind the
+ * vague sent state; "Continue to the room" lands on the pre-join chooser.
+ */
+function DeadLink({ roomId, inviteToken, onContinue, onHome }: {
+  roomId: string;
+  inviteToken: string | null;
+  onContinue: () => void;
+  onHome: () => void;
+}) {
+  const [state, setState] = useState<'idle' | 'sending' | SigninOutcome>('idle');
+
+  const resend = () => {
+    if (inviteToken === null) return;
+    setState('sending');
+    void refreshInvite(inviteToken).then(setState);
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-page px-3 py-7">
+      <div className="mx-auto flex w-full max-w-[398px] flex-col gap-2.5 rounded-[22px] bg-paper p-6 shadow-xl">
+        {state === 'sent' || state === 'cooldown' ? (
+          <div className="flex flex-col items-center gap-1.5 py-2 text-center">
+            <div aria-hidden className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${state === 'sent' ? 'bg-[#e6f2e8] text-[#3fa053]' : 'bg-warnbg'}`}>
+              {state === 'sent' ? '✓' : '⏳'}
+            </div>
+            <p className="text-[15px] font-bold">{state === 'sent' ? 'Check your inbox' : 'Already sent today'}</p>
+            <p className="max-w-[280px] text-[13px] leading-relaxed text-ink-soft">
+              {state === 'sent'
+                ? `If that invite’s email is set up, a fresh link for room ${roomId} is on its way. It can take a minute.`
+                : 'A link went out recently. Check your inbox and spam — you can ask again tomorrow.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div aria-hidden className="flex h-12 w-12 items-center justify-center self-center rounded-full bg-[#f6e3dd] text-xl">🔗</div>
+            <h1 className="text-center text-[19px] font-bold">That link didn’t work</h1>
+            <p className="mx-auto max-w-[300px] text-center text-[13.5px] leading-relaxed text-ink-soft">
+              Links to room {roomId} only work once and can go stale. You can
+              get a fresh one by email, or look at the room first.
+            </p>
+            {inviteToken !== null && (
+              <button
+                type="button"
+                disabled={state === 'sending'}
+                onClick={resend}
+                className="m-0 mt-1.5 w-full rounded-xl bg-[var(--lobby-accent,#2563eb)] px-4 py-2.5 text-[15px] font-bold text-white shadow-[0_2px_6px_rgba(37,99,235,0.35)] disabled:opacity-60"
+              >
+                {state === 'sending' ? 'Sending…' : 'Email me a new link'}
+              </button>
+            )}
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onContinue}
+          className="m-0 w-full rounded-xl border-[1.5px] border-line-strong bg-white px-4 py-2.5 font-semibold text-ink-soft"
+        >
+          Continue to the room
+        </button>
+        <button
+          type="button"
+          onClick={onHome}
+          className="m-0 py-1 text-center text-[13px] font-semibold text-[var(--lobby-accent,#2563eb)]"
+        >
+          Go home
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -270,6 +330,26 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
           message={room.message}
           onRetry={() => { room.join(); }}
           onExit={leave}
+        />
+      </>
+    );
+  }
+
+  if (room.phase === 'preview' && room.roster) {
+    // A visitor holding no seat: the chooser (design A1, or A2b once the
+    // game is running). "Sit here" is the explicit join; "That's me" mails
+    // the address already on a seat — the only reclaim path now that the
+    // name-match takeover is retired.
+    return (
+      <>
+        <ConnectionStrip status={room.status} />
+        <PreJoin
+          roomId={roomId ?? ''}
+          roster={room.roster}
+          capacity={MAX_PLAYERS}
+          seatEmoji={seatEmoji}
+          onSit={() => { room.join(); }}
+          onHome={leave}
         />
       </>
     );

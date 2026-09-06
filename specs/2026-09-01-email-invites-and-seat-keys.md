@@ -41,6 +41,34 @@ The design held; six deltas, each argued in the plan:
   unclaimed reservations. §2's mid-game claim (rotation insertion,
   tray-on-claim) is the deferred follow-up, likeliest to arrive with
   Marco Polo's real-time pool.
+
+## As built, second slice (2026-09-06)
+
+The pre-join / room-sign-in work
+([docs/plans/2026-09-06-prejoin-and-room-signin.md](../docs/plans/2026-09-06-prejoin-and-room-signin.md))
+touched this spec's ground twice:
+
+- **The honor-system reclaim is retired** (owner ruling 2026-09-06,
+  superseding the 2026-08-08 ruling that created it). Its recovery job —
+  a browser that forgot its token — belongs to notify's `seat-signin`
+  now, which proves mailbox possession where the name match proved
+  nothing. Its rotation job retires with it: **nothing rotates a seat
+  token any more**, so a leaked emailed key link lives until its room
+  dies. Accepted for casual games; an explicit rotate operation is the
+  future fix if it ever bites. "Rotation also happens automatically if
+  the underlying seat token rotates" (§1) is now vacuously true.
+- **The seat key gained user-triggerable sends**: `seat-signin` (the
+  chooser's "That's me" — occupied seats mail their bound confirmed
+  addresses the `?key=` link; reserved seats resend their live invite)
+  and `invite/refresh` (the dead-link screen — live invites resend the
+  same link, claimed ones mail the sign-in link to the original target,
+  revoked ones stay dead). Both answer one vague shape, and the cooldown
+  counts attempts rather than sends so the rate limit cannot probe which
+  seats have email. Wordgame also stopped auto-seating visitors: opening
+  a room URL lands on a pre-join chooser (`viewRoom` + the lobby hook's
+  opt-in preview mode), which is what makes "second click of a used
+  invite link" safe — it can no longer double-join.
+
 **Home:** this repo, because the design cuts across `packages/lobby`,
 `packages/notify`, and the host contract — no single game owns it. Written
 after a brainstorm on inviting specific people to games; the companion spec
