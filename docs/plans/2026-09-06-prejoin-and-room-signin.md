@@ -69,6 +69,30 @@ the invite flow it builds on is live.
   "Signed in on another phone?" link points the visitor at the That's-me
   rows rather than opening a flow of its own.
 
+## Known issue (owner ruling 2026-09-06: accepted, recorded)
+
+**A push-only player cannot reclaim their seat on a new device.** The
+mid-game chooser identifies them fine ("That's me" on their row), but
+delivery has nowhere to go: sign-in rides email, and a profile that is
+reachable by push alone has no confirmed address to mail. The visitor
+sees the vague sent state and nothing arrives. Pushing instead cannot
+help — the push lands on the old device, which is already signed in.
+
+Contact invites are exactly what produces this population: inviting a
+friend by name needs no address, so a push-only friend claims a seat
+with no email behind it. Accepted because the same friend-list habit
+keeps the blast radius small — people who play together repeatedly get
+re-invited by name next game, and the new device enters through the
+fresh invite rather than through reclaim.
+
+Mitigations sketched for when it bites, cheapest first: an email-capture
+card on the claim landing (convert invitees at the one moment of
+attention); a "sign in on another device" QR/link on the already-signed-
+in device (the seat key is derivable on demand, and holding both devices
+is the common case); push-approved device pairing (the only fix for
+push-only *and* old-device-unreachable, and a real flow of its own —
+deferred until someone actually hits it).
+
 ## Out of scope
 
 Full profile login ("all my games"), mid-game seat joining, any rotate
