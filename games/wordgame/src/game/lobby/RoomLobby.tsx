@@ -57,15 +57,31 @@ export interface RoomLobbyProps {
   onRemind?: (playerId: string) => Promise<{ ok: boolean; reason?: string }>;
   /** Delete a reserved seat. The row asks twice; this fires on the second tap. */
   onRevoke?: (playerId: string) => void;
+  /**
+   * Focus the rename field when your row first appears, with its default
+   * name selected so typing replaces it. Passed only on the arrival from
+   * the pre-join chooser's "Sit here" — a rejoin or a freshly created room
+   * must not pop the keyboard on every visit.
+   */
+  autoFocusName?: boolean;
 }
 
 type RemindNote = 'sending' | 'sent' | 'capped' | 'failed';
 
 export function RoomLobby({
   view, note, onStart, onRename, onLeaveSeat, seatEmoji, shareUrl, shareText,
-  onInvite, onRemind, onRevoke,
+  onInvite, onRemind, onRevoke, autoFocusName = false,
 }: RoomLobbyProps) {
   const isHost = view.you?.isHost === true;
+
+  // A stable ref callback fires once, when the input mounts — later
+  // re-renders reuse the same element and never re-steal focus.
+  const focusAndSelect = useCallback((el: HTMLInputElement | null) => {
+    if (el !== null) {
+      el.focus();
+      el.select();
+    }
+  }, []);
 
   // Occupied is `id && !pending` now — a reserved row has an id too, and
   // counting it as "here" once tripped the "you can start" copy.
@@ -252,6 +268,7 @@ export function RoomLobby({
               // your seat, and on the host's row a × read as "boot yourself".
               <input
                 aria-label="Your name"
+                ref={autoFocusName ? focusAndSelect : undefined}
                 defaultValue={seat.name ?? ''}
                 onBlur={(e) => {
                   const next = e.target.value.trim();

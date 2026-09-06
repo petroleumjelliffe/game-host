@@ -258,6 +258,10 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
   const navigate = useNavigate();
   const room = useRoom(roomId ?? '', connect);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // True only for the arrival from the chooser's "Sit here": the lobby then
+  // focuses the rename field with its default name selected, so the first
+  // thing typed IS the name. Rejoins and created rooms stay hands-off.
+  const [justSat, setJustSat] = useState(false);
 
   // Whenever this device holds a seat, tell the notification service which
   // seat is ours — in the lobby too, since the invite picker's "already in
@@ -348,7 +352,10 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
           roster={room.roster}
           capacity={MAX_PLAYERS}
           seatEmoji={seatEmoji}
-          onSit={() => { room.join(); }}
+          onSit={() => {
+            setJustSat(true);
+            room.join();
+          }}
           onHome={leave}
         />
       </>
@@ -377,6 +384,7 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
           // share link.
           shareUrl={window.location.href}
           shareText="Join my word game!"
+          autoFocusName={justSat}
           {...(identity === null ? {} : {
             onInvite: () => { setPickerOpen(true); },
             onRemind: (playerId: string) =>

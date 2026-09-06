@@ -312,6 +312,18 @@ describe('landing on a link', () => {
     // Joining is the explicit act now.
     fireEvent.click(screen.getByRole('button', { name: 'Sit here' }));
     expect(fake.joins).toHaveLength(1);
+
+    // And the seat you just took wants a name: the rename field is focused
+    // with its default selected, so the first thing typed replaces it.
+    fake.sendJoined({ roomId: 'ABC123', playerId: 'p4', token: 'tok4' });
+    fake.sendRoster({
+      ...rosterWithReserved(),
+      players: [
+        ...rosterWithReserved().players,
+        { id: 'p4', name: 'Player 4', isHost: false, connected: true },
+      ],
+    });
+    expect(screen.getByLabelText('Your name')).toHaveFocus();
   });
 
   it('the chooser claims a seat by email — occupied and reserved rows alike', async () => {
