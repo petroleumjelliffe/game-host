@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionStatus } from '@game-host/lobby/client/connection';
+// The shared hook (folded in with the PWA extraction — this file used to
+// carry its own copy). `navigator.onLine` is a one-way signal and is used as
+// one: **false is definitive** — there is no network, so nothing about the
+// server can be true yet — while **true only means an interface is up**, not
+// that the server is reachable. That asymmetry is exactly what is wanted
+// here: the pill may only blame the server when the device is at least on a
+// network. The shared version reads through useSyncExternalStore, which
+// closes the render-to-effect gap the local copy documented by inspection.
+import { useOnline } from '@game-host/pwa/client/useOnline';
 
 /**
  * How long a connect may take before it is worth explaining.
@@ -9,44 +18,6 @@ import type { ConnectionStatus } from '@game-host/lobby/client/connection';
  * copy and makes a two-second reconnect sound like a thirty-second one.
  */
 const EXPLAIN_AFTER_MS = 3000;
-
-/**
- * Whether this device has a network at all.
- *
- * `navigator.onLine` is a one-way signal and is used as one: **false is
- * definitive** — there is no network, so nothing about the server can be
- * true yet — while **true only means an interface is up**, not that the
- * server is reachable. That asymmetry is exactly what is wanted here. The
- * pill may only blame the server when the device is at least on a network.
- */
-function useOnline(): boolean {
-  const [online, setOnline] = useState(() =>
-    typeof navigator === 'undefined' ? true : navigator.onLine,
-  );
-
-  useEffect(() => {
-    const up = () => setOnline(true);
-    const down = () => setOnline(false);
-    window.addEventListener('online', up);
-    window.addEventListener('offline', down);
-    // Read again here, not just in the `useState` initializer above: the
-    // initializer runs at render time, and this effect attaches its
-    // listeners strictly later — render, then commit, then effects. An
-    // `offline` event landing in that gap is missed by the listeners (they
-    // do not exist yet) and never seen by the initializer (it already ran).
-    // This line is what still catches it. No test exercises this gap today
-    // — reproducing "the event lands between render and effect attachment"
-    // needs control over React's own commit timing that this suite does not
-    // have — so it stays covered by inspection, not by a red/green test.
-    setOnline(navigator.onLine);
-    return () => {
-      window.removeEventListener('online', up);
-      window.removeEventListener('offline', down);
-    };
-  }, []);
-
-  return online;
-}
 
 /**
  * Connection state, and only inside the room.

@@ -2,6 +2,7 @@
   "name": "Acquire — Startups",
   "short_name": "Acquire",
   "description": "The classic tile-and-shares board game, with startups. Pass-and-play works fully offline; online games need a network.",
+  "id": "/acquire/",
   "display": "standalone",
   "start_url": "/acquire/",
   "scope": "/acquire/",

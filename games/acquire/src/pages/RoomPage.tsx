@@ -2,14 +2,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { GameScreen } from '../game/GameScreen';
 import { RoomLobby } from '../game/lobby/RoomLobby';
 import { RoomGone } from '../game/lobby/RoomGone';
-import { StaleClient } from '../game/lobby/StaleClient';
+import { StaleClient } from '@game-host/pwa/client/StaleClient';
 import { ConnectionStrip } from '../game/lobby/ConnectionStrip';
 import { RoomRefused } from '../game/lobby/RoomRefused';
 import { seatEmoji } from '../game/online/seatEmoji';
 import { lobbyView } from '@game-host/lobby/client/view';
 import { MAX_PLAYERS, MIN_PLAYERS } from '../../engine/startups';
 import { useRoom } from '../net/useRoom';
-import { forceUpdateAndReload } from '../pwa/update';
+import { forceUpdateAndReload } from '@game-host/pwa/client/update';
 import { useDevSeat } from '../net/devSeat';
 import { getConnection, closeConnection, type Connection } from '../net/connection';
 
