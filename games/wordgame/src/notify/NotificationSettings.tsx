@@ -11,6 +11,7 @@ import {
 } from '@game-host/notify/client/pushSubscription';
 import { fetchSettings, notifyPost, type NotifySettings } from './api';
 import { getPlayerKey } from './playerKey';
+import { GAME_ID } from './gameId';
 import { pushSupported } from './push';
 
 type Load =
@@ -79,7 +80,7 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
     if (playerKey === null) return;
     const { pushEndpoints, vapidPublicKey } = load.settings;
     let cancelled = false;
-    void syncSubscription(playerKey, pushEndpoints, vapidPublicKey, 'wordgame').then((on) => {
+    void syncSubscription(playerKey, pushEndpoints, vapidPublicKey, GAME_ID).then((on) => {
       if (!cancelled) setPushOn(on);
     });
     return () => { cancelled = true; };
@@ -91,9 +92,9 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
     if (key === null) return;
     setPushBusy(true);
     setPushError(null);
-    // 'wordgame' scope-tags the subscription: it belongs to this game's
+    // The scope tag: the subscription belongs to this game's
     // worker, and the server routes each game's sends by the tag.
-    const result = await enrollPush(playerKey, key, 'wordgame');
+    const result = await enrollPush(playerKey, key, GAME_ID);
     if (result === 'enabled') setPushOn(true);
     else if (result === 'denied') {
       setPushError('Notifications are blocked for this site in your browser settings.');

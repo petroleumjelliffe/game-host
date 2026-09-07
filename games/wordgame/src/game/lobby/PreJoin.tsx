@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import type { RosterMessage } from '@game-host/lobby/protocol/protocol';
 import { requestSeatSignin, type SigninOutcome } from '@game-host/notify/client/invites';
+import { GAME_ID } from '../../notify/gameId';
 
 export interface PreJoinProps {
   roomId: string;
@@ -172,7 +173,7 @@ function SeatClaimSheet({ roomId, target, onClose }: {
 
   const send = () => {
     setState('sending');
-    void requestSeatSignin({ game: 'wordgame', roomId, playerId: target.playerId }).then(setState);
+    void requestSeatSignin({ game: GAME_ID, roomId, playerId: target.playerId }).then(setState);
   };
 
   return (

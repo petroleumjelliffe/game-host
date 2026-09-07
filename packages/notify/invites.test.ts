@@ -290,8 +290,20 @@ describe('invite by contact', () => {
     expect(mail?.unsubscribeUrl).toContain('/notify/unsubscribe');
   });
 
+  /** A second registered game, so 'othergame' tags survive the unknown-tag strip. */
+  function registerOtherGame(f: Fixture): void {
+    f.service.registerGame({
+      gameId: 'othergame',
+      title: 'Other Game',
+      roomPath: (roomId: string) => `/othergame/room/${roomId}`,
+      isConnected: () => false,
+      verifySeat: () => true,
+    });
+  }
+
   test('an invite prefers matching-scope subscriptions over off-scope ones', async () => {
     const f = await makeFixture();
+    registerOtherGame(f);
     const contactId = await playedTogether(f);
     // Sam holds two tagged subscriptions; only the inviting game's matches.
     f.service.removeSubscription(SAM_KEY, `https://push.test/${SAM_KEY}`);
@@ -316,6 +328,7 @@ describe('invite by contact', () => {
 
   test('an invite with no matching scope falls back to any subscription — a doorway must arrive', async () => {
     const f = await makeFixture();
+    registerOtherGame(f);
     const contactId = await playedTogether(f);
     // Sam's only subscription belongs to another game's installed app.
     f.service.removeSubscription(SAM_KEY, `https://push.test/${SAM_KEY}`);

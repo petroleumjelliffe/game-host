@@ -35,6 +35,7 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '../../engine/constants';
 import { useRoom } from '../net/useRoom';
 import { loadIdentity, saveIdentity } from '../net/identity';
 import { useNotifyBind } from '../notify/useNotifyBind';
+import { GAME_ID } from '../notify/gameId';
 import { getConnection, closeConnection, type Connection } from '../net/connection';
 
 export interface RoomPageProps {
@@ -201,7 +202,7 @@ function ClaimLanding({ creds, roomId, onGo }: {
   roomId: string;
   onGo: () => void;
 }) {
-  const enroll = useEnrollPush('wordgame');
+  const enroll = useEnrollPush(GAME_ID);
   const who = creds.inviterName ?? 'A friend';
   return (
     <div className="flex min-h-screen items-center justify-center bg-page px-3 py-7">
@@ -391,7 +392,7 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
             onInvite: () => { setPickerOpen(true); },
             onRemind: (playerId: string) =>
               sendRemind({
-                game: 'wordgame',
+                game: GAME_ID,
                 roomId: roomId ?? '',
                 playerId: identity.playerId,
                 token: identity.token,

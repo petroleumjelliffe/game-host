@@ -5,8 +5,9 @@
 
 import { useNotifyBind as useSharedNotifyBind } from '@game-host/notify/client/useNotifyBind';
 import { loadIdentity } from '../net/identity';
+import { GAME_ID } from './gameId';
 
 export function useNotifyBind(roomId: string, phase: 'lobby' | 'playing' | null): void {
   const identity = phase === null || roomId === '' ? null : loadIdentity(roomId);
-  useSharedNotifyBind({ game: 'wordgame', roomId, phase, identity });
+  useSharedNotifyBind({ game: GAME_ID, roomId, phase, identity });
 }

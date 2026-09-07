@@ -941,6 +941,16 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     addSubscription(playerKey, subscription): void {
       const profile = profileFor(playerKey);
       profile.push = profile.push.filter((s) => s.endpoint !== subscription.endpoint);
+      // A scope tag naming no registered game is stripped, not stored: the
+      // send loop matches tags by exact equality, so a typo'd tag would
+      // mint a subscription that reports "push enabled" and receives
+      // nothing, ever — silently worse than no tag, which matches every
+      // game. Games register at boot, before any route serves, so an
+      // unknown name here is a client bug, not a race.
+      if (subscription.gameId !== undefined && !games.has(subscription.gameId)) {
+        log(`! Push subscription tagged for unregistered game '${subscription.gameId}' — storing untagged`);
+        delete subscription.gameId;
+      }
       profile.push.push(subscription);
       saveProfile(profile);
     },

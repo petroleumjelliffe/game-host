@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useContacts } from '@game-host/notify/client/useContacts';
 import { sendInvite, type ContactRow } from '@game-host/notify/client/invites';
+import { GAME_ID } from '../../notify/gameId';
 
 export interface InvitePickerProps {
   roomId: string;
@@ -42,7 +43,7 @@ function agoText(lastPlayedAt: number): string {
 
 export function InvitePicker({ roomId, self, onClose }: InvitePickerProps) {
   const [tab, setTab] = useState<Tab>('contacts');
-  const contacts = useContacts({ game: 'wordgame', roomId }, true);
+  const contacts = useContacts({ game: GAME_ID, roomId }, true);
   const [rowNotes, setRowNotes] = useState<Record<string, RowNote>>({});
   const [draft, setDraft] = useState('');
   const [emailNote, setEmailNote] = useState<EmailNote>(null);
@@ -50,7 +51,7 @@ export function InvitePicker({ roomId, self, onClose }: InvitePickerProps) {
   const inviteContact = (contact: ContactRow) => {
     setRowNotes((notes) => ({ ...notes, [contact.contactId]: 'sending' }));
     void sendInvite({
-      game: 'wordgame',
+      game: GAME_ID,
       roomId,
       playerId: self.playerId,
       token: self.token,
@@ -71,7 +72,7 @@ export function InvitePicker({ roomId, self, onClose }: InvitePickerProps) {
     }
     setEmailNote('sending');
     void sendInvite({
-      game: 'wordgame',
+      game: GAME_ID,
       roomId,
       playerId: self.playerId,
       token: self.token,
