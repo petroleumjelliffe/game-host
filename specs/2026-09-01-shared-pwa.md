@@ -220,3 +220,29 @@ Implemented as designed, with these deltas:
 - **The key-landing enrollment prompt** already existed (`useEnrollPush`
   at wordgame's landing) and only gained the scope tag; the iOS
   install-flow copy the design sketches is untouched UI work.
+
+An adversarial review of the first landing caught what the composition
+changed underneath the moved code — code written when acquire was the
+only precaching worker now shares one origin-scoped CacheStorage with
+two more — and three smaller things, all fixed the same day:
+
+- **Cache deletion is scoped by `cachePrefix`**, in the worker's
+  activate prune and in `forceUpdateAndReload` alike. Unscoped, a
+  wordgame deploy (or one player's stale-client recovery) deleted
+  acquire's and railbaron's live precaches under their still-active
+  workers, whose installs never re-run — offline shells broken until
+  their next deploys. `swFromBuild` now fails the build unless the
+  prefix equals the base path segment, which is what makes the client's
+  BASE_URL-derived prefix sound; `checkDist` asserts it on the artifact.
+- **`apple-touch-icon` is a real PNG** for wordgame and railbaron
+  (acquire always had one): iOS ignores SVG for home-screen icons on
+  exactly the platform where installing is the push prerequisite. The
+  PNGs are committed, rendered from each game's SVG by the package's
+  `rasterizeIcon.mjs`.
+- **An unknown scope tag is stripped at `addSubscription`**, stored
+  untagged (matches every game) with a log line — a typo'd tag would
+  otherwise mint a subscription that reports enabled and receives
+  nothing, ever. Wordgame's five `'wordgame'` literals became one
+  `GAME_ID` constant.
+- **`useUpdateReady` removes its `updatefound` listener** on unmount;
+  the registration outlives every mount, so listeners must not stack.
