@@ -4,7 +4,7 @@
 // is defined wholesale and removed after.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useUpdateReady } from './update';
+import { forceUpdateAndReload, useUpdateReady } from './update';
 
 type Listener = () => void;
 
@@ -26,6 +26,24 @@ function mockServiceWorker(registration: {
 
 afterEach(() => {
   delete (navigator as { serviceWorker?: unknown }).serviceWorker;
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe('forceUpdateAndReload', () => {
+  it('deletes only this game\'s prefixed caches — the siblings share the origin CacheStorage', async () => {
+    vi.stubEnv('BASE_URL', '/acquire/');
+    const deleted: string[] = [];
+    vi.stubGlobal('caches', {
+      keys: () => Promise.resolve(['acquire-aaa', 'acquire-bbb', 'wordgame-ccc', 'railbaron-ddd']),
+      delete: (key: string) => {
+        deleted.push(key);
+        return Promise.resolve(true);
+      },
+    });
+    await forceUpdateAndReload();
+    expect(deleted.sort()).toEqual(['acquire-aaa', 'acquire-bbb']);
+  });
 });
 
 describe('useUpdateReady', () => {
@@ -40,6 +58,7 @@ describe('useUpdateReady', () => {
     const reg = {
       waiting: { postMessage: vi.fn() },
       addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     };
     mockServiceWorker(reg);
     const { result } = renderHook(() => useUpdateReady());
@@ -48,7 +67,7 @@ describe('useUpdateReady', () => {
 
   it('apply messages the waiting worker with SKIP_WAITING', async () => {
     const postMessage = vi.fn();
-    const reg = { waiting: { postMessage }, addEventListener: vi.fn() };
+    const reg = { waiting: { postMessage }, addEventListener: vi.fn(), removeEventListener: vi.fn() };
     mockServiceWorker(reg);
     const { result } = renderHook(() => useUpdateReady());
     await waitFor(() => expect(result.current.ready).toBe(true));
@@ -58,7 +77,7 @@ describe('useUpdateReady', () => {
   });
 
   it('stays not-ready when nothing is waiting', async () => {
-    const reg = { waiting: null, addEventListener: vi.fn() };
+    const reg = { waiting: null, addEventListener: vi.fn(), removeEventListener: vi.fn() };
     mockServiceWorker(reg);
     const { result } = renderHook(() => useUpdateReady());
     // Let the getRegistration promise settle before asserting the negative.

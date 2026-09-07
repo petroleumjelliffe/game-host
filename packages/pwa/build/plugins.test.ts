@@ -51,8 +51,8 @@ describe('swFromBuild', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  function run(base = '/acquire/'): string {
-    const plugin = swFromBuild({ cachePrefix: 'acquire', appName: 'Acquire' });
+  function run(base = '/acquire/', cachePrefix = 'acquire'): string {
+    const plugin = swFromBuild({ cachePrefix, appName: 'Acquire' });
     const config = {
       root,
       base,
@@ -85,8 +85,26 @@ describe('swFromBuild', () => {
     expect(changed).not.toBe(first);
   });
 
+  it('refuses a cachePrefix that is not the base path segment', () => {
+    // The prefix is the cache ownership boundary on a shared origin, and
+    // forceUpdateAndReload derives it from BASE_URL — the derivation is only
+    // sound if the two are equal, so a mismatch must fail the build.
+    expect(() => run('/wordgame/', 'acquire')).toThrow(/must equal the base path segment/);
+  });
+
+  it('prunes only its own prefix at activate — sibling games share the origin CacheStorage', () => {
+    const sw = run();
+    expect(sw).toContain("const CACHE_PREFIX = 'acquire';");
+    // The prune is scoped by the prefix, never a bare `key !== CACHE`.
+    const activateBlock = sw.slice(
+      sw.indexOf("addEventListener('activate'"),
+      sw.indexOf("addEventListener('message'"),
+    );
+    expect(activateBlock).toContain('key.startsWith(`${CACHE_PREFIX}-`)');
+  });
+
   it('ships both jobs: precache/update flow and the push handlers, no auto skipWaiting', () => {
-    const sw = run('/wordgame/');
+    const sw = run('/wordgame/', 'wordgame');
     // Push half — what wordgame's old worker did, now built in.
     expect(sw).toContain("addEventListener('push'");
     expect(sw).toContain("addEventListener('notificationclick'");

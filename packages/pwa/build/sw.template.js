@@ -12,6 +12,7 @@
 /* eslint-disable no-undef */
 
 const CACHE = '__CACHE_NAME__';
+const CACHE_PREFIX = '__CACHE_PREFIX__';
 const BASE = '__BASE__';
 const APP_NAME = __APP_NAME__;
 const PRECACHE = __PRECACHE__;
@@ -27,9 +28,15 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    // One cache per build; activating prunes every other build's cache.
+    // One cache per build; activating prunes every other build's cache —
+    // but only *this game's* builds. CacheStorage is origin-scoped and all
+    // the games share one origin, so the keys listed here include the other
+    // games' live precaches; deleting everything but our own CACHE would
+    // empty a sibling's cache under its still-active worker (whose install
+    // never re-runs, so its offline shell stays broken until its next
+    // deploy). The prefix is the ownership boundary.
     for (const key of await caches.keys()) {
-      if (key !== CACHE) await caches.delete(key);
+      if (key !== CACHE && key.startsWith(`${CACHE_PREFIX}-`)) await caches.delete(key);
     }
     await self.clients.claim();
   })());

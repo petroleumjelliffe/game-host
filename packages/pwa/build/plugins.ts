@@ -87,6 +87,19 @@ export function swFromBuild(options: { cachePrefix: string; appName: string }): 
       const dist = resolve(config.root, config.build.outDir);
       // Vite normalizes a resolved base to carry its trailing slash.
       const base = config.base;
+      // The prefix is the cache OWNERSHIP boundary on a shared origin: the
+      // worker's activate prune and the client's forceUpdateAndReload both
+      // delete only `<prefix>-*` caches, and the client derives the prefix
+      // from BASE_URL because it has nothing else at runtime. That
+      // derivation is only sound if the two really are equal, so a mismatch
+      // fails the build here rather than shipping a recovery that misses
+      // its own caches (or a prune that eats a sibling game's).
+      const baseSegment = base.replaceAll('/', '');
+      if (options.cachePrefix !== baseSegment) {
+        throw new Error(
+          `swFromBuild: cachePrefix '${options.cachePrefix}' must equal the base path segment '${baseSegment}'`,
+        );
+      }
       const files = walk(dist)
         .filter((f) => !f.endsWith('.map') && f !== 'sw.js' && f !== '404.html')
         .sort();
@@ -97,6 +110,7 @@ export function swFromBuild(options: { cachePrefix: string; appName: string }): 
       const template = fileURLToPath(new URL('./sw.template.js', import.meta.url));
       const sw = readFileSync(template, 'utf8')
         .replaceAll('__CACHE_NAME__', `${options.cachePrefix}-${hash.digest('hex').slice(0, 12)}`)
+        .replaceAll('__CACHE_PREFIX__', options.cachePrefix)
         .replaceAll('__APP_NAME__', JSON.stringify(options.appName))
         .replaceAll('__BASE__', base)
         .replaceAll('__PRECACHE__', JSON.stringify(

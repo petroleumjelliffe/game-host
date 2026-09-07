@@ -31,6 +31,12 @@ function read(name) {
 const sw = read('sw.js');
 if (sw !== null) {
   if (!sw.includes(`'${base}/'`)) failures.push(`sw.js does not carry the base '${base}/'`);
+  // The cache prefix must be the base path segment: it is the ownership
+  // boundary for cache deletion on the shared origin, and the client's
+  // forceUpdateAndReload derives it from BASE_URL.
+  if (!sw.includes(`const CACHE_PREFIX = '${base.slice(1)}';`)) {
+    failures.push(`sw.js cache prefix is not the base segment '${base.slice(1)}'`);
+  }
   const leftover = sw.match(/__[A-Z_]+__/);
   if (leftover) failures.push(`sw.js still carries the placeholder ${leftover[0]}`);
 }
