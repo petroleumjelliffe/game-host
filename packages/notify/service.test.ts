@@ -200,3 +200,42 @@ test('two rooms debounce independently', async () => {
   await wait(DEBOUNCE * 3);
   expect(f.push.sent).toHaveLength(2);
 });
+
+// The scope routing (shared-PWA spec): a subscription belongs to one game's
+// service worker, and a turn delivered through another game's worker would
+// open the room inside the wrong app shell.
+test('a scope-tagged subscription receives only its own game\'s turns', async () => {
+  const f = await makeFixture();
+  // One profile, two devices' worth of subscriptions: one tagged for
+  // testgame, one tagged for a game this service also runs.
+  const bound = f.service.bindSeat(KEY, 'testgame', 'ROOM1', 'p1', 'good-token');
+  expect(bound.ok).toBe(true);
+  f.service.addSubscription(KEY, sub('https://push.test/mine', 'testgame'));
+  f.service.addSubscription(KEY, sub('https://push.test/other', 'othergame'));
+
+  f.reporter.turnChanged('ROOM1', 'p1', 'turn-1');
+  await wait(DEBOUNCE * 3);
+  expect(f.push.sent.map((p) => p.endpoint)).toEqual(['https://push.test/mine']);
+});
+
+test('an untagged (pre-tag) subscription still receives turns from any game', async () => {
+  const f = await makeFixture();
+  const bound = f.service.bindSeat(KEY, 'testgame', 'ROOM1', 'p1', 'good-token');
+  expect(bound.ok).toBe(true);
+  f.service.addSubscription(KEY, sub('https://push.test/legacy'));
+
+  f.reporter.turnChanged('ROOM1', 'p1', 'turn-1');
+  await wait(DEBOUNCE * 3);
+  expect(f.push.sent.map((p) => p.endpoint)).toEqual(['https://push.test/legacy']);
+});
+
+test('a turn with only off-scope subscriptions sends no push at all — no fallback', async () => {
+  const f = await makeFixture();
+  const bound = f.service.bindSeat(KEY, 'testgame', 'ROOM1', 'p1', 'good-token');
+  expect(bound.ok).toBe(true);
+  f.service.addSubscription(KEY, sub('https://push.test/other', 'othergame'));
+
+  f.reporter.turnChanged('ROOM1', 'p1', 'turn-1');
+  await wait(DEBOUNCE * 3);
+  expect(f.push.sent).toHaveLength(0);
+});

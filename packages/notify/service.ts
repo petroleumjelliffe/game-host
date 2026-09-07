@@ -431,10 +431,33 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     return true;
   }
 
-  async function sendPush(profile: ProfileRecord, payload: PushPayload): Promise<void> {
+  /**
+   * The scope routing (shared-PWA spec): a subscription is per-game
+   * per-device — it belongs to one game's service worker, and a payload
+   * delivered through the wrong worker opens the room inside the wrong
+   * app shell. An untagged subscription (minted before the tag existed)
+   * matches every game. `fallbackToAnyScope` is the one deliberate
+   * exception, for invites: an invite is a doorway rather than a turn,
+   * and not arriving is the worse failure — so it prefers matching-scope
+   * subscriptions and takes any scope's when none match (friends spec §4).
+   */
+  interface PushScope {
+    gameId: string;
+    fallbackToAnyScope?: boolean;
+  }
+
+  async function sendPush(
+    profile: ProfileRecord,
+    payload: PushPayload,
+    scope: PushScope,
+  ): Promise<void> {
     if (!push || !profile.prefs.push || profile.push.length === 0) return;
+    const matching = profile.push.filter(
+      (s) => s.gameId === undefined || s.gameId === scope.gameId,
+    );
+    const targets = matching.length > 0 || !scope.fallbackToAnyScope ? matching : profile.push;
     const dead: string[] = [];
-    for (const subscription of profile.push) {
+    for (const subscription of targets) {
       try {
         await push.send(subscription, payload);
       } catch (error) {
@@ -490,11 +513,15 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     payload: TurnPayload,
     emailUrl: string,
     kind: 'turn' | 'reminder',
+    gameId: string,
   ): Promise<void> {
     const mailed = new Set<string>();
     const jobs: Promise<void>[] = [];
     for (const profile of targets) {
-      jobs.push(sendPush(profile, payload));
+      // Turns route to the sending game's scope only — no fallback: a turn
+      // arriving through another game's worker is the smear the tag exists
+      // to prevent, and this seat's other channels still carry it.
+      jobs.push(sendPush(profile, payload, { gameId }));
       if (emailEligible(profile)) {
         const address = profile.email!.address.toLowerCase();
         if (!mailed.has(address)) {
@@ -533,7 +560,7 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     };
     // The emailed link carries the seat key — every email is a login link.
     const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, roomId, playerId)}`;
-    track(sendToSeat(targets, payload, emailUrl, 'turn'));
+    track(sendToSeat(targets, payload, emailUrl, 'turn', reg.gameId));
   }
 
   function sweepReminders(): void {
@@ -563,7 +590,7 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         url: reg.roomPath(room.roomId),
       };
       const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, room.roomId, marker.playerId)}`;
-      track(sendToSeat(targets, payload, emailUrl, 'reminder'));
+      track(sendToSeat(targets, payload, emailUrl, 'reminder', room.gameId));
     }
   }
 
@@ -685,7 +712,8 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     for (const profileId of record.target.profileIds) {
       const profile = profiles.get(profileId);
       if (!profile) continue;
-      jobs.push(sendPush(profile, payload));
+      // Scope-preferred with any-scope fallback — the invite exception.
+      jobs.push(sendPush(profile, payload, { gameId: reg.gameId, fallbackToAnyScope: true }));
       if (email && emailEligible(profile)) {
         const address = profile.email!.address.toLowerCase();
         if (!mailed.has(address)) {

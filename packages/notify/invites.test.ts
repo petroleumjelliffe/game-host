@@ -290,6 +290,53 @@ describe('invite by contact', () => {
     expect(mail?.unsubscribeUrl).toContain('/notify/unsubscribe');
   });
 
+  test('an invite prefers matching-scope subscriptions over off-scope ones', async () => {
+    const f = await makeFixture();
+    const contactId = await playedTogether(f);
+    // Sam holds two tagged subscriptions; only the inviting game's matches.
+    f.service.removeSubscription(SAM_KEY, `https://push.test/${SAM_KEY}`);
+    f.service.addSubscription(SAM_KEY, sub('https://push.test/sam-here', 'testgame'));
+    f.service.addSubscription(SAM_KEY, sub('https://push.test/sam-elsewhere', 'othergame'));
+
+    f.game.addRoom('ROOM2');
+    const host = f.game.seat('ROOM2', 'p1');
+    const result = await f.service.invite({
+      playerKey: HOST_KEY,
+      gameId: 'testgame',
+      roomId: 'ROOM2',
+      playerId: 'p1',
+      token: host.token,
+      contactId,
+    });
+    expect(result).toMatchObject({ ok: true });
+    await drain();
+    const invitePushes = f.push.sent.filter((p) => 'kind' in p.payload);
+    expect(invitePushes.map((p) => p.endpoint)).toEqual(['https://push.test/sam-here']);
+  });
+
+  test('an invite with no matching scope falls back to any subscription — a doorway must arrive', async () => {
+    const f = await makeFixture();
+    const contactId = await playedTogether(f);
+    // Sam's only subscription belongs to another game's installed app.
+    f.service.removeSubscription(SAM_KEY, `https://push.test/${SAM_KEY}`);
+    f.service.addSubscription(SAM_KEY, sub('https://push.test/sam-elsewhere', 'othergame'));
+
+    f.game.addRoom('ROOM2');
+    const host = f.game.seat('ROOM2', 'p1');
+    const result = await f.service.invite({
+      playerKey: HOST_KEY,
+      gameId: 'testgame',
+      roomId: 'ROOM2',
+      playerId: 'p1',
+      token: host.token,
+      contactId,
+    });
+    expect(result).toMatchObject({ ok: true });
+    await drain();
+    const invitePushes = f.push.sent.filter((p) => 'kind' in p.payload);
+    expect(invitePushes.map((p) => p.endpoint)).toEqual(['https://push.test/sam-elsewhere']);
+  });
+
   test('refusals land before any seat is reserved', async () => {
     const f = await makeFixture();
     const contactId = await playedTogether(f);

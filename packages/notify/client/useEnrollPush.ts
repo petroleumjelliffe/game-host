@@ -33,7 +33,12 @@ function declinedBefore(): boolean {
   }
 }
 
-export function useEnrollPush(): {
+/**
+ * `gameId` scope-tags the subscription this card mints (shared-PWA spec) —
+ * every game passes its own id. Optional only so clients written before
+ * the tag keep compiling; they mint legacy any-scope records.
+ */
+export function useEnrollPush(gameId?: string): {
   state: EnrollPushState;
   enroll(): void;
   decline(): void;
@@ -57,7 +62,12 @@ export function useEnrollPush(): {
     void (async () => {
       const settings = await fetchSettings(playerKey);
       if (cancelled || settings === null || !settings.pushEnabled) return;
-      const on = await syncSubscription(playerKey, settings.pushEndpoints, settings.vapidPublicKey);
+      const on = await syncSubscription(
+        playerKey,
+        settings.pushEndpoints,
+        settings.vapidPublicKey,
+        gameId,
+      );
       if (cancelled || on) return; // already reachable: nothing to offer
       setVapidKey(settings.vapidPublicKey);
       setState('offer');
@@ -65,16 +75,16 @@ export function useEnrollPush(): {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [gameId]);
 
   const enroll = useCallback(() => {
     const playerKey = getPlayerKey();
     if (playerKey === null || vapidKey === null) return;
     setState('busy');
-    void enrollPush(playerKey, vapidKey).then((result) => {
+    void enrollPush(playerKey, vapidKey, gameId).then((result) => {
       setState(result === 'enabled' ? 'enabled' : 'failed');
     });
-  }, [vapidKey]);
+  }, [vapidKey, gameId]);
 
   const decline = useCallback(() => {
     try {

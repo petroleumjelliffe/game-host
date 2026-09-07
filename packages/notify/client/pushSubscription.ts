@@ -12,8 +12,17 @@ export type EnrollResult = 'enabled' | 'denied' | 'failed';
  * Ask permission, subscribe this browser, tell the server. The caller has
  * already established that push is supported and configured (a vapid key
  * exists) — those are display states, not outcomes.
+ *
+ * `gameId` is the scope tag (shared-PWA spec): the subscription being
+ * minted belongs to this game's service worker and no other, and the server
+ * routes each game's sends to matching-scope subscriptions. Every game
+ * names itself here; omitting it mints a legacy any-scope record.
  */
-export async function enrollPush(playerKey: string, vapidPublicKey: string): Promise<EnrollResult> {
+export async function enrollPush(
+  playerKey: string,
+  vapidPublicKey: string,
+  gameId?: string,
+): Promise<EnrollResult> {
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return 'denied';
@@ -25,6 +34,7 @@ export async function enrollPush(playerKey: string, vapidPublicKey: string): Pro
     const res = await notifyPost('/subscriptions', {
       playerKey,
       subscription: subscription.toJSON(),
+      ...(gameId === undefined ? {} : { game: gameId }),
     });
     return res.ok ? 'enabled' : 'failed';
   } catch {
@@ -57,6 +67,7 @@ export async function syncSubscription(
   playerKey: string,
   pushEndpoints: readonly string[],
   vapidPublicKey: string | null,
+  gameId?: string,
 ): Promise<boolean> {
   if (!pushSupported()) return false;
   try {
@@ -65,7 +76,11 @@ export async function syncSubscription(
     if (sub === null) return false;
     if (pushEndpoints.includes(sub.endpoint)) return true;
     if (vapidPublicKey === null) return false;
-    const res = await notifyPost('/subscriptions', { playerKey, subscription: sub.toJSON() });
+    const res = await notifyPost('/subscriptions', {
+      playerKey,
+      subscription: sub.toJSON(),
+      ...(gameId === undefined ? {} : { game: gameId }),
+    });
     return res.ok;
   } catch {
     // No worker (dev), or the query failed: off.

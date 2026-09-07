@@ -17,6 +17,17 @@ export interface PushSubscriptionRecord {
   endpoint: string;
   keys: PushSubscriptionKeys;
   addedAt: number;
+  /**
+   * The scope tag (shared-PWA spec): a push subscription belongs to the
+   * service worker that minted it, so it is inherently per-game per-device,
+   * and the send loop routes each game's turns to matching-scope
+   * subscriptions only — a wordgame turn must never open inside acquire's
+   * app shell. Optional because records from before the tag lack it; an
+   * untagged subscription matches every game (the only pre-tag subscriber
+   * was wordgame, the only pre-tag sender likewise, so wildcard is the
+   * behaviour those records were minted under).
+   */
+  gameId?: string;
 }
 
 export type EmailStatus = 'pending' | 'confirmed' | 'disabled';
@@ -184,6 +195,7 @@ function isPushSubscriptionRecord(value: unknown): value is PushSubscriptionReco
   return (
     typeof value.endpoint === 'string' &&
     typeof value.addedAt === 'number' &&
+    (value.gameId === undefined || typeof value.gameId === 'string') &&
     isObject(keys) &&
     typeof keys.p256dh === 'string' &&
     typeof keys.auth === 'string'
