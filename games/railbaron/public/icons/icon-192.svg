@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <!-- Two split-flap tiles reading RB — the departures-board identity.
+       Art is per-game (the shared PWA package deliberately generates no
+       icons); colors mirror src/index.css and appColors.ts. -->
+  <rect width="192" height="192" rx="34" fill="#0a0a0a"/>
+  <g>
+    <rect x="26" y="46" width="66" height="100" rx="9" fill="#1d1c19"/>
+    <rect x="100" y="46" width="66" height="100" rx="9" fill="#1d1c19"/>
+    <text x="59" y="122" font-family="'Roboto Condensed','Arial Narrow',sans-serif" font-weight="700" font-size="76" fill="#cfc9ba" text-anchor="middle">R</text>
+    <text x="133" y="122" font-family="'Roboto Condensed','Arial Narrow',sans-serif" font-weight="700" font-size="76" fill="#cfc9ba" text-anchor="middle">B</text>
+    <!-- The flap seam. -->
+    <rect x="26" y="94" width="66" height="4" fill="#0a0a0a"/>
+    <rect x="100" y="94" width="66" height="4" fill="#0a0a0a"/>
+  </g>
+</svg>

@@ -6,6 +6,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <title>Rail Baron</title>
+
+    <!-- PWA. The placeholders are substituted by the shared plugin
+         (@game-host/pwa) — the base to a bare "/", which Vite then prefixes
+         exactly once, and the theme color from appColors.ts, the same value
+         the manifest generator reads. -->
+    <link rel="manifest" href="__PWA_BASE__manifest.webmanifest" />
+    <meta name="theme-color" content="__THEME_COLOR__" />
+    <link rel="icon" href="__PWA_BASE__icons/icon-192.svg" type="image/svg+xml" />
+    <!-- iOS installs read these, not the manifest. -->
+    <link rel="apple-touch-icon" href="__PWA_BASE__icons/icon-192.svg" />
+    <meta name="apple-mobile-web-app-title" content="Rail Baron" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;700&family=DM+Mono:wght@400;500&display=swap" />

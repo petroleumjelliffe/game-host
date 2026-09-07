@@ -2,7 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { registerServiceWorker } from '@game-host/pwa/client/register';
 import './index.css';
+
+registerServiceWorker();
 
 // The basename comes from Vite's own BASE_URL, which Vite builds from the
 // config's `base` — so this does not hold a second hardcoded copy of the

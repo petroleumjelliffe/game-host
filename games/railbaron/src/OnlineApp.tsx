@@ -10,6 +10,7 @@ import {
 import type { FieldId, Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
 import { SERVER_URL } from './config';
+import { forceUpdateAndReload } from '@game-host/pwa/client/update';
 import { closeConnection, getConnection } from './net/connection';
 import { useOnlineGame } from './net/useOnlineGame';
 import { useRoom, type RoomState } from './net/useRoom';
@@ -210,7 +211,17 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
         });
         return;
       case 'navigate':
-        if (row.action.to === 'home') onHome();
+        if (row.action.to === 'home') {
+          // The stale screen's RELOAD row: with a service worker precaching
+          // the shell now, a plain navigation can be served the same stale
+          // shell and loop — the recovery has to get past the worker
+          // (unregister, clear caches, land on the app root fresh).
+          if (room.phase === 'stale') {
+            void forceUpdateAndReload();
+            return;
+          }
+          onHome();
+        }
         if (row.action.to === 'map') setOnMap(true);
     }
   };

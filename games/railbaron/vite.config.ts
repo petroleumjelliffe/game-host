@@ -7,7 +7,9 @@ import react from '@vitejs/plugin-react';
 // wants './basePath.ts', but tsc rejects that without
 // allowImportingTsExtensions — a repo-wide compiler flag is too much to
 // spend on a deprecation warning that has not landed yet.
+import { pwaPlaceholders, swFromBuild } from '@game-host/pwa/build/plugins';
 import { BASE_PATH } from './basePath';
+import { THEME_COLOR } from './appColors';
 
 /**
  * GitHub Pages serves static files and knows nothing about client-side
@@ -68,7 +70,15 @@ export default defineConfig({
     // tooling, not shipped code.
     proxy: { [`${BASE_PATH}/socket.io`]: { target: 'http://localhost:4001', ws: true } },
   },
-  plugins: [react(), pagesFallback()],
+  // The shared PWA plugins (@game-host/pwa): the game is installable from
+  // pure configuration — manifest config in scripts/generate-manifest.ts,
+  // the icons, these two calls, and one register() in main.tsx.
+  plugins: [
+    react(),
+    pagesFallback(),
+    pwaPlaceholders({ themeColor: THEME_COLOR }),
+    swFromBuild({ cachePrefix: 'railbaron', appName: 'Rail Baron' }),
+  ],
   test: {
     globals: true,
     // No setupFiles here, deliberately: vitest 4 merges a root-level setup

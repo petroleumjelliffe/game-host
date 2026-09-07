@@ -14,7 +14,9 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "serve": "npm run build && tsx server/index.ts",
     "start:server": "tsx server/index.ts",
+    "prebuild": "tsx scripts/generate-manifest.ts",
     "build": "vite build",
+    "postbuild": "node ../../packages/pwa/build/checkDist.mjs /railbaron",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "test": "vitest run",
@@ -27,6 +29,7 @@
   "dependencies": {
     "@game-host/host": "*",
     "@game-host/lobby": "*",
+    "@game-host/pwa": "*",
     "@game-host/room-store": "*",
     "d3-geo": "^3.1.1",
     "express": "^5.2.1",
