@@ -14,8 +14,11 @@
     <link rel="manifest" href="__PWA_BASE__manifest.webmanifest" />
     <meta name="theme-color" content="__THEME_COLOR__" />
     <link rel="icon" href="__PWA_BASE__icons/icon-192.svg" type="image/svg+xml" />
-    <!-- iOS installs read these, not the manifest. -->
-    <link rel="apple-touch-icon" href="__PWA_BASE__icons/icon-192.svg" />
+    <!-- iOS installs read these, not the manifest — and iOS ignores SVG for
+         home-screen icons, so this one is a real PNG (rendered from the SVG
+         by @game-host/pwa's rasterizeIcon.mjs; rerun it when the art
+         changes). The installed app is exactly where push lives on iOS. -->
+    <link rel="apple-touch-icon" href="__PWA_BASE__icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="Rail Baron" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet"
