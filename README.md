@@ -20,7 +20,7 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 npm install       # links every packages/*, games/*, apps/* workspace
 npm test          # every package's suite in one command
 npm run typecheck
-npm run lint      # one type-aware eslint across all nine workspaces
+npm run lint      # one type-aware eslint across all ten workspaces
 ```
 
 `npm run lint` gates pull requests and nothing else: it is a CI job of its
@@ -354,6 +354,12 @@ directory is small JSON files, and Time Machine already covers it.
 5. Add one row to `GAMES` in [apps/host/host.ts](apps/host/host.ts) — path,
    title and save-directory name all come off the mount, so the menu and the
    aggregate `/health` pick it up with nothing else to edit.
+6. (Optional, but every current game does it) Make it installable via
+   `@game-host/pwa`: a manifest config handed to `writeManifest` in a
+   `prebuild` script, icons, the two plugins in `vite.config.ts`, one
+   `register()` call, and a `postbuild` line running the package's
+   `checkDist.mjs` — see [the spec](specs/2026-09-01-shared-pwa.md). The
+   manifest's `id`/`scope`/`start_url` are append-only once anyone installs.
 
 That is the whole list. **No Caddyfile edit, no menu edit, no start script,
 no plist** — the front door forwards one port and knows no game names, the

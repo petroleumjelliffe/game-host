@@ -1,6 +1,8 @@
 # `@game-host/pwa`: one PWA machine, per-game apps
 
-**Status:** designed 2026-09-01, not yet planned.
+**Status:** designed 2026-09-01; planned and implemented 2026-09-07 via
+[docs/plans/2026-09-07-shared-pwa.md](../docs/plans/2026-09-07-shared-pwa.md).
+See "As built" at the end for deltas.
 **Home:** this repo — the design extracts acquire's hand-rolled PWA into a
 shared workspace package so every game gets install, offline shell, update
 flow, and push with a config object rather than a reimplementation.
@@ -181,3 +183,40 @@ against the `/acquire` base path from the Pages-era rename while passing.
   spectator of its own cache. Nothing here pretends otherwise.
 - A menu/root PWA (see above).
 - Badging, background sync, periodic sync — nothing has asked for them.
+
+## As built (2026-09-07)
+
+Implemented as designed, with these deltas:
+
+- **The plugins take no paths.** `swFromBuild` reads root, `outDir` and
+  `base` from Vite's `configResolved` rather than a config option, so a
+  game passes only `{ cachePrefix, appName }` and cannot hand the plugin a
+  location that disagrees with its build.
+- **`id` joined the append-only trio explicitly.** The manifests never
+  declared it; the generator now requires it, set equal to `start_url` —
+  the value browsers were already computing — so no existing install
+  re-keys. The generator makes all three required fields rather than
+  defaulting them, which is the "changing them feels deliberate" the
+  design asked for.
+- **StaleClient moved off tailwind.** The two games' copies differed only
+  in neutral tokens a shared package can ride in neither game's tailwind
+  config; the shared component is inline-styled on the `--lobby-*` var
+  seam with the same fallbacks, and wordgame pins its linen surfaces via
+  three variables in its own CSS.
+- **The artifact-level check is each game's `postbuild`**
+  (`@game-host/pwa/build/checkDist.mjs`): sw.js present with the right
+  base and no surviving placeholder, the manifest trio equal to
+  `<base>/`, index.html linking the prefixed manifest. It rides
+  `npm run build`, which is what CI and both deploys run.
+- **Untagged push subscriptions match every game** rather than being
+  migrated: every pre-tag subscription was minted by wordgame's worker
+  and wordgame was the only sender, so wildcard is the behaviour they
+  were minted under. New enrollments are tagged (`enrollPush`,
+  `syncSubscription` and `useEnrollPush` take the gameId; wordgame passes
+  `'wordgame'`).
+- **Railbaron's stale remedy** is its split-flap `staleClient()` screen's
+  RELOAD row rerouted to `forceUpdateAndReload` — its board rows are not
+  the shared React `StaleClient`, and redrawing them was not the point.
+- **The key-landing enrollment prompt** already existed (`useEnrollPush`
+  at wordgame's landing) and only gained the scope tag; the iOS
+  install-flow copy the design sketches is untouched UI work.
