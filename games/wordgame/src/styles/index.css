@@ -6,6 +6,17 @@ body {
   @apply bg-page font-sans text-ink;
 }
 
+/* The shared PWA components (@game-host/pwa: StaleClient, UpdateReadyButton)
+ * theme through the --lobby-* seam; these keep them on this game's linen
+ * palette — page, paper, ink/ink-soft, line from tailwind.config.js. */
+:root {
+  --lobby-page-bg: #e9e5da;
+  --lobby-card-bg: #f7f4ec;
+  --lobby-ink: #2b2820;
+  --lobby-ink-soft: #5f5744;
+  --lobby-line: #e0d9c8;
+}
+
 /* Motion (Word Game Motion.dc.html): mount-triggered keyframes. A staged
  * tile settles on mount, the badge rises on (re)mount, fresh rack tiles
  * rise from the bag. Everything dies under prefers-reduced-motion below;

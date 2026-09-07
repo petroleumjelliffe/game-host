@@ -12,6 +12,7 @@ import { rememberedName, saveIdentity } from '../net/identity';
 import { useMyGames, type MyGame } from './useMyGames';
 import { useNotifyStatus } from '../notify/useNotifyStatus';
 import { NotificationSettings } from '../notify/NotificationSettings';
+import { UpdateReadyButton } from '@game-host/pwa/client/UpdateReadyButton';
 import { ago } from '../game/LastMove';
 import type { RoomSummary } from '../../session/protocol';
 
@@ -260,6 +261,13 @@ export function HomePage({ connect = getConnection }: HomePageProps) {
           )}
         </button>
       </header>
+
+      {/* Installed app only, and only when a new build is waiting — the
+          shared button renders nothing otherwise. The entry page is the one
+          screen where nobody is mid-game, so restarting costs nothing. */}
+      <div className="px-4">
+        <UpdateReadyButton />
+      </div>
 
       {(notifyStatus === 'off' || notifyStatus === 'pending') && (
         <div
