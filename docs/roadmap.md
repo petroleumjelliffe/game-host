@@ -16,9 +16,13 @@ one scoped piece each. This file is not one of those and contains no code.
 
 ---
 
-## The through-line: Rail Baron cannot currently be won
+## ~~The through-line: Rail Baron cannot currently be won~~ — it can, since 2026-08-22
 
-Everything below is ordered around one fact, decided 2026-08-21.
+**Retired by phases 1 and 2** — phase 1 (2026-08-22) made the game finishable,
+phase 2 (2026-08-23) gave it the economy and the rulebook's real endgame. The
+argument stands below as the record of why the ordering was what it was.
+
+Everything below was ordered around one fact, decided 2026-08-21.
 
 [`server/rooms.ts:38`](../games/railbaron/server/rooms.ts#L38) says it plainly:
 *"'over' is unreachable: the game has no end rule yet. When the money spec
@@ -185,14 +189,15 @@ clause.** Winning is declare + home + the target after fees.
 
 Still owed, each a marked assumption or an unbuilt gate: the forced-sale
 and elimination text (half price is a placeholder; a short seat with
-nothing to sell just rides negative and the table resolves it), **starting
-cash** (discovered during implementation — the published game must grant
-some, or the first trips dip negative on bank fees alone; the fold allows
-that dip deliberately until the figure is transcribed), train purchase
-timing (`trainBought` designed, not built), the own-track and mixed-turn
-fee confirms, and the shared-trackage attribution confirm (cheapest-legal
-is an assumption the log preserves enough to revisit). The original slice
-text follows for the record.
+nothing to sell just rides negative and the table resolves it), train
+purchase timing (`trainBought` designed, not built), the own-track and
+mixed-turn fee confirms, and the shared-trackage attribution confirm
+(cheapest-legal is an assumption the log preserves enough to revisit).
+~~Starting cash~~ came off this list 2026-08-24: the $20,000 grubstake
+landed as a `startingCash` house rule beside `winTarget`, riding in front
+of the ledger so pre-rule logs replay with it too, and early turns no
+longer dip negative on bank fees alone. The original slice text follows
+for the record.
 
 - **Buying railroads** — 28 of them, at published prices, from the bank.
 - **Rent** for running on track you do not own, which is what finally makes
@@ -206,29 +211,43 @@ text follows for the record.
 
 ---
 
-## Phase 3 — the map, made bearable to play on
+## Phase 3 — the map, made bearable to play on — in progress
 
 **Size: medium.** Three backlog items that are really one piece of work, and
 that phases 1–2 make urgent rather than optional: a game you can actually
 finish is a game people will sit through, and the map is what they will be
 looking at.
 
-- Map animation for destination rolls and region picking
-- Auto pan/zoom when moving
-- Better controls to select the next node
+**First slice landed 2026-08-24** (PR #19, variant 5b of the design project's
+*Train Movement Style*): the seat-coloured engine piece glides along the route,
+a chip spends the roll down and hardens into END TURN, spent track lights up in
+the seat's colour, and FIND frames position and destination together. That pass
+also covered the next-node controls — candidate lamps, the chip yielding to
+them — so the third bullet below is substantially done, pending playtest.
 
-All three land in [`src/map/MapView.tsx`](../games/railbaron/src/map/MapView.tsx),
-**853 lines and the largest component in the repo**. Expect the plan to open by
-splitting it; three separate features editing one file that size, in sequence,
-is how it becomes a thousand lines nobody wants to touch. Note also that its
-two hooks — `usePlayback.ts` and `useRoute.ts` — carry the change-token
-dependency pattern with `eslint-disable` comments and reasons
+- Map animation for destination rolls and region picking — **design ready**:
+  the design project's updated pass (2026-08-25) covers the roll animation,
+  the lamp treatment, and a current-player indicator
+- Auto pan/zoom when moving — **design still owed**; the one item the updated
+  pass does not cover
+- ~~Better controls to select the next node~~ — the 5b treatment, 2026-08-24
+
+The remaining work lands in
+[`src/map/MapView.tsx`](../games/railbaron/src/map/MapView.tsx) — which the
+2026-08-21 version of this file said was 853 lines and warned would become "a
+thousand lines nobody wants to touch" if features kept landing in sequence
+without a split. The split did not happen before 5b and it is now **1,030
+lines**; the next map plan should open with it. Note also that its hooks —
+`usePlayback.ts` and `useRoute.ts` — carry the change-token dependency pattern
+with `eslint-disable` comments and reasons
 ([the linter](plans/2026-08-20-the-linter.md)); animation work will be tempted
 to change those arrays, and should read the reasons first.
 
-**Ordering note:** phase 2 and phase 3 both touch Rail Baron's UI. If they run
+~~**Ordering note:** phase 2 and phase 3 both touch Rail Baron's UI. If they run
 back to back, do phase 3's `MapView` split *before* phase 2's ownership UI
-rather than after, so the commerce screens are built against the split file.
+rather than after, so the commerce screens are built against the split file.~~
+Overtaken: phase 2's commerce screens landed first (2026-08-23), against the
+unsplit file.
 
 ---
 

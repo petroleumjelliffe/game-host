@@ -15,18 +15,20 @@ wearing the same clothes.
    every money event will also be a wire event — `legal.ts`, the session protocol and
    the server handlers all grow with the money spec — so the pipe gets proven while the
    event surface is small.
-2. **Roll animation on the map** — destination and payout rolls animated; the design
-   already exists in the design project. A small, shovel-ready win before the big
-   design effort. Phase 5.
+2. **Roll animation, lights, and the current-player indicator** — the design
+   project has an updated pass (2026-08-25) covering the destination and payout
+   roll animation on the map, the lamp treatment, and a current-player
+   indicator, which makes all three shovel-ready together. Phase 5.
 3. ~~**The money spec, second half**~~ — landed 2026-08-23: ownership at the
    transcribed prices, user fees as a derivation (three tiers, settled at turn
    close), the declared endgame with the rover play, and the forced-sale stub.
    See the game-host repo's `specs/2026-08-23-money-phase-2.md`; its still-owed
-   list (forced-sale/elimination text, starting cash, train purchase timing,
-   two fee confirms) is what remains of the economy. The first half — cash,
+   list is down to forced-sale/elimination text, train purchase timing, and the
+   two fee confirms — starting cash was on it until the $20,000 grubstake landed
+   2026-08-24 as a `startingCash` house rule. The first half — cash,
    banked-vs-earned, house rules, seeded dice — landed 2026-08-22.
-4. **Auto-zoom to the current player** — gated on a design-project pass first, so it
-   trails the money work. Phase 5.
+4. **Auto pan/zoom to the current player** — the one Phase 5 item the updated
+   design pass does not cover; it still needs its own design-project pass first.
 
 ## Phase 0 — map data
 
@@ -226,12 +228,19 @@ and documented in [CLAUDE.md](CLAUDE.md).
 Map work that is design-first: each item goes through the **Rail Baron Game Board
 Design** project on claude.ai/design before it is buildable here.
 
-- [ ] **Roll animation** — destination and payout rolls animated on the map. The
-      design already exists in the design project, which makes this the shovel-ready
-      one; it is slotted before the money spec (see What's next).
-- [ ] **Auto-zoom to the current player** — zoom to the moving baron's surroundings
-      while they walk their route. A playtest idea; it needs its design pass first,
-      so it trails the money work.
+- [x] **Movement animation** — landed 2026-08-24 as variant 5b of the design
+      project's *Train Movement Style*: the seat-coloured engine piece glides
+      along the route, the chip spends the roll down and hardens into END TURN,
+      spent track lights up in the seat's colour, and FIND frames position and
+      destination together. The $20,000 grubstake rode along as a
+      `startingCash` house rule.
+- [ ] **Roll animation, lights, current-player indicator** — destination and
+      payout rolls animated on the map, plus the lamp treatment and an
+      indicator for whose turn it is. The design project's updated pass
+      (2026-08-25) covers all three, which makes this the shovel-ready one.
+- [ ] **Auto pan/zoom to the current player** — pan and zoom to the moving
+      baron's surroundings while they walk their route. A playtest idea; still
+      needs its design pass — the one item the updated design does not cover.
 
 Parked, unprioritized: **keyboard accessibility on the map lamps.** Tap targets are
 `<circle role="button">` with no `tabIndex` and no key handler. This needs a design
