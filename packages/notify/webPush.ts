@@ -67,6 +67,12 @@ export async function pushSenderFromEnv(
           JSON.stringify(wireContent(payload)),
           { TTL: 24 * 60 * 60 },
         );
+        // Accepted ≠ displayed: the push service queued it; whether the OS
+        // shows it is the device's business. Logged because "no errors"
+        // is otherwise indistinguishable from "no send attempted" — the
+        // trigger has real reasons to stay silent (present at fire time,
+        // turn already marked) and debugging needs the two cases told apart.
+        log(`· Push accepted by ${new URL(subscription.endpoint).host}`);
       } catch (error) {
         const statusCode = (error as { statusCode?: number }).statusCode;
         // 404/410 mean the subscription is dead at the push service; the
