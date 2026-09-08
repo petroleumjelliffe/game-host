@@ -65,6 +65,17 @@ export async function pushSenderFromEnv(
         if (statusCode === 404 || statusCode === 410) {
           throw new PushSubscriptionGoneError(subscription.endpoint);
         }
+        // web-push's WebPushError stringifies to "Received unexpected
+        // response code" with the code and the push service's explanation
+        // hidden in fields the service's log line never reaches — observed
+        // live 2026-09-07, an undiagnosable failure until this rewrap. The
+        // body is where FCM says things like "VapidPkHashMismatch".
+        const body = (error as { body?: string }).body?.trim();
+        if (statusCode !== undefined) {
+          throw new Error(
+            `push service answered ${statusCode}${body ? ` — ${body.slice(0, 300)}` : ''} (endpoint ${new URL(subscription.endpoint).host})`,
+          );
+        }
         throw error;
       }
     },
