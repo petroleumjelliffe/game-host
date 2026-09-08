@@ -247,7 +247,7 @@ deploy. All of it lives on the service's environment, none of it in the repo:
 | Variable | What it is |
 | --- | --- |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push keys; mint once with `npx web-push generate-vapid-keys` |
-| `VAPID_SUBJECT` | `mailto:` contact URI push services may use |
+| `VAPID_SUBJECT` | `mailto:` contact URI push services may use. Effectively required: Apple's push service (Safari, installed iOS apps) rejects every send as `BadJwtToken` without a real one; only FCM tolerates the fallback |
 | `SMTP_URL` | `smtp(s)://user:pass@host:port` — any provider, none hard-coded |
 | `EMAIL_FROM` | The From header on confirmation and turn emails |
 | `NOTIFY_ORIGIN` | Absolute origin for links in emails (e.g. `https://acquire-multiplayer.onrender.com`); email stays off without it |
