@@ -45,7 +45,16 @@ export async function pushSenderFromEnv(
     log('· Push notifications off (no VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)');
     return null;
   }
+  // The fallback subject keeps Chrome/FCM working with just the two keys,
+  // but Apple's push service VALIDATES the sub claim and answers every send
+  // with 403 BadJwtToken for a localhost mail domain — observed live
+  // 2026-09-07, Safari on macOS. Push to Apple devices needs a real
+  // VAPID_SUBJECT, so an unset one is warned about at boot, not discovered
+  // one silent Safari failure at a time.
   const subject = env.VAPID_SUBJECT?.trim() || 'mailto:game-host@localhost';
+  if (!env.VAPID_SUBJECT?.trim()) {
+    log('! VAPID_SUBJECT is not set — Apple\'s push service (Safari, installed iOS apps) rejects the placeholder subject; set it to a real mailto: or https: contact');
+  }
   const webpush = (await import('web-push')).default;
   webpush.setVapidDetails(subject, publicKey, privateKey);
 
