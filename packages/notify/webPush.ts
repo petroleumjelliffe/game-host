@@ -35,6 +35,23 @@ function wireContent(payload: PushPayload): { title: string; body: string; url: 
   };
 }
 
+/**
+ * Flattens the error shapes a failed network request hides things in:
+ * AggregateError's .errors (one entry per address attempted), cause chains,
+ * and errno codes. Exported for its test only.
+ */
+export function describeSendError(error: unknown): string {
+  if (error instanceof AggregateError) {
+    const inner = error.errors.map(describeSendError).join('; ');
+    return `${error.message.trim() || 'all connection attempts failed'} [${inner}]`;
+  }
+  const e = error as { message?: string; code?: string; cause?: unknown };
+  const base = e.code
+    ? `${e.code}${e.message && e.message !== e.code ? ` ${e.message}` : ''}`
+    : String(e.message ?? error);
+  return e.cause === undefined ? base : `${base} (cause: ${describeSendError(e.cause)})`;
+}
+
 export async function pushSenderFromEnv(
   env: Record<string, string | undefined>,
   log: (line: string) => void,
@@ -91,7 +108,15 @@ export async function pushSenderFromEnv(
             `push service answered ${statusCode}${body ? ` — ${body.slice(0, 300)}` : ''} (endpoint ${new URL(subscription.endpoint).host})`,
           );
         }
-        throw error;
+        // No status code at all: the HTTPS request never completed — a
+        // network-level failure, not a push-service refusal. Node reports
+        // these as an AggregateError (every address attempt failed) whose
+        // String() is just the bare class name, with the actual errnos
+        // hidden in .errors — observed live 2026-09-09, same lesson as the
+        // WebPushError above: unwrap before logging or the line says nothing.
+        throw new Error(
+          `push send to ${new URL(subscription.endpoint).host} got no HTTP response — ${describeSendError(error)}`,
+        );
       }
     },
   };
