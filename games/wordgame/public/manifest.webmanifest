@@ -8,6 +8,9 @@
   "theme_color": "#e9e5da",
   "background_color": "#e9e5da",
   "orientation": "any",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "icons": [
     {
       "src": "icons/icon-192.svg",

@@ -9,6 +9,9 @@
   "theme_color": "#0a0a0a",
   "background_color": "#0a0a0a",
   "orientation": "any",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "icons": [
     {
       "src": "icons/icon-192.svg",

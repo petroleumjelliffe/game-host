@@ -30,6 +30,7 @@ describe('manifestFrom', () => {
       short_name: 'Acquire',
       display: 'standalone',
       orientation: 'any',
+      launch_handler: { client_mode: 'navigate-existing' },
       theme_color: '#0a936c',
       background_color: '#f4f1e8',
     });

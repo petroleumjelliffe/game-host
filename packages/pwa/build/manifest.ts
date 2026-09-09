@@ -53,6 +53,13 @@ export function manifestFrom(config: PwaManifestConfig): Record<string, unknown>
     theme_color: config.themeColor,
     background_color: config.backgroundColor,
     orientation: config.orientation ?? 'any',
+    // Where the OS routes an in-scope link into the installed app at all
+    // (Android Chrome by default, desktop Chrome per-app opt-in; never iOS
+    // or macOS Safari, which always hand a link from Mail to the browser),
+    // reuse the window that is already open rather than launching a second
+    // one — a turn nudge lands on the game that is up. Ignored elsewhere,
+    // and not part of the install-identity trio.
+    launch_handler: { client_mode: 'navigate-existing' },
     icons: config.icons,
   };
 }
