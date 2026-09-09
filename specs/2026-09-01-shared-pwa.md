@@ -268,3 +268,12 @@ platform:
   none, the click raises Safari and stops. Chrome and Firefox honour
   openWindow outright; the installed-app context is a different WebKit
   path expected to honour it as well.
+
+One trigger change followed the live run (owner ruling, 2026-09-09):
+**push is immediate and presence-blind; email keeps the debounce.** A
+push to a player already looking at the board is a one-click way into
+the tab — the same email is noise — so `turnChanged` now sends the push
+leg at once (markers written there, same crash-skips discipline) and
+arms the debounce for the email leg alone, which still re-checks
+presence at fire time. The 24h reminder stays dual-channel and
+presence-checked.

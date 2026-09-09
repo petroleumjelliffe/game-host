@@ -113,7 +113,12 @@ it('binding a seat needs that seat\'s real token', async () => {
   expect(record?.bindings[seat.playerId]).toBeDefined();
 });
 
-it('a disconnected actor gets a turn marker; a connected one never does', async () => {
+it('a bound actor gets a turn marker at the turn change, connected or not', async () => {
+  // The channel split (2026-09-09) rewrote this test's premise: it used to
+  // assert that a connected actor NEVER gets a marker, because the debounce
+  // declined at fire time. Push is now immediate and presence-blind — the
+  // marker lands the moment the turn changes — and presence only gates the
+  // email leg, which packages/notify's own suite covers channel by channel.
   const host = await boot();
   const creator = await host.client(ACQUIRE);
   const joinedMsg = next<JoinedWithToken>(creator, 'joined');
@@ -124,43 +129,16 @@ it('a disconnected actor gets a turn marker; a connected one never does', async 
 
   expect((await bind(host, p1)).status).toBe(200);
 
-  // Begin: the first commit reports p1 (first in seat order) as the actor.
+  // Begin: the first commit reports p1 (first in seat order) as the actor —
+  // still connected, and marked anyway. The save is fire-and-forget, so poll.
   const begun = next<{ reason: string }>(creator, 'state');
   creator.emit('beginGame');
   await begun;
-
-  // Both players connected: the debounce fires and declines.
-  await wait(DEBOUNCE_MS * 4);
-  let record = await markerRecord(host, p1.roomId);
-  expect(record?.lastNotified ?? {}).toEqual({});
-
-  // Now the actor walks away. Nothing re-reports the turn — the pending
-  // window already passed — so play one more commit from the guest? No:
-  // p1 is still the actor. Re-trigger by disconnecting and having the
-  // *server* see a fresh turn report requires a commit, which only the
-  // actor can produce. So instead assert the inverse on a fresh room:
-  creator.disconnect();
-  const c2 = await host.client(ACQUIRE);
-  const j2 = next<JoinedWithToken>(c2, 'joined');
-  c2.emit('createRoom', { protocolVersion: AQ_VERSION, name: 'Eve' });
-  const p1b = await j2;
-  const g2 = await host.client(ACQUIRE);
-  await joinRoom(g2, p1b.roomId, AQ_VERSION, 'Finn');
-  expect((await bind(host, p1b)).status).toBe(200);
-  const begun2 = next<{ reason: string }>(c2, 'state');
-  c2.emit('beginGame');
-  await begun2;
-  // The actor drops immediately after their turn starts and stays away
-  // past the debounce: the marker lands.
-  c2.disconnect();
   let marked: RoomMarkerRecord | null = null;
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 50 && marked === null; i++) {
     await wait(DEBOUNCE_MS);
-    record = await markerRecord(host, p1b.roomId);
-    if (record && Object.keys(record.lastNotified).length > 0) {
-      marked = record;
-      break;
-    }
+    const record = await markerRecord(host, p1.roomId);
+    if (record && Object.keys(record.lastNotified).length > 0) marked = record;
   }
-  expect(marked?.lastNotified[p1b.playerId]).toBeDefined();
+  expect(marked?.lastNotified[p1.playerId]).toBeDefined();
 });
