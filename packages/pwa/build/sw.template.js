@@ -102,18 +102,26 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Focus-or-open, not a bare openWindow. macOS Safari silently ignores a
-// plain clients.openWindow from notificationclick in common configurations
-// (observed live 2026-09-09: notification shown, click did nothing), and
-// the workaround is the canonical pattern anyway — an absolute URL, reuse
-// of an existing window when one is open (navigating it if it is elsewhere
-// in this game), openWindow only as the last resort.
+// openWindow FIRST, synchronously, then focus/navigate as the fallback —
+// the reverse of the canonical focus-first pattern, deliberately. macOS
+// Safari silently no-ops clients.openWindow from notificationclick (a
+// known, unresolved WebKit bug; observed live 2026-09-09: notification
+// shown, click only raised Safari), and elsewhere in WebKit a transient
+// user activation does not survive an await — so openWindow's one real
+// chance is the first synchronous statement of the handler, gesture
+// fresh. The price is that Chrome opens a new tab instead of focusing an
+// existing one, which is exactly what this worker's predecessors always
+// did. The fallback still catches the case where openWindow yields
+// nothing but a window of this game is already open: focus it, and
+// navigate it if it is elsewhere in the game.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const raw = event.notification.data && event.notification.data.url;
   if (!raw) return;
   const url = new URL(raw, self.location.origin).href;
-  event.waitUntil((async () => {
+  // Safari's failure mode is success-shaped — openWindow resolves with
+  // nothing rather than rejecting — so the fallback runs on both paths.
+  const fallback = async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const exact = wins.find((w) => w.url === url);
     if (exact && 'focus' in exact) return exact.focus();
@@ -122,6 +130,12 @@ self.addEventListener('notificationclick', (event) => {
       await sameApp.focus();
       return sameApp.navigate(url);
     }
-    return self.clients.openWindow(url);
-  })());
+    return undefined;
+  };
+  event.waitUntil(
+    self.clients.openWindow(url).then(
+      (win) => (win && 'focus' in win ? win.focus() : (win ?? fallback())),
+      fallback,
+    ),
+  );
 });
