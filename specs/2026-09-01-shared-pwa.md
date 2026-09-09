@@ -246,3 +246,25 @@ two more — and three smaller things, all fixed the same day:
   `GAME_ID` constant.
 - **`useUpdateReady` removes its `updatefound` listener** on unmount;
   the registration outlives every mount, so listeners must not stack.
+
+The first live end-to-end run (2026-09-09, localhost, all three desktop
+browsers) confirmed the whole send path and found the edges of one
+platform:
+
+- **Delivery and display verified everywhere**: turn pushes from the
+  game reached Safari (web.push.apple.com), Chrome (FCM) and Firefox
+  (Mozilla), once three environment truths were established — Apple
+  rejects a placeholder `VAPID_SUBJECT` (FCM and Mozilla tolerate it),
+  `tsx watch` never reloads `.env`, and macOS keeps a per-app
+  notification toggle. The notify boot warning and per-send
+  accepted/failed log lines added along the way are what made each
+  diagnosable.
+- **macOS Safari cannot open a window from a notification click** in
+  the browser-tab service-worker context — a known, unresolved WebKit
+  bug (their openWindow silently resolves with nothing, even called
+  synchronously with the gesture fresh). The worker's click handler is
+  therefore openWindow-first with a focus+navigate fallback: with any
+  window of the game open, Safari lands the player in the room; with
+  none, the click raises Safari and stops. Chrome and Firefox honour
+  openWindow outright; the installed-app context is a different WebKit
+  path expected to honour it as well.

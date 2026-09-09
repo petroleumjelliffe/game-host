@@ -107,13 +107,15 @@ self.addEventListener('push', (event) => {
 // Safari silently no-ops clients.openWindow from notificationclick (a
 // known, unresolved WebKit bug; observed live 2026-09-09: notification
 // shown, click only raised Safari), and elsewhere in WebKit a transient
-// user activation does not survive an await — so openWindow's one real
-// chance is the first synchronous statement of the handler, gesture
-// fresh. The price is that Chrome opens a new tab instead of focusing an
-// existing one, which is exactly what this worker's predecessors always
-// did. The fallback still catches the case where openWindow yields
-// nothing but a window of this game is already open: focus it, and
-// navigate it if it is elsewhere in the game.
+// user activation does not survive an await — so openWindow gets the
+// first synchronous statement of the handler, gesture fresh. Measured
+// outcome (2026-09-09, macOS Safari, browser tab): even this no-ops
+// when no window of the game is open — that half is a platform
+// limitation we document rather than fight, and the click still raises
+// Safari — while the focus+navigate fallback works whenever any window
+// of the game exists, which is the common case for a turn nudge.
+// Chrome and Firefox honour openWindow outright. The installed-app
+// context is a different WebKit path and is expected to honour it too.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const raw = event.notification.data && event.notification.data.url;
