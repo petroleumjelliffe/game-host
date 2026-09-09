@@ -3,9 +3,8 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useOnline } from '../pwa/useOnline';
-import { useUpdateReady } from '../pwa/update';
-import { isInstalledApp } from '../pwa/installed';
+import { useOnline } from '@game-host/pwa/client/useOnline';
+import { UpdateReadyButton } from '@game-host/pwa/client/UpdateReadyButton';
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -15,11 +14,6 @@ export function HomePage() {
   // Online is not offered as though it would work, with the same wording the
   // device-offline pill already uses. One vocabulary, not two.
   const online = useOnline();
-  // A new build, installed and waiting. Surfaced here and only here: the mode
-  // chooser is the one screen where nobody is mid-game, so restarting costs
-  // nothing. The ruling is next-launch activation — this button is the
-  // explicit exception, never an automatic one.
-  const update = useUpdateReady();
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -68,19 +62,12 @@ export function HomePage() {
           Both modes support 2–6 players
         </div>
 
-        {/* Installed app only. In a tab this is noise — a refresh gets the
-            new build through the network-first worker — but the installed app
-            has no refresh gesture, so this is its one way in. (Owner, from
-            the first real install.) */}
-        {isInstalledApp() && update.ready && (
-          <button
-            type="button"
-            onClick={update.apply}
-            className="mt-3 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
-          >
-            Update ready — restart the app
-          </button>
-        )}
+        {/* A new build, installed and waiting. Surfaced here and only here:
+            the mode chooser is the one screen where nobody is mid-game, so
+            restarting costs nothing. The installed-app-only gate (in a tab a
+            refresh does the job) lives inside the shared button, which
+            renders nothing otherwise. */}
+        <UpdateReadyButton />
       </div>
     </div>
   );

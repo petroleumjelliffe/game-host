@@ -20,7 +20,7 @@ http://<machine-name>.local/railbaron/  → Rail Baron
 npm install       # links every packages/*, games/*, apps/* workspace
 npm test          # every package's suite in one command
 npm run typecheck
-npm run lint      # one type-aware eslint across all nine workspaces
+npm run lint      # one type-aware eslint across all ten workspaces
 ```
 
 `npm run lint` gates pull requests and nothing else: it is a CI job of its
@@ -247,7 +247,7 @@ deploy. All of it lives on the service's environment, none of it in the repo:
 | Variable | What it is |
 | --- | --- |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push keys; mint once with `npx web-push generate-vapid-keys` |
-| `VAPID_SUBJECT` | `mailto:` contact URI push services may use |
+| `VAPID_SUBJECT` | `mailto:` contact URI push services may use. Effectively required: Apple's push service (Safari, installed iOS apps) rejects every send as `BadJwtToken` without a real one; only FCM tolerates the fallback |
 | `SMTP_URL` | `smtp(s)://user:pass@host:port` — any provider, none hard-coded |
 | `EMAIL_FROM` | The From header on confirmation and turn emails |
 | `NOTIFY_ORIGIN` | Absolute origin for links in emails (e.g. `https://acquire-multiplayer.onrender.com`); email stays off without it |
@@ -354,6 +354,12 @@ directory is small JSON files, and Time Machine already covers it.
 5. Add one row to `GAMES` in [apps/host/host.ts](apps/host/host.ts) — path,
    title and save-directory name all come off the mount, so the menu and the
    aggregate `/health` pick it up with nothing else to edit.
+6. (Optional, but every current game does it) Make it installable via
+   `@game-host/pwa`: a manifest config handed to `writeManifest` in a
+   `prebuild` script, icons, the two plugins in `vite.config.ts`, one
+   `register()` call, and a `postbuild` line running the package's
+   `checkDist.mjs` — see [the spec](specs/2026-09-01-shared-pwa.md). The
+   manifest's `id`/`scope`/`start_url` are append-only once anyone installs.
 
 That is the whole list. **No Caddyfile edit, no menu edit, no start script,
 no plist** — the front door forwards one port and knows no game names, the

@@ -26,6 +26,7 @@ const packages = [
   ['host', 'packages/host'],
   ['room-store', 'packages/room-store'],
   ['notify', 'packages/notify'],
+  ['pwa', 'packages/pwa'],
   ['marcopolo', 'games/marcopolo'],
   ['railbaron', 'games/railbaron'],
   ['acquire', 'games/acquire'],
@@ -38,7 +39,7 @@ const packages = [
 // with the light pair — `notify` likewise: timers and temp files, no DOM.
 // `apps-host` does not: it boots every game per file, and `wordgame` carries
 // a jsdom project like the other games, so both run in the heavy lane.
-const LIGHT = new Set(['lobby', 'host', 'room-store', 'notify', 'marcopolo']);
+const LIGHT = new Set(['lobby', 'host', 'room-store', 'notify', 'pwa', 'marcopolo']);
 const light = packages.filter(([name]) => LIGHT.has(name));
 const heavy = packages.filter(([name]) => !LIGHT.has(name));
 

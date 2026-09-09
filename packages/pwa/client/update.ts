@@ -24,12 +24,11 @@ import { useCallback, useEffect, useState } from 'react';
  *
  * The root, not a reload of the current URL. With the worker just
  * unregistered, nothing serves SPA deep links except the host's own
- * fallback — and that is host-specific (GH Pages has the 404.html redirect;
- * the local test mount had nothing and answered the recovery with a bare
- * 404, observed live). `index.html` at the base is a real file on any static
- * host, so landing there depends on nobody. The player lands on the mode
- * chooser running the fixed client; their room seat survives in
- * localStorage and one join re-seats them.
+ * fallback — and that is host-specific (a bare static test mount answered
+ * the recovery with a 404, observed live). `index.html` at the base is a
+ * real file on any host, so landing there depends on nobody. The player
+ * lands on the game's entry page running the fixed client; their room seat
+ * survives in localStorage and one join re-seats them.
  */
 export async function forceUpdateAndReload(): Promise<void> {
   try {
@@ -38,7 +37,17 @@ export async function forceUpdateAndReload(): Promise<void> {
       await reg?.unregister().catch(() => undefined);
     }
     if ('caches' in window) {
-      for (const key of await caches.keys()) await caches.delete(key);
+      // Only THIS game's caches. CacheStorage is origin-scoped and the games
+      // share one origin, so caches.keys() lists the siblings' live
+      // precaches too — deleting those empties a cache under a still-active
+      // worker whose install never re-runs, breaking that game's offline
+      // shell until its next deploy. The cache names are `<prefix>-<hash>`
+      // and swFromBuild enforces prefix === the base path segment, which is
+      // what makes deriving it from BASE_URL sound.
+      const prefix = `${import.meta.env.BASE_URL.replaceAll('/', '')}-`;
+      for (const key of await caches.keys()) {
+        if (key.startsWith(prefix)) await caches.delete(key);
+      }
     }
   } catch {
     // Fall through to the navigation regardless — see above.
@@ -66,21 +75,32 @@ export function useUpdateReady(): { ready: boolean; apply: () => void } {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     let disposed = false;
+    let registration: ServiceWorkerRegistration | undefined;
+
+    const check = () => {
+      if (!disposed && registration?.waiting) setWaiting(registration.waiting);
+    };
+    const onUpdateFound = () => {
+      registration?.installing?.addEventListener('statechange', check);
+    };
 
     void navigator.serviceWorker.getRegistration().then((reg) => {
       if (!reg || disposed) return;
-      const check = () => {
-        if (!disposed && reg.waiting) setWaiting(reg.waiting);
-      };
+      registration = reg;
       // A worker may already be waiting from a previous visit...
       check();
       // ...or arrive while this page is open.
-      reg.addEventListener('updatefound', () => {
-        reg.installing?.addEventListener('statechange', check);
-      });
+      reg.addEventListener('updatefound', onUpdateFound);
     });
 
-    return () => { disposed = true; };
+    return () => {
+      disposed = true;
+      // The registration outlives every mount of this hook, so the listener
+      // must not: without this, each remount stacked another handler on the
+      // same long-lived object. The statechange listeners die with their
+      // installing worker; the disposed flag silences any that outlive us.
+      registration?.removeEventListener('updatefound', onUpdateFound);
+    };
   }, []);
 
   const apply = useCallback(() => {

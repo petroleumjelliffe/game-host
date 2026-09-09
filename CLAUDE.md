@@ -20,7 +20,7 @@ It is also, as of this migration, where the game code itself lives:
 | `games/acquire` | Acquire — engine, session, server and a React client. Served at `/acquire`; its GitHub Pages deploy is retired. |
 | `games/wordgame` | The word game (crossword rules, 2–6 players, deliberately neutral name) — engine, session, server and a React client. Built for multi-day play: state persists on every move, and turns feed the notification service. |
 
-`npm install` at the root links all nine workspaces; `npm test` and
+`npm install` at the root links all ten workspaces; `npm test` and
 `npm run typecheck` at the root cover them all in one command (see Testing,
 below).
 
@@ -50,7 +50,8 @@ arrangements.
 | --- | --- |
 | `packages/host` | `@game-host/host` — the contract (`HostContext`, `MountedGame`), the error boundary (`guardSocket`, `guardTick`), and `closeSockets`. No game logic. |
 | `packages/room-store` | `@game-host/room-store` — where a room lives between processes: atomic staging, per-room write chains, `settled()`, quarantine. Generic over the payload; each persisting game configures it with its record guard ([plan](docs/plans/2026-08-20-room-store.md)). |
-| `packages/notify` | `@game-host/notify` — the turn-notification service: Web Push + double-opt-in email, a debounce that re-checks presence at fire time, once-per-turn markers persisted before any send. Games see only the three contract types in `packages/host/contract.ts`; the composed host owns the service, its `/notify` routes and `DATA_DIR/notifications/`. All channel config is env (see README's Render table); unconfigured means off, not broken. |
+| `packages/notify` | `@game-host/notify` — the turn-notification service: Web Push + double-opt-in email, split by channel — push fires at the turn change, presence-blind (clicking it lands you in the room, so it is a convenience even mid-session); email waits out a debounce that re-checks presence at fire time. Once-per-turn markers persisted before any send. Games see only the three contract types in `packages/host/contract.ts`; the composed host owns the service, its `/notify` routes and `DATA_DIR/notifications/`. All channel config is env (see README's Render table); unconfigured means off, not broken. |
+| `packages/pwa` | `@game-host/pwa` — one PWA machine, per-game apps ([spec](specs/2026-09-01-shared-pwa.md), [plan](docs/plans/2026-09-07-shared-pwa.md)): the two Vite plugins (placeholder substitution, `sw-from-build` with its content-hash cache name), the shared service-worker template (offline shell + push, no `skipWaiting` outside the user-initiated message), the manifest writer (its `id`/`scope`/`start_url` trio is append-only — installed icons are bound to it), and the client half (`register`, `useUpdateReady`/`forceUpdateAndReload`, `isInstalledApp`, `useOnline`, `StaleClient`, `UpdateReadyButton`). Each game's footprint is a manifest config, its icons, two plugin calls, one `register()`, and the stale/update wiring; each game's `postbuild` runs the package's `checkDist.mjs` against the built dist. Push subscriptions are scope-tagged per game (`records.ts` in notify): turns route to matching-scope subscriptions only, invites prefer the scope and fall back to any. |
 | `apps/host` | `@game-host/apps-host` — the composed process, and the only package allowed to depend on all the games. |
 
 ## Check whether this clone *is* the host machine
@@ -92,12 +93,12 @@ anywhere.
 ## Testing
 
 ```bash
-npm install     # links packages/{lobby,host,room-store}, games/{marcopolo,railbaron,acquire}, apps/host
-npm test        # every package's suite, one command: 1996 tests / 205 files
+npm install     # links packages/{lobby,host,room-store,notify,pwa}, games/{marcopolo,railbaron,acquire,wordgame}, apps/host
+npm test        # every package's suite, one command: 2205 tests / 227 files
 
 DATA_DIR=$(mktemp -d) npm run start:host   # all three games, one process, port 4000
 npm run typecheck
-npm run lint    # all nine workspaces, type-aware, one invocation, ~5s
+npm run lint    # all ten workspaces, type-aware, one invocation, ~5s
 ```
 
 `npm test` runs `scripts/test-all.mjs`, which spawns one independent
@@ -144,7 +145,7 @@ per package: pass/fail, exit code, test/file counts, and — distinctly — how
 many of those tests failed when the run wasn't clean) says which one(s).
 
 `npm run lint` is the opposite arrangement and deliberately so: **one**
-`eslint .` at the root covers all nine workspaces, because
+`eslint .` at the root covers all ten workspaces, because
 typescript-eslint's `projectService` resolves each file to its own package's
 `tsconfig.json`. Do not give this a `--workspaces` fan-out; it would be
 slower and buy nothing. Five rules, all errors, all type-aware — the two

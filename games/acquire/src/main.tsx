@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
-import { registerServiceWorker } from "./pwa/register";
+import { registerServiceWorker } from "@game-host/pwa/client/register";
 import "./styles/index.css";
 
 registerServiceWorker();

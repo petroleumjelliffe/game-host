@@ -25,7 +25,8 @@ import { RoomLobby } from '../game/lobby/RoomLobby';
 import { InvitePicker } from '../game/lobby/InvitePicker';
 import { PreJoin } from '../game/lobby/PreJoin';
 import { RoomGone } from '../game/lobby/RoomGone';
-import { StaleClient } from '../game/lobby/StaleClient';
+import { StaleClient } from '@game-host/pwa/client/StaleClient';
+import { forceUpdateAndReload } from '@game-host/pwa/client/update';
 import { ConnectionStrip } from '../game/lobby/ConnectionStrip';
 import { RoomRefused } from '../game/lobby/RoomRefused';
 import { seatEmoji } from '../game/seatEmoji';
@@ -34,6 +35,7 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '../../engine/constants';
 import { useRoom } from '../net/useRoom';
 import { loadIdentity, saveIdentity } from '../net/identity';
 import { useNotifyBind } from '../notify/useNotifyBind';
+import { GAME_ID } from '../notify/gameId';
 import { getConnection, closeConnection, type Connection } from '../net/connection';
 
 export interface RoomPageProps {
@@ -200,7 +202,7 @@ function ClaimLanding({ creds, roomId, onGo }: {
   roomId: string;
   onGo: () => void;
 }) {
-  const enroll = useEnrollPush();
+  const enroll = useEnrollPush(GAME_ID);
   const who = creds.inviterName ?? 'A friend';
   return (
     <div className="flex min-h-screen items-center justify-center bg-page px-3 py-7">
@@ -309,9 +311,10 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
     return (
       <>
         <ConnectionStrip status={room.status} />
-        {/* The worker caches nothing (push only), so a plain reload really
-            does fetch the current bundle. */}
-        <StaleClient onReload={() => { window.location.reload(); }} onExit={leave} />
+        {/* The shared worker precaches the shell now (it used to be push
+            only), so a plain reload can be served the same stale shell and
+            loop — the reload has to get past the worker. */}
+        <StaleClient onReload={() => { void forceUpdateAndReload(); }} onExit={leave} />
       </>
     );
   }
@@ -389,7 +392,7 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
             onInvite: () => { setPickerOpen(true); },
             onRemind: (playerId: string) =>
               sendRemind({
-                game: 'wordgame',
+                game: GAME_ID,
                 roomId: roomId ?? '',
                 playerId: identity.playerId,
                 token: identity.token,

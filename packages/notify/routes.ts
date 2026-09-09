@@ -30,7 +30,11 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function parseSubscription(value: unknown, addedAt: number): PushSubscriptionRecord | null {
+function parseSubscription(
+  value: unknown,
+  addedAt: number,
+  gameId: string | null,
+): PushSubscriptionRecord | null {
   if (typeof value !== 'object' || value === null) return null;
   const sub = value as Record<string, unknown>;
   const keys = sub.keys;
@@ -38,7 +42,15 @@ function parseSubscription(value: unknown, addedAt: number): PushSubscriptionRec
   if (typeof keys !== 'object' || keys === null) return null;
   const { p256dh, auth } = keys as Record<string, unknown>;
   if (typeof p256dh !== 'string' || typeof auth !== 'string') return null;
-  return { endpoint: sub.endpoint, keys: { p256dh, auth }, addedAt };
+  return {
+    endpoint: sub.endpoint,
+    keys: { p256dh, auth },
+    addedAt,
+    // The scope tag. Optional and additive: a client built before it
+    // existed sends none and mints an untagged (any-scope) record, exactly
+    // what its subscriptions already were.
+    ...(gameId === null ? {} : { gameId }),
+  };
 }
 
 /** Minimal page for the two email-link endpoints — no assets, no scripts. */
@@ -249,7 +261,11 @@ export function createNotifyRouter(service: NotifyService): Router {
 
   router.post('/subscriptions', (req, res) => {
     const playerKey = playerKeyOf(req);
-    const subscription = parseSubscription(body(req).subscription, Date.now());
+    const subscription = parseSubscription(
+      body(req).subscription,
+      Date.now(),
+      asString(body(req).game),
+    );
     if (!playerKey || !subscription) {
       res.status(400).json({ error: 'bad request' });
       return;

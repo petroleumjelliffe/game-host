@@ -7,10 +7,10 @@
  * worker is exactly the app before this feature existed, and a player
  * mid-game should never pay for a caching problem.
  *
- * BASE_URL arrives verbatim from the config ('/acquire', no
- * trailing slash) — normalize before joining, or the browser requests
- * '/acquiresw.js'. The same verbatim behaviour already bit
- * index.html's placeholders; see vite.config.ts.
+ * BASE_URL arrives verbatim from the game's config (its base path, no
+ * trailing slash guaranteed) — normalize before joining, or the browser
+ * requests '/<game>sw.js'. The same verbatim behaviour already bit
+ * index.html's placeholders; see build/plugins.ts.
  */
 export function registerServiceWorker(): void {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;

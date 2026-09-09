@@ -35,6 +35,23 @@ function wireContent(payload: PushPayload): { title: string; body: string; url: 
   };
 }
 
+/**
+ * Flattens the error shapes a failed network request hides things in:
+ * AggregateError's .errors (one entry per address attempted), cause chains,
+ * and errno codes. Exported for its test only.
+ */
+export function describeSendError(error: unknown): string {
+  if (error instanceof AggregateError) {
+    const inner = error.errors.map(describeSendError).join('; ');
+    return `${error.message.trim() || 'all connection attempts failed'} [${inner}]`;
+  }
+  const e = error as { message?: string; code?: string; cause?: unknown };
+  const base = e.code
+    ? `${e.code}${e.message && e.message !== e.code ? ` ${e.message}` : ''}`
+    : String(e.message ?? error);
+  return e.cause === undefined ? base : `${base} (cause: ${describeSendError(e.cause)})`;
+}
+
 export async function pushSenderFromEnv(
   env: Record<string, string | undefined>,
   log: (line: string) => void,
@@ -45,7 +62,16 @@ export async function pushSenderFromEnv(
     log('· Push notifications off (no VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)');
     return null;
   }
+  // The fallback subject keeps Chrome/FCM working with just the two keys,
+  // but Apple's push service VALIDATES the sub claim and answers every send
+  // with 403 BadJwtToken for a localhost mail domain — observed live
+  // 2026-09-07, Safari on macOS. Push to Apple devices needs a real
+  // VAPID_SUBJECT, so an unset one is warned about at boot, not discovered
+  // one silent Safari failure at a time.
   const subject = env.VAPID_SUBJECT?.trim() || 'mailto:game-host@localhost';
+  if (!env.VAPID_SUBJECT?.trim()) {
+    log('! VAPID_SUBJECT is not set — Apple\'s push service (Safari, installed iOS apps) rejects the placeholder subject; set it to a real mailto: or https: contact');
+  }
   const webpush = (await import('web-push')).default;
   webpush.setVapidDetails(subject, publicKey, privateKey);
 
@@ -58,6 +84,12 @@ export async function pushSenderFromEnv(
           JSON.stringify(wireContent(payload)),
           { TTL: 24 * 60 * 60 },
         );
+        // Accepted ≠ displayed: the push service queued it; whether the OS
+        // shows it is the device's business. Logged because "no errors"
+        // is otherwise indistinguishable from "no send attempted" — the
+        // trigger has real reasons to stay silent (present at fire time,
+        // turn already marked) and debugging needs the two cases told apart.
+        log(`· Push accepted by ${new URL(subscription.endpoint).host}`);
       } catch (error) {
         const statusCode = (error as { statusCode?: number }).statusCode;
         // 404/410 mean the subscription is dead at the push service; the
@@ -65,7 +97,26 @@ export async function pushSenderFromEnv(
         if (statusCode === 404 || statusCode === 410) {
           throw new PushSubscriptionGoneError(subscription.endpoint);
         }
-        throw error;
+        // web-push's WebPushError stringifies to "Received unexpected
+        // response code" with the code and the push service's explanation
+        // hidden in fields the service's log line never reaches — observed
+        // live 2026-09-07, an undiagnosable failure until this rewrap. The
+        // body is where FCM says things like "VapidPkHashMismatch".
+        const body = (error as { body?: string }).body?.trim();
+        if (statusCode !== undefined) {
+          throw new Error(
+            `push service answered ${statusCode}${body ? ` — ${body.slice(0, 300)}` : ''} (endpoint ${new URL(subscription.endpoint).host})`,
+          );
+        }
+        // No status code at all: the HTTPS request never completed — a
+        // network-level failure, not a push-service refusal. Node reports
+        // these as an AggregateError (every address attempt failed) whose
+        // String() is just the bare class name, with the actual errnos
+        // hidden in .errors — observed live 2026-09-09, same lesson as the
+        // WebPushError above: unwrap before logging or the line says nothing.
+        throw new Error(
+          `push send to ${new URL(subscription.endpoint).host} got no HTTP response — ${describeSendError(error)}`,
+        );
       }
     },
   };

@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// No jest-dom here — this package has no setupFiles, so the assertions stay
+// on what @testing-library and the DOM provide directly.
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { StaleClient } from './StaleClient';
@@ -6,16 +9,16 @@ describe('StaleClient', () => {
   it('says what is wrong without blaming the player', () => {
     render(<StaleClient onReload={() => {}} onExit={() => {}} />);
 
-    expect(screen.getByTestId('stale-client')).toBeInTheDocument();
+    expect(screen.getByTestId('stale-client')).toBeTruthy();
     // Not `can't`: the heading uses a typographic apostrophe, and matching the
     // straight one silently fails on copy that is correct.
-    expect(screen.getByRole('heading')).toHaveTextContent(/talk to the server/i);
+    expect(screen.getByRole('heading').textContent).toMatch(/talk to the server/i);
   });
 
   /**
-   * Either side can be the newer one — the client ships to GitHub Pages and
-   * the server to Render, independently — so the copy must not name a culprit
-   * it cannot identify. "Your app is out of date" is wrong half the time, and
+   * Either side can be the newer one — an installed app's cached shell and
+   * the server deploy independently — so the copy must not name a culprit it
+   * cannot identify. "Your app is out of date" is wrong half the time, and
    * wrong in a way that sends the player to reload something already current.
    */
   it('blames neither side, because it cannot know which is behind', () => {

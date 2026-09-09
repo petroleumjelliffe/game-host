@@ -1,9 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { pwaPlaceholders, swFromBuild } from '@game-host/pwa/build/plugins';
 import { BASE_PATH } from './basePath';
+import { THEME_COLOR } from './appColors';
 
 export default defineConfig(() => ({
-  plugins: [react()],
+  // The shared PWA plugins (@game-host/pwa). Adopting them replaced this
+  // game's push-only, hand-committed public/sw.js: the shared worker carries
+  // the same push handlers plus the offline shell, and gives up the old
+  // worker's skipWaiting — next-launch activation is the right trade for
+  // multi-day games, where a worker swapping content-hashed assets under a
+  // live session is exactly the failure that rule exists to prevent.
+  plugins: [
+    react(),
+    pwaPlaceholders({ themeColor: THEME_COLOR }),
+    swFromBuild({ cachePrefix: 'wordgame', appName: 'Word Game' }),
+  ],
   // 7934 is this game's dev-client slot in the cross-game port registry
   // (PORTS.md); strictPort fails loudly rather than sliding into a
   // neighbour's slot. allowedHosts covers the host machine's mDNS name.

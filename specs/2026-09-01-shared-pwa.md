@@ -1,6 +1,8 @@
 # `@game-host/pwa`: one PWA machine, per-game apps
 
-**Status:** designed 2026-09-01, not yet planned.
+**Status:** designed 2026-09-01; planned and implemented 2026-09-07 via
+[docs/plans/2026-09-07-shared-pwa.md](../docs/plans/2026-09-07-shared-pwa.md).
+See "As built" at the end for deltas.
 **Home:** this repo — the design extracts acquire's hand-rolled PWA into a
 shared workspace package so every game gets install, offline shell, update
 flow, and push with a config object rather than a reimplementation.
@@ -181,3 +183,97 @@ against the `/acquire` base path from the Pages-era rename while passing.
   spectator of its own cache. Nothing here pretends otherwise.
 - A menu/root PWA (see above).
 - Badging, background sync, periodic sync — nothing has asked for them.
+
+## As built (2026-09-07)
+
+Implemented as designed, with these deltas:
+
+- **The plugins take no paths.** `swFromBuild` reads root, `outDir` and
+  `base` from Vite's `configResolved` rather than a config option, so a
+  game passes only `{ cachePrefix, appName }` and cannot hand the plugin a
+  location that disagrees with its build.
+- **`id` joined the append-only trio explicitly.** The manifests never
+  declared it; the generator now requires it, set equal to `start_url` —
+  the value browsers were already computing — so no existing install
+  re-keys. The generator makes all three required fields rather than
+  defaulting them, which is the "changing them feels deliberate" the
+  design asked for.
+- **StaleClient moved off tailwind.** The two games' copies differed only
+  in neutral tokens a shared package can ride in neither game's tailwind
+  config; the shared component is inline-styled on the `--lobby-*` var
+  seam with the same fallbacks, and wordgame pins its linen surfaces via
+  three variables in its own CSS.
+- **The artifact-level check is each game's `postbuild`**
+  (`@game-host/pwa/build/checkDist.mjs`): sw.js present with the right
+  base and no surviving placeholder, the manifest trio equal to
+  `<base>/`, index.html linking the prefixed manifest. It rides
+  `npm run build`, which is what CI and both deploys run.
+- **Untagged push subscriptions match every game** rather than being
+  migrated: every pre-tag subscription was minted by wordgame's worker
+  and wordgame was the only sender, so wildcard is the behaviour they
+  were minted under. New enrollments are tagged (`enrollPush`,
+  `syncSubscription` and `useEnrollPush` take the gameId; wordgame passes
+  `'wordgame'`).
+- **Railbaron's stale remedy** is its split-flap `staleClient()` screen's
+  RELOAD row rerouted to `forceUpdateAndReload` — its board rows are not
+  the shared React `StaleClient`, and redrawing them was not the point.
+- **The key-landing enrollment prompt** already existed (`useEnrollPush`
+  at wordgame's landing) and only gained the scope tag; the iOS
+  install-flow copy the design sketches is untouched UI work.
+
+An adversarial review of the first landing caught what the composition
+changed underneath the moved code — code written when acquire was the
+only precaching worker now shares one origin-scoped CacheStorage with
+two more — and three smaller things, all fixed the same day:
+
+- **Cache deletion is scoped by `cachePrefix`**, in the worker's
+  activate prune and in `forceUpdateAndReload` alike. Unscoped, a
+  wordgame deploy (or one player's stale-client recovery) deleted
+  acquire's and railbaron's live precaches under their still-active
+  workers, whose installs never re-run — offline shells broken until
+  their next deploys. `swFromBuild` now fails the build unless the
+  prefix equals the base path segment, which is what makes the client's
+  BASE_URL-derived prefix sound; `checkDist` asserts it on the artifact.
+- **`apple-touch-icon` is a real PNG** for wordgame and railbaron
+  (acquire always had one): iOS ignores SVG for home-screen icons on
+  exactly the platform where installing is the push prerequisite. The
+  PNGs are committed, rendered from each game's SVG by the package's
+  `rasterizeIcon.mjs`.
+- **An unknown scope tag is stripped at `addSubscription`**, stored
+  untagged (matches every game) with a log line — a typo'd tag would
+  otherwise mint a subscription that reports enabled and receives
+  nothing, ever. Wordgame's five `'wordgame'` literals became one
+  `GAME_ID` constant.
+- **`useUpdateReady` removes its `updatefound` listener** on unmount;
+  the registration outlives every mount, so listeners must not stack.
+
+The first live end-to-end run (2026-09-09, localhost, all three desktop
+browsers) confirmed the whole send path and found the edges of one
+platform:
+
+- **Delivery and display verified everywhere**: turn pushes from the
+  game reached Safari (web.push.apple.com), Chrome (FCM) and Firefox
+  (Mozilla), once three environment truths were established — Apple
+  rejects a placeholder `VAPID_SUBJECT` (FCM and Mozilla tolerate it),
+  `tsx watch` never reloads `.env`, and macOS keeps a per-app
+  notification toggle. The notify boot warning and per-send
+  accepted/failed log lines added along the way are what made each
+  diagnosable.
+- **macOS Safari cannot open a window from a notification click** in
+  the browser-tab service-worker context — a known, unresolved WebKit
+  bug (their openWindow silently resolves with nothing, even called
+  synchronously with the gesture fresh). The worker's click handler is
+  therefore openWindow-first with a focus+navigate fallback: with any
+  window of the game open, Safari lands the player in the room; with
+  none, the click raises Safari and stops. Chrome and Firefox honour
+  openWindow outright; the installed-app context is a different WebKit
+  path expected to honour it as well.
+
+One trigger change followed the live run (owner ruling, 2026-09-09):
+**push is immediate and presence-blind; email keeps the debounce.** A
+push to a player already looking at the board is a one-click way into
+the tab — the same email is noise — so `turnChanged` now sends the push
+leg at once (markers written there, same crash-skips discipline) and
+arms the debounce for the email leg alone, which still re-checks
+presence at fire time. The 24h reminder stays dual-channel and
+presence-checked.

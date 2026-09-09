@@ -79,6 +79,11 @@ export function fakeEmailSender(): FakeEmailSender {
   };
 }
 
-export function sub(endpoint: string): PushSubscriptionRecord {
-  return { endpoint, keys: { p256dh: 'p', auth: 'a' }, addedAt: 0 };
+export function sub(endpoint: string, gameId?: string): PushSubscriptionRecord {
+  return {
+    endpoint,
+    keys: { p256dh: 'p', auth: 'a' },
+    addedAt: 0,
+    ...(gameId === undefined ? {} : { gameId }),
+  };
 }

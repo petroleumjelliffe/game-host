@@ -48,15 +48,21 @@ export default tseslint.config(
       parserOptions: {
         projectService: {
           // TypeScript that belongs to no tsconfig, and so is not typechecked
-          // either. Acquire's generate-manifest.ts is a prebuild step run by
-          // tsx, in a scripts/ directory no `include` covers; it gets the
-          // default project so it is linted at all, rather than being ignored
-          // for the crime of not being in a tsconfig.
+          // either. Each game's generate-manifest.ts is a prebuild step run
+          // by tsx, in a scripts/ directory no `include` covers; they get
+          // the default project so they are linted at all, rather than being
+          // ignored for the crime of not being in a tsconfig. (Acquire's was
+          // first; wordgame and railbaron gained theirs with the shared PWA,
+          // 2026-09-07.)
           //
           // Marco Polo's two config files were here too until 2026-08-21.
           // They are in its tsconfig now, which is the better fix — being
           // unchecked was hiding a real error, not just a lint gap.
-          allowDefaultProject: ['games/acquire/scripts/*.ts'],
+          allowDefaultProject: [
+            'games/acquire/scripts/*.ts',
+            'games/railbaron/scripts/*.ts',
+            'games/wordgame/scripts/*.ts',
+          ],
         },
       },
     },

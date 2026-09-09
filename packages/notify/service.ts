@@ -356,7 +356,14 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
   // would mean writing a record for every probe of a room that never
   // existed. A soft cap that resets on restart is the right size.
   const signinAttempts = new Map<string, { day: string; count: number }>();
-  const pendingTimers = new Map<string, NodeJS.Timeout>();
+  // The pending EMAIL leg per room, remembering which turn it is counting
+  // for: a re-report of the same turn must leave the countdown running
+  // rather than cancel it (push has already sent by then, so the re-report
+  // returns early and could never re-arm it).
+  const pendingTimers = new Map<
+    string,
+    { timer: NodeJS.Timeout; playerId: string; turnKey: string }
+  >();
   const inFlightSends = new Set<Promise<void>>();
   let reminderTimer: NodeJS.Timeout | null = null;
   let closed = false;
@@ -431,10 +438,33 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     return true;
   }
 
-  async function sendPush(profile: ProfileRecord, payload: PushPayload): Promise<void> {
+  /**
+   * The scope routing (shared-PWA spec): a subscription is per-game
+   * per-device — it belongs to one game's service worker, and a payload
+   * delivered through the wrong worker opens the room inside the wrong
+   * app shell. An untagged subscription (minted before the tag existed)
+   * matches every game. `fallbackToAnyScope` is the one deliberate
+   * exception, for invites: an invite is a doorway rather than a turn,
+   * and not arriving is the worse failure — so it prefers matching-scope
+   * subscriptions and takes any scope's when none match (friends spec §4).
+   */
+  interface PushScope {
+    gameId: string;
+    fallbackToAnyScope?: boolean;
+  }
+
+  async function sendPush(
+    profile: ProfileRecord,
+    payload: PushPayload,
+    scope: PushScope,
+  ): Promise<void> {
     if (!push || !profile.prefs.push || profile.push.length === 0) return;
+    const matching = profile.push.filter(
+      (s) => s.gameId === undefined || s.gameId === scope.gameId,
+    );
+    const targets = matching.length > 0 || !scope.fallbackToAnyScope ? matching : profile.push;
     const dead: string[] = [];
-    for (const subscription of profile.push) {
+    for (const subscription of targets) {
       try {
         await push.send(subscription, payload);
       } catch (error) {
@@ -490,12 +520,17 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     payload: TurnPayload,
     emailUrl: string,
     kind: 'turn' | 'reminder',
+    gameId: string,
+    channels: { push: boolean; email: boolean },
   ): Promise<void> {
     const mailed = new Set<string>();
     const jobs: Promise<void>[] = [];
     for (const profile of targets) {
-      jobs.push(sendPush(profile, payload));
-      if (emailEligible(profile)) {
+      // Turns route to the sending game's scope only — no fallback: a turn
+      // arriving through another game's worker is the smear the tag exists
+      // to prevent, and this seat's other channels still carry it.
+      if (channels.push) jobs.push(sendPush(profile, payload, { gameId }));
+      if (channels.email && emailEligible(profile)) {
         const address = profile.email!.address.toLowerCase();
         if (!mailed.has(address)) {
           mailed.add(address);
@@ -506,22 +541,34 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     await Promise.allSettled(jobs);
   }
 
-  function fire(reg: NotifyGameRegistration, roomId: string, playerId: string, turnKey: string): void {
+  function seatTargets(room: RoomRecord, playerId: string): ProfileRecord[] {
+    return (room.bindings[playerId] ?? [])
+      .map((id) => profiles.get(id))
+      .filter((p): p is ProfileRecord => p !== undefined);
+  }
+
+  /**
+   * The push leg: immediate at the turn change, and deliberately NOT
+   * presence-gated (owner, 2026-09-09). A push to a player already looking
+   * at the board is a convenience — clicking it lands them in the room —
+   * where the same email would be noise, so the channels split: push now,
+   * email behind the debounce with the presence re-check.
+   */
+  function firePush(reg: NotifyGameRegistration, roomId: string, playerId: string, turnKey: string): void {
     if (closed) return;
-    // Presence is checked now, at the end of the window, not at the turn
-    // change — the whole point of the debounce.
-    if (reg.isConnected(roomId, playerId)) return;
     const room = rooms.get(roomKey(reg.gameId, roomId));
     if (!room) return;
     if (room.lastNotified[playerId] === turnKey) return;
-    const targets = (room.bindings[playerId] ?? [])
-      .map((id) => profiles.get(id))
-      .filter((p): p is ProfileRecord => p !== undefined);
+    const targets = seatTargets(room, playerId);
     if (targets.length === 0) return;
 
     // Markers before sends — see the file comment for why this order. The
-    // currentTurn marker is the 24h reminder's anchor; turnChanged clears
-    // it the moment a newer turn supersedes it.
+    // marker now stands for the whole turn the moment the push leg runs, so
+    // a crash inside the debounce window skips that turn's email rather
+    // than ever duplicating the push — the same crash-skips discipline as
+    // always, applied at the new earliest send. The currentTurn marker is
+    // the 24h reminder's anchor; turnChanged clears it the moment a newer
+    // turn supersedes it.
     room.lastNotified[playerId] = turnKey;
     room.currentTurn = { playerId, turnKey, notifiedAt: now() };
     saveRoom(room);
@@ -531,9 +578,32 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       roomId,
       url: reg.roomPath(roomId),
     };
+    track(sendToSeat(targets, payload, '', 'turn', reg.gameId, { push: true, email: false }));
+  }
+
+  /**
+   * The email leg, at the end of the debounce window. Reaching here means
+   * the turn is still current (a newer turn cancels the timer); presence is
+   * checked now, at the end of the window — the whole point of the debounce.
+   */
+  function fireEmail(reg: NotifyGameRegistration, roomId: string, playerId: string, turnKey: string): void {
+    if (closed) return;
+    if (reg.isConnected(roomId, playerId)) return;
+    const room = rooms.get(roomKey(reg.gameId, roomId));
+    if (!room) return;
+    // The marker gates arming this timer, not this send — by now it holds
+    // this very turnKey, written by the push leg.
+    const targets = seatTargets(room, playerId);
+    if (targets.length === 0) return;
+
+    const payload: TurnPayload = {
+      gameTitle: reg.title,
+      roomId,
+      url: reg.roomPath(roomId),
+    };
     // The emailed link carries the seat key — every email is a login link.
     const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, roomId, playerId)}`;
-    track(sendToSeat(targets, payload, emailUrl, 'turn'));
+    track(sendToSeat(targets, payload, emailUrl, 'turn', reg.gameId, { push: false, email: true }));
   }
 
   function sweepReminders(): void {
@@ -563,7 +633,10 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         url: reg.roomPath(room.roomId),
       };
       const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, room.roomId, marker.playerId)}`;
-      track(sendToSeat(targets, payload, emailUrl, 'reminder'));
+      // The 24h nudge stays dual-channel and presence-checked: by then the
+      // immediate push is long dismissed, and both channels saying "still
+      // your turn" is the reminder's whole job.
+      track(sendToSeat(targets, payload, emailUrl, 'reminder', room.gameId, { push: true, email: true }));
     }
   }
 
@@ -685,7 +758,8 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     for (const profileId of record.target.profileIds) {
       const profile = profiles.get(profileId);
       if (!profile) continue;
-      jobs.push(sendPush(profile, payload));
+      // Scope-preferred with any-scope fallback — the invite exception.
+      jobs.push(sendPush(profile, payload, { gameId: reg.gameId, fallbackToAnyScope: true }));
       if (email && emailEligible(profile)) {
         const address = profile.email!.address.toLowerCase();
         if (!mailed.has(address)) {
@@ -796,9 +870,19 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         turnChanged: (roomId, currentPlayerId, turnKey) => {
           if (closed || !ROOM_ID.test(roomId)) return;
           const key = roomKey(registration.gameId, roomId);
-          const timer = pendingTimers.get(key);
-          if (timer) {
-            clearTimeout(timer);
+          // Cancel a pending email leg only when the turn actually moved on.
+          // A re-report of the SAME turn (a post-boot re-report, a duplicate
+          // event) returns early below — push already sent, marker standing —
+          // so cancelling here would silently kill an email still counting
+          // down, with nothing left to re-arm it.
+          const pending = pendingTimers.get(key);
+          const samePending =
+            pending !== undefined &&
+            currentPlayerId !== null &&
+            pending.playerId === currentPlayerId &&
+            pending.turnKey === turnKey;
+          if (pending && !samePending) {
+            clearTimeout(pending.timer);
             pendingTimers.delete(key);
           }
           // A superseded currentTurn dies here, persisted — without this, a
@@ -815,12 +899,14 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
           }
           if (currentPlayerId === null) return;
           if (rooms.get(key)?.lastNotified[currentPlayerId] === turnKey) return;
-          const next = setTimeout(() => {
+          // Push now, email after the window — see firePush/fireEmail.
+          firePush(registration, roomId, currentPlayerId, turnKey);
+          const timer = setTimeout(() => {
             pendingTimers.delete(key);
-            fire(registration, roomId, currentPlayerId, turnKey);
+            fireEmail(registration, roomId, currentPlayerId, turnKey);
           }, debounceMs);
-          next.unref();
-          pendingTimers.set(key, next);
+          timer.unref();
+          pendingTimers.set(key, { timer, playerId: currentPlayerId, turnKey });
         },
         seatVacated: (roomId, playerId) => {
           if (!ROOM_ID.test(roomId)) return;
@@ -850,9 +936,9 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         roomRemoved: (roomId) => {
           if (!ROOM_ID.test(roomId)) return;
           const key = roomKey(registration.gameId, roomId);
-          const timer = pendingTimers.get(key);
-          if (timer) {
-            clearTimeout(timer);
+          const pending = pendingTimers.get(key);
+          if (pending) {
+            clearTimeout(pending.timer);
             pendingTimers.delete(key);
           }
           if (rooms.delete(key)) void roomStore.remove(key);
@@ -913,6 +999,16 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     addSubscription(playerKey, subscription): void {
       const profile = profileFor(playerKey);
       profile.push = profile.push.filter((s) => s.endpoint !== subscription.endpoint);
+      // A scope tag naming no registered game is stripped, not stored: the
+      // send loop matches tags by exact equality, so a typo'd tag would
+      // mint a subscription that reports "push enabled" and receives
+      // nothing, ever — silently worse than no tag, which matches every
+      // game. Games register at boot, before any route serves, so an
+      // unknown name here is a client bug, not a race.
+      if (subscription.gameId !== undefined && !games.has(subscription.gameId)) {
+        log(`! Push subscription tagged for unregistered game '${subscription.gameId}' — storing untagged`);
+        delete subscription.gameId;
+      }
       profile.push.push(subscription);
       saveProfile(profile);
     },
@@ -1343,7 +1439,7 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
 
     async close(): Promise<void> {
       closed = true;
-      for (const timer of pendingTimers.values()) clearTimeout(timer);
+      for (const pending of pendingTimers.values()) clearTimeout(pending.timer);
       pendingTimers.clear();
       if (reminderTimer !== null) {
         clearInterval(reminderTimer);
