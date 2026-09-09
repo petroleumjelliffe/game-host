@@ -102,8 +102,26 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// Focus-or-open, not a bare openWindow. macOS Safari silently ignores a
+// plain clients.openWindow from notificationclick in common configurations
+// (observed live 2026-09-09: notification shown, click did nothing), and
+// the workaround is the canonical pattern anyway — an absolute URL, reuse
+// of an existing window when one is open (navigating it if it is elsewhere
+// in this game), openWindow only as the last resort.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data && event.notification.data.url;
-  if (url) event.waitUntil(self.clients.openWindow(url));
+  const raw = event.notification.data && event.notification.data.url;
+  if (!raw) return;
+  const url = new URL(raw, self.location.origin).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const exact = wins.find((w) => w.url === url);
+    if (exact && 'focus' in exact) return exact.focus();
+    const sameApp = wins.find((w) => w.url.startsWith(new URL(BASE, self.location.origin).href));
+    if (sameApp && 'navigate' in sameApp) {
+      await sameApp.focus();
+      return sameApp.navigate(url);
+    }
+    return self.clients.openWindow(url);
+  })());
 });
