@@ -78,7 +78,7 @@ describe('NotificationSettings', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(
-      await screen.findByText('Check your inbox — the confirmation link lasts 24 hours.'),
+      await screen.findByText('Check your inbox — tap the link, then come back here. It lasts 24 hours.'),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/notify/email', expect.anything());
@@ -119,7 +119,7 @@ describe('NotificationSettings', () => {
     );
     render(<NotificationSettings onClose={() => {}} />);
     expect(
-      await screen.findByText('Turn emails go to pete@example.com.'),
+      await screen.findByText('Signed in as pete@example.com.'),
     ).toBeInTheDocument();
   });
 
@@ -153,5 +153,55 @@ describe('NotificationSettings', () => {
     expect(
       await screen.findByText(/the 🔔 badge now shows on your profile/),
     ).toBeInTheDocument();
+  });
+});
+
+describe('NotificationSettings — sign-in (spec 2026-09-09)', () => {
+  it('tells the server which kind of device is asking', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, settings()))
+      .mockResolvedValueOnce(jsonResponse(200, { result: 'confirmationSent' }));
+    render(<NotificationSettings onClose={() => {}} />);
+    fireEvent.change(await screen.findByLabelText('Email address'), { target: { value: 'pete@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => c[0] === '/notify/email')!;
+      // jsdom has no display-mode media and no navigator.standalone: a browser.
+      expect(JSON.parse(String((call[1] as RequestInit).body))).toMatchObject({ device: 'browser' });
+    });
+    expect(await screen.findByText(/then come back here/)).toBeInTheDocument();
+  });
+
+  it('a confirmed address shows the email toggle and a sign-out; the toggle only changes the pref', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, settings({ email: { address: 'pete@example.com', status: 'confirmed' } })))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    render(<NotificationSettings onClose={() => {}} />);
+    const toggle = await screen.findByRole('checkbox', { name: 'Email me when it’s my turn' });
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => c[0] === '/notify/prefs')!;
+      expect(JSON.parse(String((call[1] as RequestInit).body))).toMatchObject({ email: false });
+    });
+    expect(screen.getByText('pete@example.com')).toBeInTheDocument(); // still signed in
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('sign out asks twice, then clears every seat on this device and closes', async () => {
+    localStorage.setItem('wordgame.room.ABC123', JSON.stringify({ playerId: 'p1', token: 't', name: 'Pete' }));
+    localStorage.setItem('wordgame.room.XYZ789', JSON.stringify({ playerId: 'p2', token: 't', name: 'Pete' }));
+    const onClose = vi.fn();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, settings({ email: { address: 'pete@example.com', status: 'confirmed' } })))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    render(<NotificationSettings onClose={onClose} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out this device' }));
+    await waitFor(() => { expect(onClose).toHaveBeenCalled(); });
+    expect(fetchMock).toHaveBeenCalledWith('/notify/signout', expect.anything());
+    expect(localStorage.getItem('wordgame.room.ABC123')).toBeNull();
+    expect(localStorage.getItem('wordgame.room.XYZ789')).toBeNull();
+    expect(localStorage.getItem('notify.key')).not.toBeNull();
   });
 });
