@@ -17,6 +17,14 @@ import type {
   RosterMessage,
 } from '@game-host/lobby/protocol/protocol';
 
+// The claim screen's push card: jsdom is neither iOS nor push-capable, so
+// the real hook hides it. One test below forces the iOS-in-Safari state to
+// read the install nudge (spec 2026-09-09 §The Safari nudge on iOS).
+let enrollState: 'hidden' | 'needsInstall' = 'hidden';
+vi.mock('@game-host/notify/client/useEnrollPush', () => ({
+  useEnrollPush: () => ({ state: enrollState, enroll: () => {}, decline: () => {} }),
+}));
+
 function fakeConnection() {
   const joinedHandlers = new Set<(m: JoinedMessage) => void>();
   const rosterHandlers = new Set<(m: RosterMessage) => void>();
@@ -376,5 +384,22 @@ describe('landing on a link', () => {
     // No ceremony: straight to the ordinary join with the redeemed seat.
     await waitFor(() => { expect(fake.joins).toHaveLength(1); });
     expect(fake.joins[0]).toMatchObject({ playerId: 'p2', token: 'minted-2' });
+  });
+});
+
+describe('the claim screen on an iPhone in Safari', () => {
+  afterEach(() => { enrollState = 'hidden'; });
+
+  it('says to add to the Home Screen, then sign in from the app with the same email', async () => {
+    enrollState = 'needsInstall';
+    stubNotify({
+      '/notify/invite/claim': () =>
+        Promise.resolve(jsonResponse(200, { playerId: 'p3', token: 'minted', name: 'Sam', inviterName: 'Pete' })),
+    });
+    window.history.replaceState(null, '', '/room/ABC123?invite=tok-abc');
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    await waitFor(() => { expect(screen.getByText(/You’re in, Sam/)).toBeInTheDocument(); });
+    expect(screen.getByText(/then open it and sign in with the same email/)).toBeInTheDocument();
   });
 });
