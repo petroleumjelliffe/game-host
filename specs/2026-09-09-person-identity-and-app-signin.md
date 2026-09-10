@@ -1,6 +1,7 @@
 # A person across devices: email is the account, the app signs in
 
-**Status:** designed 2026-09-09; not yet planned. Phase A of three (A: email
+**Status:** designed 2026-09-09, decisions recorded the same day (see
+"Decisions" at the end); not yet planned. Phase A of three (A: email
 is the person; B: paste handoff from Safari; C: emailed sign-in code, only
 if B leaves anyone stranded). This document designs A and shapes the person
 model so B drops in without reopening it.
@@ -92,7 +93,11 @@ function, `personOf(profileId)`, and B extends that function.
 Per device stays per device: each profile keeps its own push subscriptions,
 its own prefs, and binds to seats when that device opens the room.
 
-## Server: three additions under the existing `/notify` routes
+## Server: four additions under the existing `/notify` routes
+
+Restore, accept, and the confirm-page change below, plus `POST
+/notify/signout`, which is specified with the client's sign-out control
+because its meaning is decided there.
 
 ### Restore: `POST /notify/me`
 
@@ -190,14 +195,37 @@ existing summaries endpoint, unchanged.
 **The home screen's three states.**
 
 - Not signed in: one card, "Sign in with your email to see your games on
-  this device", which opens the email field that already lives in
-  notification settings. The card shows whether or not the device already
-  holds rooms; a device can hold rooms and still be unlinked.
+  this device", which opens the email field that already lives in the
+  notification settings sheet. The same card appears in a room's lobby, so
+  a friend who arrived by room code meets it before the game starts. The
+  card shows whether or not the device already holds rooms; a device can
+  hold rooms and still be unlinked.
 - Signed in: a line, "Signed in as pete@example.com", next to the existing
-  settings control. Removing the address from settings is what ends it.
+  settings control. Sign out, in the settings sheet, is what ends it.
 - After submitting an address: "Check your email, then come back here." The
   page re-reads settings on visibility change until the address flips to
   confirmed, then restores.
+
+**Sign out, and turning email off, are two different controls.** Today the
+settings sheet offers neither: the server has a remove-address call and an
+email preference, but the only thing a person can do about email is the
+unsubscribe link in each mail. Both controls arrive with this spec, with
+distinct meanings:
+
+- **"Email me when it's my turn"** is the existing email preference,
+  surfaced as a toggle. Off stops the mail and nothing else: the address
+  stays confirmed, the device stays signed in, restore keeps working. The
+  unsubscribe link in each mail does the same thing.
+- **"Sign out"** leaves the device as if new, except that it keeps its
+  device key. `POST /notify/signout` with the key deletes the address
+  record and removes this profile from every room binding, so the device
+  stops receiving turn pushes for seats it no longer holds; push
+  subscriptions and preferences stay, because they belong to the device and
+  signing in again should not re-ask for permission. The client then clears
+  every room identity in its store, including seats created or joined on
+  this device before sign-in: "clean it up" means no seat survives, not
+  only the restored ones. Sign out is per device; it does nothing to the
+  Safari profile or to any other phone.
 
 **Invited games are cards.** Each shows the game, who invited you, and a
 claim button that calls accept and opens the room. They sit above the
@@ -234,11 +262,11 @@ This section is the adversarial review, kept.
   of the person's games. Nothing here mitigates that, and nothing cheap can.
   It is the trade "email is the account" makes, and it is recorded here so
   it is not rediscovered.
-- **There is no sign-out that reaches other devices.** Removing an address
-  unlinks a profile, but seats already restored stay in that device's
-  storage, and seat tokens never rotate since the honor-system reclaim was
-  retired. A lost phone keeps playing until the room dies. The
-  remove-address control must not imply more than it does.
+- **Sign-out reaches only the device it is pressed on.** It cleans that
+  device and stops its notifications, but seats already restored onto
+  another device stay there, and seat tokens never rotate since the
+  honor-system reclaim was retired. A lost phone keeps playing until the
+  room dies. Nothing in the sign-out copy may imply otherwise.
 - **A shared mailbox is one person.** Two people who confirm the same
   family address see each other's seats and can play each other's turns. A
   cannot fix this. B can, because a paste links a specific device. This is
@@ -270,10 +298,14 @@ Render feature. Nothing here should be debugged on the LAN.
   profile produces one email and one push per turn.
 - Routes: `/me` refuses a missing or malformed key and answers only for the
   key; the response never appears in the log; `GET /confirm` does not
-  confirm and `POST /confirm` does; `device` is validated.
-- Client: the three home-screen states against the fake connection; an
-  invite card through accept to navigation; restore on visibility change
-  writes the store; a refused accept re-runs restore.
+  confirm and `POST /confirm` does; `device` is validated. `/signout`
+  deletes the address and every binding for the profile and leaves its push
+  subscriptions and prefs alone; a second call is a no-op.
+- Client: the three home-screen states against the fake connection; the
+  sign-in card in a room lobby; an invite card through accept to
+  navigation; restore on visibility change writes the store; a refused
+  accept re-runs restore; sign out empties the identity store and keeps the
+  device key; the email toggle changes the preference and nothing else.
 - One artifact-level pass on the built app: vitest's `BASE_URL` differs
   from the build's, and a green suite once hid a shipped 404 on this very
   home screen (2026-08-31).
@@ -290,24 +322,28 @@ Render feature. Nothing here should be debugged on the LAN.
 - Passkeys. The right answer for a product; a WebAuthn dependency in the
   server bundle and "save a passkey for the word game" are the wrong first
   move for game night. The person model here is what they would attach to.
-- A sign-out or unlink control beyond removing the address.
-- Acquire and Rail Baron clients.
+- Acquire and Rail Baron clients. Sign-in, the all-active-games list, push
+  invites and turn notifications are all meant to reach them later; the
+  server half here is game-agnostic so that costs each game only its client
+  wiring.
 
-## Open questions
+## Decisions (2026-09-09)
 
-Decisions the author of this spec should not make alone; each carries a
-recommendation.
+Four questions were put to the owner with the design; the answers are
+folded into the sections above and recorded here so they read as decisions
+rather than defaults.
 
-1. **Where sign-in lives.** Recommended: a home-screen card that opens the
-   existing email field in notification settings, rather than a separate
-   sign-in screen, so there is one place an address is typed.
-2. **What it is called.** "Sign in with your email" reads as an account,
-   which is what it now is; "Link this device" is more honest about the
-   mechanism. Recommended: "Sign in".
-3. **Removing the address.** Recommended: unlinks the device and stops its
-   emails, and leaves already-restored seats in place, since they are the
-   person's own and the tokens cannot be revoked anyway. The alternative,
-   clearing restored seats on removal, reads more like sign-out but would
-   surprise anyone who removes an address to stop email.
-4. **Which clients in A.** Recommended: the word game only; Acquire's home
-   screen is a different shape and its multi-day use is lighter.
+1. **Where sign-in lives.** A card, on the home screen and in a room's
+   lobby, opening the email field in the existing settings sheet. Not a
+   separate sign-in screen: one place an address is typed.
+2. **What it is called.** "Sign in". It is an account now.
+3. **What removing the address means.** Two controls, not one. Turning
+   email off is the existing preference, surfaced as a toggle, and leaves
+   the device signed in. Sign out cleans the device: the address, every
+   binding, and every seat in local storage go; the device key and its push
+   subscriptions stay. Chosen over "remove address leaves restored seats in
+   place", which would have made the same control mean different things to
+   someone stopping mail and someone leaving a shared phone.
+4. **Which clients in A.** The word game only, with the explicit intent
+   that sign-in, the all-active-games list, push invites and turn
+   notifications are applied to the other games afterwards.
