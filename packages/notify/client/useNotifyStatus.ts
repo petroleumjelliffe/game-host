@@ -10,22 +10,30 @@ import { pushSupported } from './push';
 
 export type NotifyStatus = 'loading' | 'unavailable' | 'off' | 'pending' | 'on';
 
-export function useNotifyStatus(): { status: NotifyStatus; emailAddress: string | null; refresh(): void } {
+export function useNotifyStatus(): {
+  status: NotifyStatus;
+  emailAddress: string | null;
+  /** Signed in (spec 2026-09-09): the address is confirmed, not merely entered. */
+  emailConfirmed: boolean;
+  refresh(): void;
+} {
   const [status, setStatus] = useState<NotifyStatus>('loading');
   const [emailAddress, setEmailAddress] = useState<string | null>(null);
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
   const [epoch, setEpoch] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const playerKey = getPlayerKey();
-    if (playerKey === null) { setStatus('unavailable'); setEmailAddress(null); return; }
+    if (playerKey === null) { setStatus('unavailable'); setEmailAddress(null); setEmailConfirmed(false); return; }
     void (async () => {
       const settings = await fetchSettings(playerKey);
       if (cancelled) return;
-      if (settings === null) { setStatus('unavailable'); setEmailAddress(null); return; }
+      if (settings === null) { setStatus('unavailable'); setEmailAddress(null); setEmailConfirmed(false); return; }
       // The entry banner masks and shows this address whether the eventual
       // status is 'on', 'off' or 'pending' — set it once, up front.
       setEmailAddress(settings.email?.address ?? null);
+      setEmailConfirmed(settings.email?.status === 'confirmed');
       if (settings.email?.status === 'confirmed') { setStatus('on'); return; }
 
       // Push counts as "on" only when THIS browser holds a subscription the
@@ -52,5 +60,5 @@ export function useNotifyStatus(): { status: NotifyStatus; emailAddress: string 
   }, [epoch]);
 
   const refresh = useCallback(() => { setEpoch((e) => e + 1); }, []);
-  return { status, emailAddress, refresh };
+  return { status, emailAddress, emailConfirmed, refresh };
 }
