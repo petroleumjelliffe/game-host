@@ -43,6 +43,7 @@ import {
   normalizeBindings,
   PLAYER_KEY,
   type ContactRecord,
+  type EmailRecord,
   type InviteRecord,
   type InviteTarget,
   type NotifyPrefs,
@@ -87,6 +88,31 @@ export interface SettingsView {
   prefs: NotifyPrefs;
   pushEndpoints: string[];
   email: { address: string; status: string } | null;
+}
+
+/** One seat the person holds, with the credentials the client writes to its store. */
+export interface MineSeat {
+  game: string;
+  roomId: string;
+  playerId: string;
+  token: string;
+  name: string;
+}
+
+/** One live invite addressed to the person, claimable without its token. */
+export interface MineInvite {
+  game: string;
+  roomId: string;
+  playerId: string;
+  inviterName: string | null;
+  gameTitle: string;
+}
+
+export interface MineView {
+  /** The asking profile's confirmed address, or null: the person is then the profile alone. */
+  address: string | null;
+  seats: MineSeat[];
+  invites: MineInvite[];
 }
 
 export interface BindResult {
@@ -223,6 +249,15 @@ export interface NotifyService extends TurnNotifier {
    * never dropped: absent this boot is not gone.
    */
   startReminderSweep(): void;
+  /**
+   * Restore: everything the person behind this key holds. The person is
+   * derived, never stored — this profile plus every profile proven on the
+   * same address (confirmed, or confirmed then unsubscribed). Answers only
+   * for the asking key: there is no lookup by profile id or by address.
+   * The payload carries every live seat token the person holds, so it is
+   * never logged.
+   */
+  me(playerKey: string): MineView;
   settings(playerKey: string): SettingsView;
   addSubscription(playerKey: string, subscription: PushSubscriptionRecord): void;
   removeSubscription(playerKey: string, endpoint: string): void;
@@ -394,6 +429,13 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
 
   function saveInvite(record: InviteRecord): void {
     void inviteStore.save(record.tokenHash, record);
+  }
+
+  /** Invites that can still be claimed. */
+  function* invitesLive(): Iterable<InviteRecord> {
+    for (const record of invites.values()) {
+      if (record.claimedAt === undefined && record.revokedAt === undefined) yield record;
+    }
   }
 
   function track(send: Promise<void>): void {
@@ -648,6 +690,35 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     if (count >= MAX_SIGNIN_REQUESTS_PER_SEAT_PER_DAY) return false;
     signinAttempts.set(key, { day, count: count + 1 });
     return true;
+  }
+
+  /** An address that has proven itself once: confirmed, or confirmed then unsubscribed. */
+  function proven(record: EmailRecord | undefined): record is EmailRecord {
+    return record !== undefined && (record.status === 'confirmed' || record.status === 'disabled');
+  }
+
+  /** The person's address key, or null when this profile has no proven address. */
+  function personAddress(profileId: string): string | null {
+    const record = profiles.get(profileId)?.email;
+    return proven(record) ? record.address.toLowerCase() : null;
+  }
+
+  /**
+   * The person (spec §"The person, derived rather than stored"): this
+   * profile plus every profile proven on the same address. Unsubscribed
+   * counts as proven — "stop mailing me" is not "sign me out". Phase B
+   * adds an explicit device link to this union; nothing else may assume
+   * an address is the only way in.
+   */
+  function personProfileIds(profileId: string): string[] {
+    const out = [profileId];
+    const wanted = personAddress(profileId);
+    if (wanted === null) return out;
+    for (const other of profiles.values()) {
+      if (other.profileId === profileId) continue;
+      if (proven(other.email) && other.email.address.toLowerCase() === wanted) out.push(other.profileId);
+    }
+    return out;
   }
 
   /** The confirmed addresses across a set of profiles, deduped, lowercased key. */
@@ -1420,6 +1491,46 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         }
       }
       return null;
+    },
+
+    me(playerKey): MineView {
+      const profileId = profileIdFor(playerKey);
+      const person = new Set(personProfileIds(profileId));
+      const self = profiles.get(profileId);
+      const address = self?.email?.status === 'confirmed' ? self.email.address : null;
+
+      const seats: MineSeat[] = [];
+      for (const room of rooms.values()) {
+        const reg = games.get(room.gameId);
+        // Unmounted this boot is not gone: skipped, never dropped.
+        if (!reg?.getSeatCredentials) continue;
+        for (const [playerId, bound] of Object.entries(room.bindings)) {
+          if (!bound.some((id) => person.has(id))) continue;
+          const creds = reg.getSeatCredentials(room.roomId, playerId);
+          if (!creds) continue; // departed or revoked: the game says so
+          seats.push({ game: room.gameId, roomId: room.roomId, ...creds });
+        }
+      }
+
+      const wanted = personAddress(profileId);
+      const invites: MineInvite[] = [];
+      for (const record of invitesLive()) {
+        const reg = games.get(record.gameId);
+        if (!reg) continue;
+        const mine =
+          record.target.kind === 'profile'
+            ? record.target.profileIds.some((id) => person.has(id))
+            : wanted !== null && record.target.address.toLowerCase() === wanted;
+        if (!mine) continue;
+        invites.push({
+          game: record.gameId,
+          roomId: record.roomId,
+          playerId: record.playerId,
+          inviterName: profiles.get(record.inviterProfileId)?.name ?? null,
+          gameTitle: reg.title,
+        });
+      }
+      return { address, seats, invites };
     },
 
     startReminderSweep(): void {
