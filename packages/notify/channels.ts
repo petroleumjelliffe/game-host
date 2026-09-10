@@ -5,7 +5,18 @@
 // absent, not stubbed, when unconfigured. Adding a channel (ntfy, a Discord
 // webhook) is implementing one of these and handing it to the service.
 
-import type { PushSubscriptionRecord } from './records.js';
+import type { ConfirmDevice, PushSubscriptionRecord } from './records.js';
+
+/** What asked to confirm, and when: the confirm mail names both. */
+export interface ConfirmationContext {
+  device: ConfirmDevice | null;
+  requestedAt: number;
+}
+
+/** The device kind, as a sentence subject — the mail and the confirm page agree. */
+export function describeDevice(device: ConfirmDevice | null): string {
+  return device === 'app' ? 'The installed app on a phone' : device === 'browser' ? 'A browser' : 'A device';
+}
 
 /** What every turn notification says, on any channel. */
 export interface TurnPayload {
@@ -48,7 +59,12 @@ export interface PushSender {
 }
 
 export interface EmailSender {
-  sendConfirmation(to: string, confirmUrl: string): Promise<void>;
+  /**
+   * The confirmation mail. Confirming signs the asking device in (spec
+   * §Confirming now signs in a device), so the mail must say what asked
+   * and when, and tell the reader to ignore it if that was not them.
+   */
+  sendConfirmation(to: string, confirmUrl: string, context: ConfirmationContext): Promise<void>;
   sendTurn(to: string, payload: TurnPayload, roomUrl: string, unsubscribeUrl: string): Promise<void>;
   /** The 24h nudge: same content as the turn mail, subject marked as a reminder. */
   sendTurnReminder(

@@ -14,7 +14,16 @@
 
 import express, { type Request, type Response, Router } from 'express';
 import { isPlayerKey, type NotifyService } from './service.js';
+import { describeDevice } from './channels.js';
 import type { PushSubscriptionRecord } from './records.js';
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
 
 function body(req: Request): Record<string, unknown> {
   const value: unknown = req.body;
@@ -301,13 +310,21 @@ export function createNotifyRouter(service: NotifyService): Router {
 
   router.post('/email', (req, res) => {
     const playerKey = playerKeyOf(req);
-    const address = asString(body(req).email);
-    if (!playerKey || address === null) {
+    const b = body(req);
+    const address = asString(b.email);
+    // What asked, for the mail: the installed app or a browser tab. Optional
+    // (older clients send none); anything else is a malformed request.
+    const device = b.device;
+    if (
+      !playerKey ||
+      address === null ||
+      (device !== undefined && device !== 'app' && device !== 'browser')
+    ) {
       res.status(400).json({ error: 'bad request' });
       return;
     }
     service
-      .submitEmail(playerKey, address)
+      .submitEmail(playerKey, address, device)
       .then((result) => {
         const status =
           result === 'emailUnavailable'
@@ -332,23 +349,49 @@ export function createNotifyRouter(service: NotifyService): Router {
     res.json({ ok: true });
   });
 
+  // Confirming signs a device in (spec 2026-09-09 §Confirming now signs in a
+  // device), so the emailed link only SHOWS; a button POSTs. A mail scanner
+  // that prefetches links can no longer confirm on the person's behalf.
   router.get('/confirm', (req, res) => {
     const token = asString(req.query.token);
+    const details = token === null ? 'invalid' : service.confirmationDetails(token);
+    if (details === 'expired') {
+      page(res, 410, 'Link expired', 'Sign-in links last 24 hours. Ask for a fresh one from the game.');
+      return;
+    }
+    if (details === 'invalid') {
+      page(res, 404, 'Link not recognised', 'This link is invalid or was already used.');
+      return;
+    }
+    const what = escapeHtml(describeDevice(details.device));
+    const when = escapeHtml(new Date(details.requestedAt).toUTCString());
+    // `page` wraps this in a paragraph; the form closes and reopens it.
+    page(
+      res,
+      200,
+      'Sign in this device?',
+      `${what} asked to sign in as <strong>${escapeHtml(details.address)}</strong> at ${when}. ` +
+        `Confirming signs that device in: it will see every game this address is seated in, ` +
+        `and turn emails will come here.</p>` +
+        `<form method="post" action="/notify/confirm">` +
+        `<input type="hidden" name="token" value="${escapeHtml(token ?? '')}">` +
+        `<button type="submit" style="font:inherit;padding:.6rem 1.2rem">Sign in this device</button>` +
+        `</form><p>Not you? Close this page and nothing happens.`,
+    );
+  });
+
+  router.post('/confirm', express.urlencoded({ extended: false }), (req, res) => {
+    const token = asString(body(req).token);
+    const details = token === null ? 'invalid' : service.confirmationDetails(token);
     const result = token === null ? 'invalid' : service.confirmEmail(token);
     if (result === 'confirmed') {
-      page(
-        res,
-        200,
-        'Email confirmed',
-        'Turn notifications will now reach this address. You can close this tab.',
-      );
+      const back =
+        typeof details === 'object' && details.device === 'app'
+          ? 'Go back to the app — your games are there now.'
+          : 'Go back to the game — your games are there now.';
+      page(res, 200, 'Signed in', back);
     } else if (result === 'expired') {
-      page(
-        res,
-        410,
-        'Link expired',
-        'Confirmation links last 24 hours. Open your notification settings in the game and send a fresh one.',
-      );
+      page(res, 410, 'Link expired', 'Sign-in links last 24 hours. Ask for a fresh one from the game.');
     } else {
       page(res, 404, 'Link not recognised', 'This link is invalid or was already used.');
     }

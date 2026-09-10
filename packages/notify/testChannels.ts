@@ -3,9 +3,16 @@
 // arrays the tests read, and fail only when told to — the service's pruning
 // and error posture is what's under test, never these.
 
-import type { EmailSender, InvitePayload, PushPayload, PushSender, TurnPayload } from './channels.js';
+import type {
+  ConfirmationContext,
+  EmailSender,
+  InvitePayload,
+  PushPayload,
+  PushSender,
+  TurnPayload,
+} from './channels.js';
 import { PushSubscriptionGoneError } from './channels.js';
-import type { PushSubscriptionRecord } from './records.js';
+import type { ConfirmDevice, PushSubscriptionRecord } from './records.js';
 
 export interface RecordedPush {
   endpoint: string;
@@ -42,6 +49,9 @@ export interface RecordedEmail {
   unsubscribeUrl?: string;
   /** Present on invite mails: who the mail says asked. */
   inviterName?: string | null;
+  /** Present on confirmation mails: what asked to sign in, and when. */
+  device?: ConfirmDevice | null;
+  requestedAt?: number;
 }
 
 export interface FakeEmailSender extends EmailSender {
@@ -52,8 +62,14 @@ export function fakeEmailSender(): FakeEmailSender {
   const sent: RecordedEmail[] = [];
   return {
     sent,
-    sendConfirmation(to: string, confirmUrl: string) {
-      sent.push({ kind: 'confirmation', to, url: confirmUrl });
+    sendConfirmation(to: string, confirmUrl: string, context: ConfirmationContext) {
+      sent.push({
+        kind: 'confirmation',
+        to,
+        url: confirmUrl,
+        device: context.device,
+        requestedAt: context.requestedAt,
+      });
       return Promise.resolve();
     },
     sendTurn(to: string, _payload: TurnPayload, roomUrl: string, unsubscribeUrl: string) {

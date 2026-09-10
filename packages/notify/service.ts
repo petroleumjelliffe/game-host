@@ -42,6 +42,7 @@ import {
   MAX_PROFILE_NAME_LENGTH,
   normalizeBindings,
   PLAYER_KEY,
+  type ConfirmDevice,
   type ContactRecord,
   type EmailRecord,
   type InviteRecord,
@@ -273,7 +274,16 @@ export interface NotifyService extends TurnNotifier {
   addSubscription(playerKey: string, subscription: PushSubscriptionRecord): void;
   removeSubscription(playerKey: string, endpoint: string): void;
   setPrefs(playerKey: string, prefs: Partial<NotifyPrefs>): void;
-  submitEmail(playerKey: string, address: string): Promise<EmailSubmitResult>;
+  /** `device` is what asked — named in the mail, because confirming signs it in. */
+  submitEmail(playerKey: string, address: string, device?: ConfirmDevice): Promise<EmailSubmitResult>;
+  /**
+   * What the confirm page shows before the button: the address and what
+   * asked. Same answers as `confirmEmail` for a dead token, so the page
+   * and the button never disagree.
+   */
+  confirmationDetails(
+    token: string,
+  ): { address: string; device: ConfirmDevice | null; requestedAt: number } | 'expired' | 'invalid';
   removeEmail(playerKey: string): void;
   /**
    * Sign out (spec §Sign out): the address goes and so does every seat
@@ -1204,7 +1214,7 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       saveProfile(profile);
     },
 
-    async submitEmail(playerKey, rawAddress): Promise<EmailSubmitResult> {
+    async submitEmail(playerKey, rawAddress, device): Promise<EmailSubmitResult> {
       if (!email || !emailUsable || origin === null) return 'emailUnavailable';
       const address = rawAddress.trim();
       if (!isValidEmailAddress(address)) return 'invalidAddress';
@@ -1223,18 +1233,21 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
           : 0;
       if (sendCount >= MAX_CONFIRMATION_SENDS_PER_DAY) return 'rateLimited';
       const confirmToken = newToken();
+      const requestedAt = now();
       profile.email = {
         address,
         status: 'pending',
         confirmToken,
-        confirmExpiry: now() + CONFIRM_TTL_MS,
+        confirmExpiry: requestedAt + CONFIRM_TTL_MS,
+        ...(device === undefined ? {} : { device }),
+        requestedAt,
         sendDay: day,
         sendCount: sendCount + 1,
       };
       saveProfile(profile);
       const confirmUrl = `${origin}/notify/confirm?token=${confirmToken}`;
       try {
-        await email.sendConfirmation(address, confirmUrl);
+        await email.sendConfirmation(address, confirmUrl, { device: device ?? null, requestedAt });
       } catch (error) {
         log(`! Confirmation email failed: ${String(error)}`);
       }
@@ -1278,9 +1291,22 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
         record.status = 'confirmed';
         delete record.confirmToken;
         delete record.confirmExpiry;
+        delete record.device;
+        delete record.requestedAt;
         record.unsubscribeToken = newToken();
         saveProfile(profile);
         return 'confirmed';
+      }
+      return 'invalid';
+    },
+
+    confirmationDetails(token) {
+      if (typeof token !== 'string' || token.length < 16) return 'invalid';
+      for (const profile of profiles.values()) {
+        const record = profile.email;
+        if (!record || record.status !== 'pending' || record.confirmToken !== token) continue;
+        if (record.confirmExpiry !== undefined && now() > record.confirmExpiry) return 'expired';
+        return { address: record.address, device: record.device ?? null, requestedAt: record.requestedAt ?? 0 };
       }
       return 'invalid';
     },
