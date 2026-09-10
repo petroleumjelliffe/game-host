@@ -36,6 +36,12 @@ vi.mock('../net/identity', () => ({
 // The restore call needs a device key; a fixed one keeps localStorage out of it.
 vi.mock('../notify/playerKey', () => ({ getPlayerKey: () => 'k'.repeat(24) }));
 
+const acceptInviteMock = vi.fn();
+vi.mock('@game-host/notify/client/landing', async (importActual) => ({
+  ...(await importActual<typeof import('@game-host/notify/client/landing')>()),
+  acceptInvite: (...a: unknown[]) => acceptInviteMock(...a),
+}));
+
 const fetchMock = vi.fn();
 
 beforeEach(() => {
@@ -46,6 +52,7 @@ beforeEach(() => {
   clearIdentityMock.mockReset();
   rememberedNameMock.mockReset().mockReturnValue(null);
   saveIdentityMock.mockReset();
+  acceptInviteMock.mockReset();
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -300,5 +307,59 @@ describe('HomePage — creating a room', () => {
 
     expect(await screen.findByText('room:ABC123')).toBeInTheDocument();
     expect(saveIdentityMock).toHaveBeenCalledWith('ABC123', { playerId: 'p1', token: 'tok', name: '' });
+  });
+});
+
+describe('HomePage — sign-in and invites', () => {
+  it('offers sign-in when the service knows this device holds no address', async () => {
+    mockRooms([], { address: null, seats: [], invites: [] });
+    notifyStatusValue = 'off';
+    renderHome();
+    expect(await screen.findByText(/Sign in with your email/)).toBeInTheDocument();
+    // The plain nudge yields to the sign-in card.
+    expect(screen.queryByText(/get a nudge when it’s yours/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(screen.getByRole('dialog', { name: 'Notification settings' })).toBeInTheDocument();
+  });
+
+  it('shows no sign-in card when there is no service to sign in to', async () => {
+    mockRooms([], null);
+    renderHome();
+    await screen.findByText('New room');
+    expect(screen.queryByText(/Sign in with your email/)).not.toBeInTheDocument();
+  });
+
+  it('says who is signed in', async () => {
+    mockRooms([], { address: 'pete@example.com', seats: [], invites: [] });
+    renderHome();
+    expect(await screen.findByText('Signed in as pete@example.com')).toBeInTheDocument();
+  });
+
+  it('lists invites as cards; claiming one writes the seat and opens the room', async () => {
+    mockRooms([], {
+      address: 'pete@example.com', seats: [],
+      invites: [{ game: 'wordgame', roomId: 'INV111', playerId: 'p3', inviterName: 'Alice', gameTitle: 'Word Game' }],
+    });
+    acceptInviteMock.mockResolvedValue({ playerId: 'p3', token: 't3', name: 'Pete', inviterName: 'Alice' });
+    renderHome();
+    expect(await screen.findByText(/Alice saved you a seat/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Claim' }));
+    await screen.findByText('room:INV111');
+    expect(acceptInviteMock).toHaveBeenCalledWith('wordgame', 'INV111');
+    expect(saveIdentityMock).toHaveBeenCalledWith('INV111', { playerId: 'p3', token: 't3', name: 'Pete' });
+  });
+
+  it('a refused claim re-runs restore instead of showing an error', async () => {
+    mockRooms([], {
+      address: 'pete@example.com', seats: [],
+      invites: [{ game: 'wordgame', roomId: 'INV111', playerId: 'p3', inviterName: null, gameTitle: 'Word Game' }],
+    });
+    acceptInviteMock.mockResolvedValue(null);
+    renderHome();
+    fireEvent.click(await screen.findByRole('button', { name: 'Claim' }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter((c) => c[0] === '/notify/me').length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
