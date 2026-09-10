@@ -366,3 +366,125 @@ no plist** — the front door forwards one port and knows no game names, the
 menu is generated from what mounted, and one agent runs the lot. Those four
 steps used to be steps 4 through 6 of this checklist and a plist copy;
 deleting them was the point of the composition work.
+
+## State of play — what is open, and where it stands
+
+**Snapshot taken 2026-09-08.** One place to see every open item across the
+four games, the shared packages and the PWA, each with its status. This is a
+*snapshot*, not the record: [docs/roadmap.md](docs/roadmap.md) owns order and
+size, [docs/backlog.md](docs/backlog.md) owns evidence, and each dated spec
+and plan carries its own status line and as-built notes. When this section
+and one of those disagree, that file is right and this section is stale —
+revise it here rather than arguing the point in two places.
+
+Status words, used consistently below: **done** (merged to `main`),
+**in PR** (implemented, checks green, unmerged), **designed** (spec written,
+no plan), **planned** (plan written, not built), **owed** (a gap the as-built
+notes name), **parked** (deliberately set aside with a note on how to resume),
+**deferred** (out of scope by ruling until brought back in), **undecided**.
+
+### Shared: lobby, notify, host
+
+- **Spectator mode** — *designed*, PR #21 (2026-08-30), unmerged. A watcher
+  is a lobby binding with no seat. Two slices when planned: lobby plus Rail
+  Baron, then Acquire. Marco Polo *deferred* — its snapshot default for an
+  unknown viewer is full visibility, the dangerous direction.
+- **Invites and seat keys** — *done* 2026-09-05 for Wordgame only. Acquire
+  adoption is the named next step, together with the decision on extracting
+  the duplicated lobby kit. Rail Baron and Marco Polo *deferred*.
+- **Friends ledger** — *done* 2026-09-05. Friend requests, blocking UI,
+  forget-me and profile merging are stubbed or ruled out.
+- **Pre-join chooser and room sign-in** — *done* 2026-09-06 for Wordgame.
+  Acquire still auto-joins until it opts into preview mode.
+- **Push-only reclaim gap** — *known issue, accepted* 2026-09-06: a player
+  reachable by push alone cannot reclaim a seat on a new device. Three
+  mitigations sketched in the pre-join plan, none built.
+- **Seat token rotation** — retired with the name-match reclaim; a leaked
+  emailed link lives until its room dies. Accepted; an explicit rotate is the
+  fix if it bites.
+- **Mid-game invites and claims** (checklist P6) — *deferred*; the owner's
+  note says it should arrive with Marco Polo's adoption.
+- **Notify the host when a seat is taken** — *maybe later* (playtest,
+  2026-08-31); needs a new payload kind in the notify contract.
+- **Turn-notification opt-in for Acquire and Rail Baron** — *owed*; both
+  servers already report turns, neither client has the UI.
+- **House rules, generalised** — *undecided* beyond the first consumer
+  (Rail Baron's `rules.json`, 2026-08-22). Read the parked
+  `feat/host-env-local` branch before designing it.
+- **Acquire's server tsconfig is unenforced** — decided to enforce, *not
+  done*. Measured at about an afternoon (backlog).
+
+### PWA
+
+- **`@game-host/pwa`** — *in PR* #30 (2026-09-07), checks green. Extracts
+  Acquire's hand-rolled PWA into one package, gives Wordgame the offline
+  shell, gives Rail Baron a PWA from configuration, and scope-tags push
+  subscriptions per game.
+- **After it merges, still owed:** the iOS install-flow copy the design
+  sketches; and driving the update path on a real installed app against a
+  real protocol bump — Acquire's own note calls that the hard cutoff before
+  handing anyone the app, and zero installs exist yet.
+
+### Wordgame
+
+- **Redesign, touch, motion** — *done* 2026-08-31 to 09-01 (PRs #23–#27).
+  The redesign plan's status line still says "not started"; it is wrong.
+- **Move history** — hidden, not deleted. Wanted back; the reveal mechanism
+  is *undecided*.
+- **Play-button count-up** — deliberately omitted from the motion spec.
+- **Playtest leftovers** (2026-08-31): notifications-enabled icon after
+  confirming an address, and 2L/2W/3L/3W premium labels — *open*, no
+  recorded closure. Drag-and-drop and the blank-tile caps bug are done.
+
+### Rail Baron
+
+- **Money phases 1 and 2** — *done* 2026-08-22/23. **Movement animation
+  (5b)** — *done* 2026-08-24, with the $20,000 grubstake as a `startingCash`
+  house rule.
+- **Economy, still owed** on untranscribed rulebook text: forced-sale and
+  elimination rules, train purchase timing (`trainBought` designed, not
+  built), the own-track and mixed-turn fee confirms, shared-trackage
+  attribution.
+- **Roll animation, lights, current-player indicator** — design ready
+  (2026-08-25), shovel-ready, *not built*.
+- **Auto pan/zoom while moving** — *owes its design pass*.
+- **`MapView.tsx` split** — the file reached 1,030 lines; the next map plan
+  should open with it.
+- **Keyboard access to map lamps** — *parked*; needs a design decision.
+- **Game-night destination reroll** — *parked* 2026-08-22. The room's save
+  file on Render is the witness nobody has read yet.
+- **Stale docs:** `games/railbaron/CLAUDE.md` still says starting cash is
+  unmodelled and online mode is undeployed. Both are wrong. PR #20 (opened
+  2026-08-26) brings both roadmaps up to date and is unmerged.
+
+### Acquire
+
+- **Broadcast per-step moves** to cut other players' wait — *not started*;
+  the roadmap's strongest candidate to jump the queue before a game night.
+- **Finish the reskin** — blocked on a visual audit, not effort. Needs a
+  list of which screens still look old before it needs a plan.
+- **Move the lobby into the game** — *undecided*.
+- **Invites, friends, pre-join, and a notification settings panel** — *owed*,
+  next after Wordgame per the UI checklist.
+- **Recovery time and the clipped away-dot** at five or six seats — *owed*
+  from the production by-hand pass.
+- **Two engine TODOs** in `engine/gameTypes.ts`: `Startup.id` should be the
+  `StartupId` type, and `Startup.tiles` should give way to a board lookup.
+
+### Marco Polo
+
+- **Splashing, tap-to-move-farther, turbo meter** — one movement mechanic,
+  wants one design conversation. The turbo meter may not survive it.
+- **Does not register with notify** — prerequisite for any invites work.
+- **Persists nothing**, so every deploy drops a live round. Accepted risk,
+  recorded in the monorepo spec.
+
+### Housekeeping
+
+- Merge or close PRs #20, #21 and #30; all three sit on branches behind
+  `main`.
+- The roadmap and backlog were last revised 2026-08-23 on `main` and
+  predate Wordgame, notify, invites and the PWA entirely.
+- Ten local branches from 2026-08-20 to 08-24 are merged and can be pruned
+  (one, `feat/train-movement-5b`, is still checked out in the
+  `game-host-dev` worktree).
