@@ -86,7 +86,9 @@ test('bind demands the real seat token', async () => {
 });
 
 test('a malformed playerKey is rejected everywhere it appears', async () => {
-  for (const path of ['/settings', '/subscriptions', '/prefs', '/email', '/email/remove']) {
+  for (const path of [
+    '/settings', '/subscriptions', '/prefs', '/email', '/email/remove', '/me', '/invite/accept', '/signout',
+  ]) {
     const res = await post(path, { playerKey: 'too short' });
     expect(res.status, path).toBe(400);
   }
@@ -245,4 +247,23 @@ test('bind accepts and ignores unknown-phase payloads from odd clients', async (
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ok: true });
+});
+
+test('me answers only for a well-formed key, and carries seats and invites', async () => {
+  expect((await post('/me', {})).status).toBe(400);
+  const res = await post('/me', { playerKey: KEY });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ address: null, seats: [], invites: [] });
+});
+
+test('invite/accept refuses malformed input and answers one shape for nothing to accept', async () => {
+  expect((await post('/invite/accept', { playerKey: KEY })).status).toBe(400);
+  const res = await post('/invite/accept', { playerKey: KEY, game: 'testgame', roomId: 'ROOM1' });
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ error: 'unavailable' });
+});
+
+test('signout is idempotent and answers ok', async () => {
+  expect(await (await post('/signout', { playerKey: KEY })).json()).toEqual({ ok: true });
+  expect(await (await post('/signout', { playerKey: KEY })).json()).toEqual({ ok: true });
 });

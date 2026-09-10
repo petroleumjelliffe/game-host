@@ -259,6 +259,43 @@ export function createNotifyRouter(service: NotifyService): Router {
     else res.json(creds);
   });
 
+  // Restore (spec 2026-09-09 §Restore). The answer carries every live seat
+  // token the person holds: nothing here logs, and nothing else may.
+  router.post('/me', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    if (!playerKey) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    res.json(service.me(playerKey));
+  });
+
+  // The in-app accept: claim by the hash the server holds, same single
+  // refusal shape as the emailed claim.
+  router.post('/invite/accept', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    if (!playerKey || game === null || roomId === null) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const creds = service.acceptInvite(playerKey, game, roomId);
+    if (creds === null) res.status(404).json({ error: 'unavailable' });
+    else res.json(creds);
+  });
+
+  router.post('/signout', (req, res) => {
+    const playerKey = playerKeyOf(req);
+    if (!playerKey) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    service.signOut(playerKey);
+    res.json({ ok: true });
+  });
+
   router.post('/settings', (req, res) => {
     const playerKey = playerKeyOf(req);
     if (!playerKey) {
