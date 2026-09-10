@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
@@ -12,6 +12,14 @@ import type {
 } from '@game-host/lobby/protocol/protocol';
 import { makeView } from '../test/fixtures';
 import { CENTER } from '../../engine/constants';
+
+// The room page asks whether this device is signed in (spec 2026-09-09) to
+// decide on the lobby's sign-in card. Real useNotifyStatus does a network
+// round trip; a mutable value keeps that out of every render here.
+let notifyStatusValue = { status: 'unavailable', emailAddress: null as string | null, emailConfirmed: false };
+vi.mock('../notify/useNotifyStatus', () => ({
+  useNotifyStatus: () => ({ ...notifyStatusValue, refresh: () => {} }),
+}));
 
 function fakeConnection() {
   // Sets, not single slots: useLobbyRoom and useRoom both subscribe to the
@@ -200,5 +208,40 @@ describe('RoomPage', () => {
 
     fake.sendRejected({ code: 'versionMismatch', message: 'Protocol skew.' });
     expect(screen.getByTestId('stale-client')).toBeInTheDocument();
+  });
+});
+
+describe('RoomPage — sign-in from the lobby (spec 2026-09-09)', () => {
+  afterEach(() => {
+    notifyStatusValue = { status: 'unavailable', emailAddress: null, emailConfirmed: false };
+  });
+
+  it('a lobby on a device with no address offers sign-in, which opens the settings sheet', async () => {
+    notifyStatusValue = { status: 'off', emailAddress: null, emailConfirmed: false };
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    fake.sendJoined({ roomId: 'ABC123', playerId: 'me', token: 't' });
+    fake.sendRoster(lobbyRoster());
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+    expect(screen.getByRole('dialog', { name: 'Notification settings' })).toBeInTheDocument();
+  });
+
+  it('a lobby on a signed-in device shows no sign-in card', async () => {
+    notifyStatusValue = { status: 'on', emailAddress: 'pete@example.com', emailConfirmed: true };
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    fake.sendJoined({ roomId: 'ABC123', playerId: 'me', token: 't' });
+    fake.sendRoster(lobbyRoster());
+    await screen.findByText('Start game');
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+  });
+
+  it('a lobby with no notify service shows no sign-in card either', async () => {
+    const fake = fakeConnection();
+    renderRoom(fake.connection);
+    fake.sendJoined({ roomId: 'ABC123', playerId: 'me', token: 't' });
+    fake.sendRoster(lobbyRoster());
+    await screen.findByText('Start game');
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 });

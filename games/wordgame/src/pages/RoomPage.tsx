@@ -35,6 +35,8 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '../../engine/constants';
 import { useRoom } from '../net/useRoom';
 import { loadIdentity, saveIdentity } from '../net/identity';
 import { useNotifyBind } from '../notify/useNotifyBind';
+import { useNotifyStatus } from '../notify/useNotifyStatus';
+import { NotificationSettings } from '../notify/NotificationSettings';
 import { GAME_ID } from '../notify/gameId';
 import { getConnection, closeConnection, type Connection } from '../net/connection';
 
@@ -233,7 +235,7 @@ function ClaimLanding({ creds, roomId, onGo }: {
               </p>
               <p className="mt-0.5 text-[12px] text-ink-faint">
                 {enroll.state === 'needsInstall'
-                  ? 'Add this game to your Home Screen first (Share → Add to Home Screen) — iPhones only push to installed apps.'
+                  ? 'Add this game to your Home Screen (Share → Add to Home Screen) — iPhones only push to installed apps — then open it and sign in with the same email to find this game there.'
                   : enroll.state === 'failed'
                     ? 'That didn’t take — you can try again from settings.'
                     : 'On this device. Change anytime in settings.'}
@@ -260,6 +262,12 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
   const navigate = useNavigate();
   const room = useRoom(roomId ?? '', connect);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Whether this device is signed in (spec 2026-09-09): the lobby offers
+  // sign-in when the service is there and no address is confirmed.
+  const notify = useNotifyStatus();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const offerSignIn =
+    notify.status !== 'unavailable' && notify.status !== 'loading' && !notify.emailConfirmed;
   // True only for the arrival from the chooser's "Sit here": the lobby then
   // focuses the rename field with its default name selected, so the first
   // thing typed IS the name. Rejoins and created rooms stay hands-off.
@@ -388,6 +396,7 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
           shareUrl={window.location.href}
           shareText="Join my word game!"
           autoFocusName={justSat}
+          {...(offerSignIn ? { onSignIn: () => { setSettingsOpen(true); } } : {})}
           {...(identity === null ? {} : {
             onInvite: () => { setPickerOpen(true); },
             onRemind: (playerId: string) =>
@@ -407,6 +416,9 @@ function RoomView({ roomId, connect }: { roomId: string | undefined; connect: ()
             self={{ playerId: identity.playerId, token: identity.token }}
             onClose={() => { setPickerOpen(false); }}
           />
+        )}
+        {settingsOpen && (
+          <NotificationSettings onClose={() => { setSettingsOpen(false); notify.refresh(); }} />
         )}
       </>
     );
