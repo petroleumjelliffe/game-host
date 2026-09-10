@@ -9,10 +9,13 @@ import {
   syncSubscription,
   unsubscribePush,
 } from '@game-host/notify/client/pushSubscription';
+import { setEmailPref, signOut } from '@game-host/notify/client/api';
+import { isInstalledApp } from '@game-host/pwa/client/installed';
 import { fetchSettings, notifyPost, type NotifySettings } from './api';
 import { getPlayerKey } from './playerKey';
 import { GAME_ID } from './gameId';
 import { pushSupported } from './push';
+import { clearIdentity, listRooms } from '../net/identity';
 
 type Load =
   | { state: 'loading' }
@@ -54,6 +57,10 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
   const [editingOverride, setEditingOverride] = useState<boolean | null>(null);
   // A successful submit updates what's shown without waiting on a refetch.
   const [emailOverride, setEmailOverride] = useState<{ address: string; status: string } | null>(null);
+  // The "Email me when it's my turn" preference, mirrored so the toggle
+  // answers at once; null until settings load.
+  const [emailPref, setEmailPrefState] = useState<boolean | null>(null);
+  const [signingOut, setSigningOut] = useState<'idle' | 'confirm' | 'busy'>('idle');
 
   const playerKey = getPlayerKey();
 
@@ -68,6 +75,7 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
     void fetchSettings(playerKey).then((settings) => {
       if (cancelled) return;
       setLoad(settings === null ? { state: 'unavailable' } : { state: 'ready', settings });
+      if (settings !== null) setEmailPrefState(settings.prefs.email);
     });
     return () => { cancelled = true; };
   }, [playerKey]);
@@ -136,7 +144,13 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
     setEmailBusy(true);
     setEmailNote(null);
     try {
-      const res = await notifyPost('/email', { playerKey, email: address });
+      // What is asking, for the confirm mail: confirming now signs this
+      // device in, and the mail names the device kind (spec 2026-09-09).
+      const res = await notifyPost('/email', {
+        playerKey,
+        email: address,
+        device: isInstalledApp() ? 'app' : 'browser',
+      });
       if (res.status === 429) setEmailNote('rateLimited');
       else if (res.status === 503) setEmailNote('unavailable');
       else if (res.status === 400) setEmailNote('invalid');
@@ -244,9 +258,9 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
                       }`}
                     >
                       {emailStatus.status === 'confirmed'
-                        ? `Turn emails go to ${emailStatus.address}.`
+                        ? `Signed in as ${emailStatus.address}.`
                         : emailStatus.status === 'pending'
-                          ? `Waiting for you to confirm ${emailStatus.address} — check your inbox; the link lasts 24 hours.`
+                          ? `Waiting for you to confirm ${emailStatus.address} — check your inbox, tap the link, then come back here.`
                           : `Emails to ${emailStatus.address} are off — re-enter the address to re-enable.`}
                     </p>
                   )}
@@ -293,9 +307,63 @@ export function NotificationSettings({ onClose }: NotificationSettingsProps) {
                     </>
                   )}
 
+                  {/* Two controls, not one (spec 2026-09-09, decision 3).
+                      The toggle is a preference: off stops the mail and
+                      nothing else. Sign out cleans this device — the
+                      address, every binding, every seat in local storage;
+                      the device key and its push subscription stay so
+                      signing in again does not re-ask for permission.
+                      Other devices are untouched. */}
+                  {!editing && emailStatus !== null && emailStatus.status === 'confirmed' && (
+                    <>
+                      <label className="flex items-center gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          checked={emailPref ?? true}
+                          onChange={(e) => {
+                            const next = e.target.checked;
+                            setEmailPrefState(next);
+                            if (playerKey !== null) void setEmailPref(playerKey, next);
+                          }}
+                        />
+                        Email me when it’s my turn
+                      </label>
+                      {signingOut === 'confirm' ? (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="flex-1 text-ink-mute">
+                            This device forgets every game. Other devices stay signed in.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSigningOut('busy');
+                              void (async () => {
+                                if (playerKey !== null) await signOut(playerKey);
+                                for (const room of listRooms()) clearIdentity(room.roomId);
+                                onClose();
+                              })();
+                            }}
+                            className="m-0 flex-none rounded-lg border border-danger-ink px-3 py-1.5 font-semibold text-danger-ink"
+                          >
+                            Sign out this device
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={signingOut === 'busy'}
+                          onClick={() => { setSigningOut('confirm'); }}
+                          className="m-0 self-start text-sm font-semibold text-ink-mute"
+                        >
+                          Sign out
+                        </button>
+                      )}
+                    </>
+                  )}
+
                   {emailNote !== null && (
                     <p className="text-sm text-ink-mute">
-                      {emailNote === 'sent' && 'Check your inbox — the confirmation link lasts 24 hours.'}
+                      {emailNote === 'sent' && 'Check your inbox — tap the link, then come back here. It lasts 24 hours.'}
                       {emailNote === 'already' && 'That address is already confirmed.'}
                       {emailNote === 'rateLimited' && 'Too many attempts for now — try again later.'}
                       {emailNote === 'invalid' && 'That doesn’t look like an email address.'}

@@ -7,7 +7,10 @@
 // belongs to the composed host, shared across games.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchSettings, notifyPost } from './api';
+import { fetchMine, fetchSettings, notifyPost, setEmailPref, signOut } from './api';
+
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -43,5 +46,28 @@ describe('the /notify API paths', () => {
     expect(await fetchSettings('k')).toBeNull();
     fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
     expect(await fetchSettings('k')).toBeNull();
+  });
+
+  it('fetchMine posts the key to /notify/me and validates the shape', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { address: 'a@b.c', seats: [], invites: [] }));
+    expect(await fetchMine('k'.repeat(24))).toEqual({ address: 'a@b.c', seats: [], invites: [] });
+    expect(fetchMock).toHaveBeenCalledWith('/notify/me', expect.objectContaining({ method: 'POST' }));
+    fetchMock.mockResolvedValueOnce(json(200, { nope: true }));
+    expect(await fetchMine('k'.repeat(24))).toBeNull();
+    fetchMock.mockResolvedValueOnce(json(404, { error: 'not here' }));
+    expect(await fetchMine('k'.repeat(24))).toBeNull();
+  });
+
+  it('signOut and setEmailPref answer ok as a boolean', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { ok: true }));
+    expect(await signOut('k'.repeat(24))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith('/notify/signout', expect.anything());
+    fetchMock.mockResolvedValueOnce(json(200, { ok: true }));
+    expect(await setEmailPref('k'.repeat(24), false)).toBe(true);
+    expect(fetchMock).toHaveBeenLastCalledWith('/notify/prefs', expect.objectContaining({
+      body: JSON.stringify({ playerKey: 'k'.repeat(24), email: false }),
+    }));
+    fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    expect(await signOut('k'.repeat(24))).toBe(false);
   });
 });

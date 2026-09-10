@@ -32,12 +32,22 @@ export interface PushSubscriptionRecord {
 
 export type EmailStatus = 'pending' | 'confirmed' | 'disabled';
 
+/** What asked to confirm an address: the installed app, or a browser tab. */
+export type ConfirmDevice = 'app' | 'browser';
+
 export interface EmailRecord {
   address: string;
   status: EmailStatus;
   /** Single-use confirmation token; present only while `pending`. */
   confirmToken?: string;
   confirmExpiry?: number;
+  /**
+   * What asked, and when — shown in the mail and on the confirm page,
+   * because confirming now signs that device in (spec 2026-09-09). Present
+   * only while `pending`; discarded on confirm.
+   */
+  device?: ConfirmDevice;
+  requestedAt?: number;
   /** Minted at confirmation; the one-click unsubscribe link, no login required. */
   unsubscribeToken?: string;
   /** Confirmation-send rate limit: at most 3 per address per UTC day. */

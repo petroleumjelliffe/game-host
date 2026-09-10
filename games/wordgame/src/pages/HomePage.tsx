@@ -9,6 +9,8 @@ import { useNavigate, type NavigateFunction } from 'react-router-dom';
 import { askWithTimeout } from '@game-host/lobby/client/answerTimeout';
 import { getConnection, type Connection } from '../net/connection';
 import { rememberedName, saveIdentity } from '../net/identity';
+import { acceptInvite } from '@game-host/notify/client/landing';
+import type { MineInvite } from '@game-host/notify/client/api';
 import { useMyGames, type MyGame } from './useMyGames';
 import { useNotifyStatus } from '../notify/useNotifyStatus';
 import { NotificationSettings } from '../notify/NotificationSettings';
@@ -187,11 +189,74 @@ function FinishedCard({ roomId, summary, navigate }: { roomId: string; summary: 
   );
 }
 
+/** An invite the person can claim from here (spec 2026-09-09 §Client). */
+function InviteCard({ invite, onClaim }: { invite: MineInvite; onClaim: () => void }) {
+  const who = invite.inviterName ?? 'A friend';
+  return (
+    <div
+      data-testid={`invite-${invite.roomId}`}
+      className="m-0 mx-4 mb-2 flex w-[calc(100%-2rem)] items-center gap-2 rounded-xl border-[1.5px] border-dashed border-[#c9a86a] bg-[#fbf9f3] px-3 py-2.5"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14px] font-semibold text-ink">Room {invite.roomId}</div>
+        <div className="text-[12px] text-[#8a6d2f]">{who} saved you a seat</div>
+      </div>
+      <button
+        type="button"
+        onClick={onClaim}
+        className="m-0 flex-none rounded-lg bg-[var(--lobby-accent,#2563eb)] px-3.5 py-1.5 text-[12.5px] font-semibold text-white"
+      >
+        Claim
+      </button>
+    </div>
+  );
+}
+
+/** The one banner slot under the header: a sentence and a button. */
+function Banner({ tone, text, action, onAction }: {
+  tone: 'accent' | 'warn';
+  text: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <div
+      className={`mx-4 mb-1.5 flex items-center gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 ${
+        tone === 'accent' ? 'border-accent bg-[#f0f5ff]' : 'border-warn-accent bg-warnbg'
+      }`}
+    >
+      <div className={`flex-1 text-[13px] ${tone === 'accent' ? 'text-accent-strong' : 'text-warn-ink'}`}>
+        {text}
+      </div>
+      <button
+        type="button"
+        onClick={onAction}
+        className={`m-0 flex-none rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white ${
+          tone === 'accent' ? 'bg-accent' : 'bg-warn-accent'
+        }`}
+      >
+        {action}
+      </button>
+    </div>
+  );
+}
+
 export function HomePage({ connect = getConnection }: HomePageProps) {
   const navigate = useNavigate();
-  const { games } = useMyGames();
+  const { games, invites, address, signedInKnown, refresh } = useMyGames();
   const { status: notifyStatus, emailAddress, refresh: refreshNotify } = useNotifyStatus();
   const [notifyOpen, setNotifyOpen] = useState(false);
+
+  // Accept (spec §Accept): a refusal is not an error — a linked device may
+  // have claimed the same invite by link a moment ago, and restore then
+  // shows the seat instead of the invite.
+  const claim = (invite: MineInvite) => {
+    void acceptInvite(invite.game, invite.roomId).then((creds) => {
+      if (creds === null) { refresh(); return; }
+      saveIdentity(invite.roomId, { playerId: creds.playerId, token: creds.token, name: creds.name });
+      navigate(`/room/${invite.roomId}`);
+    });
+  };
 
   // The create-room episode, lifted verbatim from the deleted
   // OnlineLobbyPage: the ask, its two answer channels, and the shared
@@ -262,6 +327,10 @@ export function HomePage({ connect = getConnection }: HomePageProps) {
         </button>
       </header>
 
+      {address !== null && (
+        <p className="-mt-2 px-4 pb-2 text-[12px] text-ink-faint">Signed in as {address}</p>
+      )}
+
       {/* Installed app only, and only when a new build is waiting — the
           shared button renders nothing otherwise. The entry page is the one
           screen where nobody is mid-game, so restarting costs nothing. */}
@@ -269,27 +338,41 @@ export function HomePage({ connect = getConnection }: HomePageProps) {
         <UpdateReadyButton />
       </div>
 
-      {(notifyStatus === 'off' || notifyStatus === 'pending') && (
-        <div
-          className={`mx-4 mb-1.5 flex items-center gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 ${
-            notifyStatus === 'off' ? 'border-accent bg-[#f0f5ff]' : 'border-warn-accent bg-warnbg'
-          }`}
-        >
-          <div className={`flex-1 text-[13px] ${notifyStatus === 'off' ? 'text-accent-strong' : 'text-warn-ink'}`}>
-            {notifyStatus === 'off'
-              ? '🔔 Turns can be days apart — get a nudge when it’s yours'
-              : `✉️ Confirm your email — we sent a link to ${maskEmail(emailAddress)}`}
-          </div>
-          <button
-            type="button"
-            onClick={() => { setNotifyOpen(true); }}
-            className={`m-0 flex-none rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-white ${
-              notifyStatus === 'off' ? 'bg-accent' : 'bg-warn-accent'
-            }`}
-          >
-            {notifyStatus === 'off' ? 'Set up' : 'Resend'}
-          </button>
-        </div>
+      {/* One banner (spec 2026-09-09 §Client, three states): a pending
+          confirmation first, then sign-in when the service knows this device
+          holds no address, then the plain push nudge. The sign-in card shows
+          whether or not the device already holds rooms — a device can hold
+          rooms and still be unlinked. */}
+      {notifyStatus === 'pending' ? (
+        <Banner
+          tone="warn"
+          text={`✉️ Confirm your email — we sent a link to ${maskEmail(emailAddress)}. Tap it, then come back here.`}
+          action="Resend"
+          onAction={() => { setNotifyOpen(true); }}
+        />
+      ) : signedInKnown && address === null ? (
+        <Banner
+          tone="accent"
+          text="Sign in with your email to see your games on this device"
+          action="Sign in"
+          onAction={() => { setNotifyOpen(true); }}
+        />
+      ) : notifyStatus === 'off' ? (
+        <Banner
+          tone="accent"
+          text="🔔 Turns can be days apart — get a nudge when it’s yours"
+          action="Set up"
+          onAction={() => { setNotifyOpen(true); }}
+        />
+      ) : null}
+
+      {invites.length > 0 && (
+        <>
+          <SectionHeader>INVITED</SectionHeader>
+          {invites.map((i) => (
+            <InviteCard key={i.roomId} invite={i} onClaim={() => { claim(i); }} />
+          ))}
+        </>
       )}
 
       {lobbyGames.length > 0 && (
@@ -352,7 +435,11 @@ export function HomePage({ connect = getConnection }: HomePageProps) {
       </div>
 
       {notifyOpen && (
-        <NotificationSettings onClose={() => { setNotifyOpen(false); refreshNotify(); }} />
+        <NotificationSettings
+          // Both refreshes: a sign-out or a fresh confirmation changes the
+          // list as much as the badge.
+          onClose={() => { setNotifyOpen(false); refreshNotify(); refresh(); }}
+        />
       )}
     </div>
   );

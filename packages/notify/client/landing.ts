@@ -61,6 +61,24 @@ export async function redeemLanding(param: LandingParam): Promise<LandingCredent
 }
 
 /**
+ * The in-app accept (spec 2026-09-09 §Accept): claim one of the person's
+ * invites without its token. Null for every refusal, including "already
+ * claimed by a linked device" — re-run restore rather than showing an error.
+ */
+export async function acceptInvite(game: string, roomId: string): Promise<LandingCredentials | null> {
+  try {
+    const playerKey = getPlayerKey();
+    if (playerKey === null) return null;
+    const res = await notifyPost('/invite/accept', { playerKey, game, roomId });
+    if (!res.ok) return null;
+    const body: unknown = await res.json();
+    return isCredentials(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Remove the credential from the address bar — mail scanners already saw
  * it, but the person's history and shared screenshots need not.
  */

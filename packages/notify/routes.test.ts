@@ -86,7 +86,9 @@ test('bind demands the real seat token', async () => {
 });
 
 test('a malformed playerKey is rejected everywhere it appears', async () => {
-  for (const path of ['/settings', '/subscriptions', '/prefs', '/email', '/email/remove']) {
+  for (const path of [
+    '/settings', '/subscriptions', '/prefs', '/email', '/email/remove', '/me', '/invite/accept', '/signout',
+  ]) {
     const res = await post(path, { playerKey: 'too short' });
     expect(res.status, path).toBe(400);
   }
@@ -122,18 +124,56 @@ test('the email flow works over the wire, links included', async () => {
   expect(confirmUrl.startsWith('https://games.test/notify/confirm?token=')).toBe(true);
   // The link's path is exactly this router's confirm route.
   const token = new URL(confirmUrl).searchParams.get('token') ?? '';
-  const confirm = await fetch(`${base}/confirm?token=${token}`);
+  // GET shows the page and confirms nothing: the click now signs in a
+  // device, and a mail scanner that prefetches links must not do that.
+  const shown = await fetch(`${base}/confirm?token=${token}`);
+  expect(shown.status).toBe(200);
+  const html = await shown.text();
+  expect(html).toContain('Sign in this device');
+  expect(html).toContain('pete@example.com');
+  // No device was named on the request, so the page says only "a device".
+  expect(html).toContain('A device');
+  const pending = (await (await post('/settings', { playerKey: KEY })).json()) as { email: { status: string } };
+  expect(pending.email.status).toBe('pending');
+  // POST confirms.
+  const confirm = await fetch(`${base}/confirm`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: `token=${encodeURIComponent(token)}`,
+  });
   expect(confirm.status).toBe(200);
-  expect(await confirm.text()).toContain('Email confirmed');
+  expect(await confirm.text()).toContain('Signed in');
   // Single use.
   const again = await fetch(`${base}/confirm?token=${token}`);
   expect(again.status).toBe(404);
 });
 
+test('an app asking to sign in gets an app-flavoured mail and a go-back-to-the-app page', async () => {
+  expect((await post('/email', { playerKey: KEY, email: 'pete@example.com', device: 'app' })).status).toBe(200);
+  expect(email.sent[0]?.device).toBe('app');
+  const token = new URL(email.sent[0]?.url ?? '').searchParams.get('token') ?? '';
+  expect(await (await fetch(`${base}/confirm?token=${token}`)).text()).toContain('The installed app');
+  const confirm = await fetch(`${base}/confirm`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: `token=${encodeURIComponent(token)}`,
+  });
+  expect(await confirm.text()).toContain('Go back to the app');
+});
+
+test('a device value that is neither app nor browser is a bad request', async () => {
+  expect((await post('/email', { playerKey: KEY, email: 'pete@example.com', device: 'toaster' })).status).toBe(400);
+});
+
 test('the unsubscribe link from a turn email works with no credentials', async () => {
   await post('/email', { playerKey: KEY, email: 'pete@example.com' });
   const token = new URL(email.sent[0]?.url ?? '').searchParams.get('token') ?? '';
-  await fetch(`${base}/confirm?token=${token}`);
+  // The button, not the link: only the POST confirms.
+  await fetch(`${base}/confirm`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: `token=${encodeURIComponent(token)}`,
+  });
   expect(
     (
       await post('/bind', {
@@ -207,4 +247,23 @@ test('bind accepts and ignores unknown-phase payloads from odd clients', async (
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ok: true });
+});
+
+test('me answers only for a well-formed key, and carries seats and invites', async () => {
+  expect((await post('/me', {})).status).toBe(400);
+  const res = await post('/me', { playerKey: KEY });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ address: null, seats: [], invites: [] });
+});
+
+test('invite/accept refuses malformed input and answers one shape for nothing to accept', async () => {
+  expect((await post('/invite/accept', { playerKey: KEY })).status).toBe(400);
+  const res = await post('/invite/accept', { playerKey: KEY, game: 'testgame', roomId: 'ROOM1' });
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ error: 'unavailable' });
+});
+
+test('signout is idempotent and answers ok', async () => {
+  expect(await (await post('/signout', { playerKey: KEY })).json()).toEqual({ ok: true });
+  expect(await (await post('/signout', { playerKey: KEY })).json()).toEqual({ ok: true });
 });

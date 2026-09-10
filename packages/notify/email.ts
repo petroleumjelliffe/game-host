@@ -8,7 +8,8 @@
 // email carries absolute links (confirm, the room, unsubscribe), and a mail
 // client has no origin to be relative to.
 
-import type { EmailSender, InvitePayload, TurnPayload } from './channels.js';
+import type { ConfirmationContext, EmailSender, InvitePayload, TurnPayload } from './channels.js';
+import { describeDevice } from './channels.js';
 
 function escapeHtml(text: string): string {
   return text
@@ -32,19 +33,27 @@ export async function emailSenderFromEnv(
   const transport = nodemailer.createTransport(smtpUrl);
 
   return {
-    async sendConfirmation(to: string, confirmUrl: string): Promise<void> {
+    // Confirming signs the asking device in (spec 2026-09-09), so the mail
+    // says what asked and when, and what the click grants.
+    async sendConfirmation(to: string, confirmUrl: string, context: ConfirmationContext): Promise<void> {
+      const what = describeDevice(context.device);
+      const when = new Date(context.requestedAt).toUTCString();
       await transport.sendMail({
         from,
         to,
-        subject: 'Confirm turn notifications',
+        subject: 'Confirm your email to sign in',
         text:
-          `Someone (hopefully you) asked for it's-your-turn emails at this address.\n\n` +
+          `${what} asked to sign in as this address at ${when}.\n\n` +
+          `Confirming signs that device in: it will see every game this address is seated in, ` +
+          `and it's-your-turn emails will come here.\n\n` +
           `Confirm within 24 hours:\n${confirmUrl}\n\n` +
-          `If this wasn't you, ignore this email and nothing further will be sent.`,
+          `If this wasn't you, ignore this email — nothing is signed in and nothing further will be sent.`,
         html:
-          `<p>Someone (hopefully you) asked for it's-your-turn emails at this address.</p>` +
-          `<p><a href="${escapeHtml(confirmUrl)}">Confirm email notifications</a> (link lasts 24 hours).</p>` +
-          `<p>If this wasn't you, ignore this email and nothing further will be sent.</p>`,
+          `<p>${escapeHtml(what)} asked to sign in as this address at ${escapeHtml(when)}.</p>` +
+          `<p>Confirming signs that device in: it will see every game this address is seated in, ` +
+          `and it's-your-turn emails will come here.</p>` +
+          `<p><a href="${escapeHtml(confirmUrl)}">Confirm and sign in</a> (link lasts 24 hours).</p>` +
+          `<p>If this wasn't you, ignore this email — nothing is signed in and nothing further will be sent.</p>`,
       });
     },
 

@@ -164,3 +164,22 @@ test('email flow reports unavailable when the channel or origin is missing', asy
   expect(await bare.submitEmail(KEY, 'pete@example.com')).toBe('emailUnavailable');
   await bare.close();
 });
+
+test('the confirmation carries which device asked, and the page can read it back before confirming', async () => {
+  expect(await service.submitEmail(KEY, 'pete@example.com', 'app')).toBe('confirmationSent');
+  const mail = email.sent[0]!;
+  expect(mail.kind).toBe('confirmation');
+  expect(mail.device).toBe('app');
+  expect(mail.requestedAt).toBe(clock.now);
+  const token = tokenFromLink(mail.url);
+  expect(service.confirmationDetails(token)).toEqual({
+    address: 'pete@example.com', device: 'app', requestedAt: clock.now,
+  });
+  expect(service.confirmEmail(token)).toBe('confirmed');
+  expect(service.confirmationDetails(token)).toBe('invalid');
+});
+
+test('no device given reads as null, not browser', async () => {
+  expect(await service.submitEmail(KEY, 'pete@example.com')).toBe('confirmationSent');
+  expect(email.sent[0]?.device).toBeNull();
+});

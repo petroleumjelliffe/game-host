@@ -48,11 +48,15 @@ describe('useNotifyStatus', () => {
     result.current.refresh(); rerender();
     await waitFor(() => { expect(result.current.status).toBe('pending'); });
     expect(result.current.emailAddress).toBe('a@b.c');
+    expect(result.current.emailConfirmed).toBe(false);
 
     fetchSettings.mockResolvedValue(settings({ address: 'a@b.c', status: 'confirmed' }));
     result.current.refresh(); rerender();
     await waitFor(() => { expect(result.current.status).toBe('on'); });
     expect(result.current.emailAddress).toBe('a@b.c');
+    // "Signed in" is the confirmed address specifically — push alone can
+    // make status 'on' without any address.
+    expect(result.current.emailConfirmed).toBe(true);
   });
 
   it('resolves to off (not hung) when push is supported but no service worker is registered', async () => {

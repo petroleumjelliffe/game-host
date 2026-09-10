@@ -1,7 +1,9 @@
 # A person across devices: email is the account, the app signs in
 
 **Status:** designed 2026-09-09, decisions recorded the same day (see
-"Decisions" at the end); not yet planned. Phase A of three (A: email
+"Decisions" at the end); planned and implemented 2026-09-09 via
+[docs/plans/2026-09-09-person-identity-and-app-signin.md](../docs/plans/2026-09-09-person-identity-and-app-signin.md).
+See "As built" at the end for deltas. Phase A of three (A: email
 is the person; B: paste handoff from Safari; C: emailed sign-in code, only
 if B leaves anyone stranded). This document designs A and shapes the person
 model so B drops in without reopening it.
@@ -347,3 +349,42 @@ rather than defaults.
 4. **Which clients in A.** The word game only, with the explicit intent
    that sign-in, the all-active-games list, push invites and turn
    notifications are applied to the other games afterwards.
+
+## As built (2026-09-09)
+
+Implemented as designed, in the plan's thirteen tasks, with these deltas:
+
+- **`disabled` links too.** A person is every profile whose address is
+  confirmed *or* confirmed-then-unsubscribed; the spec said "confirmed".
+  Unsubscribing is "stop mailing me", and turning it into a sign-out would
+  have surprised anyone who used the link in a turn mail. The restore's
+  `address` field still reports only a *confirmed* address, so a device
+  that unsubscribed reads as signed in on the server and shows the
+  "emails are off" line in settings.
+- **The restore hook lives in the game** (`useMyGames`), not the shared
+  client: the shared package returns credentials and the game writes
+  them, the precedent `landing.ts` set. The shared client gained only
+  calls (`fetchMine`, `acceptInvite`, `signOut`, `setEmailPref`) and one
+  field on the status hook (`emailConfirmed`) — no new file, so
+  `importBoundary.test.ts` still counts 13.
+- **Email invites to a proven address also push.** The spec's fan-out
+  section covered contact invites; an invite *by address* to someone whose
+  app is linked is the same use case and got the same treatment.
+- **`confirmationDetails`** is a separate read from `confirmEmail`, so the
+  GET page and the POST button cannot disagree about a token. `POST
+  /notify/confirm` takes a form body; it is the one urlencoded route, and
+  the parser is scoped to it.
+- **The invite card carries no seat name.** The invite record never held
+  one (the lobby holds it on the pending seat); the card says who invited
+  you and which room, which is what the person needs to decide.
+- **Push to the bound Safari profile still goes out.** Fan-out expands to
+  the person and dedupes by profile, so a turn reaches every profile's
+  subscriptions once; on an iPhone Safari holds none, so in practice it is
+  the app's push and the address's one mail.
+- **The home screen's one banner slot** ranks pending-confirmation above
+  sign-in above the push nudge; the sign-in card appears only when
+  `/notify/me` has answered (never on the standalone dev server) and
+  reports no address.
+- **A signed-out device keeps its device key.** Sign out clears every seat
+  in local storage and asks the server to drop the address and bindings;
+  the key and its push subscription stay so signing in again is one step.

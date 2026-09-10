@@ -64,13 +64,20 @@ export interface RoomLobbyProps {
    * must not pop the keyboard on every visit.
    */
   autoFocusName?: boolean;
+  /**
+   * Offer sign-in (spec 2026-09-09 §Client, decision 1): shown when the
+   * device holds no confirmed address, so a friend who arrived by room
+   * code meets it before the game starts. Absent means signed in, or no
+   * notify service to sign in to.
+   */
+  onSignIn?: () => void;
 }
 
 type RemindNote = 'sending' | 'sent' | 'capped' | 'failed';
 
 export function RoomLobby({
   view, note, onStart, onRename, onLeaveSeat, seatEmoji, shareUrl, shareText,
-  onInvite, onRemind, onRevoke, autoFocusName = false,
+  onInvite, onRemind, onRevoke, autoFocusName = false, onSignIn,
 }: RoomLobbyProps) {
   const isHost = view.you?.isHost === true;
 
@@ -160,7 +167,25 @@ export function RoomLobby({
       underCode={shareUrl !== undefined && (
         <ShareRoomButton url={shareUrl} {...(shareText === undefined ? {} : { text: shareText })} />
       )}
-      seatNote={<p className="text-center text-[12px] text-ink-faint">{seatNote}</p>}
+      seatNote={(
+        <>
+          {onSignIn !== undefined && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border-[1.5px] border-[var(--lobby-accent,#2563eb)] bg-[#f0f5ff] px-3 py-2">
+              <span className="flex-1 text-[12.5px] text-accent-strong">
+                Sign in with your email to keep this seat on your other devices
+              </span>
+              <button
+                type="button"
+                onClick={onSignIn}
+                className="m-0 flex-none rounded-lg bg-[var(--lobby-accent,#2563eb)] px-3 py-1.5 text-[12.5px] font-semibold text-white"
+              >
+                Sign in
+              </button>
+            </div>
+          )}
+          <p className="text-center text-[12px] text-ink-faint">{seatNote}</p>
+        </>
+      )}
       note={note}
       onLeave={onLeaveSeat}
       primary={isHost ? (
