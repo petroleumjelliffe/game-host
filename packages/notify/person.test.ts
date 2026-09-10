@@ -307,3 +307,66 @@ describe('acceptInvite: claim by the hash the server holds', () => {
     expect(f.service.me(APP).seats.map((s) => s.playerId)).toEqual(['p2']);
   });
 });
+
+describe('fan-out reaches the person, not only the bound profile', () => {
+  test('a turn: one push to the linked app profile, one email to the address — never two mails', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    // Safari holds the seat and the address; the app is linked and holds push.
+    seatAndBind(f, SAFARI, 'ROOM1', 'p1', 'Pete');
+    await confirm(f, SAFARI, 'pete@example.com');
+    await confirm(f, APP, 'pete@example.com');
+    f.service.addSubscription(APP, sub('https://push.test/app', 'testgame'));
+    f.email.sent.length = 0;
+    f.push.sent.length = 0;
+    f.reporter.turnChanged('ROOM1', 'p1', 'turn-1');
+    await wait(30);
+    expect(f.push.sent.map((p) => p.endpoint).sort()).toEqual([
+      'https://push.test/app',
+      `https://push.test/${SAFARI}`,
+    ]);
+    expect(f.email.sent.filter((m) => m.kind === 'turn')).toHaveLength(1);
+  });
+
+  test('an invite to a contact holding only the Safari profile pushes to the app profile', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    f.game.addRoom('ROOM2');
+    // A shared game makes Pete a contact of Alice's, via the Safari profile.
+    seatAndBind(f, SAFARI, 'ROOM1', 'p2', 'Pete');
+    seatAndBind(f, OTHER, 'ROOM1', 'p1', 'Alice');
+    await confirm(f, SAFARI, 'pete@example.com');
+    await confirm(f, APP, 'pete@example.com');
+    f.service.addSubscription(APP, sub('https://push.test/app', 'testgame'));
+    const contact = f.service.contacts(OTHER).find((c) => c.name === 'Pete')!;
+    const host = seatAndBind(f, OTHER, 'ROOM2', 'p1', 'Alice');
+    f.push.sent.length = 0;
+    const result = await f.service.invite({
+      playerKey: OTHER, gameId: 'testgame', roomId: 'ROOM2', playerId: 'p1', token: host.token,
+      contactId: contact.contactId,
+    });
+    expect(result).toMatchObject({ ok: true });
+    await drain();
+    expect(f.push.sent.map((p) => p.endpoint).sort()).toEqual([
+      'https://push.test/app',
+      `https://push.test/${SAFARI}`,
+    ]);
+    expect(f.push.sent[0]?.payload).toMatchObject({ kind: 'invite', roomId: 'ROOM2' });
+  });
+
+  test('an invite by email to a proven address also pushes to its profiles', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const host = seatAndBind(f, OTHER, 'ROOM1', 'p1', 'Alice');
+    await confirm(f, APP, 'pete@example.com');
+    f.service.addSubscription(APP, sub('https://push.test/app', 'testgame'));
+    f.push.sent.length = 0;
+    await f.service.invite({
+      playerKey: OTHER, gameId: 'testgame', roomId: 'ROOM1', playerId: 'p1', token: host.token,
+      email: 'pete@example.com',
+    });
+    await drain();
+    expect(f.push.sent.map((p) => p.endpoint)).toEqual(['https://push.test/app']);
+    expect(f.email.sent.filter((m) => m.kind === 'invite')).toHaveLength(1);
+  });
+});

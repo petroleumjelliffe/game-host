@@ -647,10 +647,14 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     await Promise.allSettled(jobs);
   }
 
+  /**
+   * Everyone bound to the seat, expanded to their persons (spec §Fan-out):
+   * a seat bound only in Safari still pushes to the installed app linked
+   * to the same address. Email is deduped by address downstream, so the
+   * linked, unbound profile costs one push and no second mail.
+   */
   function seatTargets(room: RoomRecord, playerId: string): ProfileRecord[] {
-    return (room.bindings[playerId] ?? [])
-      .map((id) => profiles.get(id))
-      .filter((p): p is ProfileRecord => p !== undefined);
+    return personProfiles(room.bindings[playerId] ?? []);
   }
 
   /**
@@ -785,6 +789,29 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     return out;
   }
 
+  /** The profiles behind a set of profile ids, expanded to their persons, each once. */
+  function personProfiles(profileIds: readonly string[]): ProfileRecord[] {
+    const seen = new Set<string>();
+    const out: ProfileRecord[] = [];
+    for (const id of profileIds) {
+      for (const member of personProfileIds(id)) {
+        if (seen.has(member)) continue;
+        seen.add(member);
+        const profile = profiles.get(member);
+        if (profile) out.push(profile);
+      }
+    }
+    return out;
+  }
+
+  /** Every profile proven on this address — the person behind an emailed invite. */
+  function profilesProvenOn(address: string): ProfileRecord[] {
+    const wanted = address.toLowerCase();
+    return [...profiles.values()].filter(
+      (p) => proven(p.email) && p.email.address.toLowerCase() === wanted,
+    );
+  }
+
   /** The confirmed addresses across a set of profiles, deduped, lowercased key. */
   function confirmedAddresses(profileIds: readonly string[]): { address: string; unsubscribeToken?: string }[] {
     const seen = new Set<string>();
@@ -878,21 +905,28 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     const roomUrl = `${origin ?? ''}${payload.url}`;
     if (record.target.kind === 'email') {
       if (!email || !emailUsable) return;
-      try {
-        // First contact: no unsubscribe token exists yet (claiming is what
-        // confirms the address and mints one), so no link — the mail says
-        // "ignore this and nothing more will be sent" instead.
-        await email.sendInvite(record.target.address, payload, roomUrl);
-      } catch (error) {
-        log(`! Invite email failed: ${String(error)}`);
+      const jobs: Promise<void>[] = [];
+      // A proven address has profiles behind it, and the installed app
+      // among them can only be reached by push (spec §Fan-out).
+      for (const profile of profilesProvenOn(record.target.address)) {
+        jobs.push(sendPush(profile, payload, { gameId: reg.gameId, fallbackToAnyScope: true }));
       }
+      // First contact: no unsubscribe token exists yet (claiming is what
+      // confirms the address and mints one), so no link — the mail says
+      // "ignore this and nothing more will be sent" instead.
+      jobs.push(
+        email.sendInvite(record.target.address, payload, roomUrl).catch((error: unknown) => {
+          log(`! Invite email failed: ${String(error)}`);
+        }),
+      );
+      await Promise.allSettled(jobs);
       return;
     }
     const mailed = new Set<string>();
     const jobs: Promise<void>[] = [];
-    for (const profileId of record.target.profileIds) {
-      const profile = profiles.get(profileId);
-      if (!profile) continue;
+    // The contact holds the profiles the inviter has shared a seat with —
+    // on an iPhone, the Safari one, which has no push. Expand to the person.
+    for (const profile of personProfiles(record.target.profileIds)) {
       // Scope-preferred with any-scope fallback — the invite exception.
       jobs.push(sendPush(profile, payload, { gameId: reg.gameId, fallbackToAnyScope: true }));
       if (email && emailEligible(profile)) {
