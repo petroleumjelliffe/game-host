@@ -370,3 +370,33 @@ describe('fan-out reaches the person, not only the bound profile', () => {
     expect(f.email.sent.filter((m) => m.kind === 'invite')).toHaveLength(1);
   });
 });
+
+describe('signOut', () => {
+  test('drops the address and every binding, keeps push and prefs; a second call is a no-op', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    f.game.addRoom('ROOM2');
+    seatAndBind(f, APP, 'ROOM1', 'p1', 'Pete');
+    seatAndBind(f, APP, 'ROOM2', 'p1', 'Pete');
+    seatAndBind(f, OTHER, 'ROOM1', 'p2', 'Alice');
+    await confirm(f, APP, 'pete@example.com');
+    f.service.setPrefs(APP, { email: false });
+
+    f.service.signOut(APP);
+    const settings = f.service.settings(APP);
+    expect(settings.email).toBeNull();
+    expect(settings.prefs).toEqual({ push: true, email: false });
+    expect(settings.pushEndpoints).toEqual([`https://push.test/${APP}`]);
+    expect(f.service.me(APP).seats).toEqual([]);
+    // The other person's binding on the same room is untouched.
+    expect(f.service.me(OTHER).seats.map((s) => s.playerId)).toEqual(['p2']);
+    // No turn reaches the signed-out device.
+    f.push.sent.length = 0;
+    f.reporter.turnChanged('ROOM1', 'p1', 'turn-1');
+    await wait(30);
+    expect(f.push.sent).toEqual([]);
+
+    expect(() => f.service.signOut(APP)).not.toThrow();
+    expect(() => f.service.signOut('never-seen-key-0123456789')).not.toThrow();
+  });
+});

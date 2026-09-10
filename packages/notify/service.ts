@@ -275,6 +275,13 @@ export interface NotifyService extends TurnNotifier {
   setPrefs(playerKey: string, prefs: Partial<NotifyPrefs>): void;
   submitEmail(playerKey: string, address: string): Promise<EmailSubmitResult>;
   removeEmail(playerKey: string): void;
+  /**
+   * Sign out (spec §Sign out): the address goes and so does every seat
+   * binding, so the device stops receiving turns for seats it no longer
+   * holds. Push subscriptions and prefs stay — they are the device's, and
+   * signing in again must not re-ask for permission. Per device only.
+   */
+  signOut(playerKey: string): void;
   confirmEmail(token: string): ConfirmResult;
   unsubscribeEmail(token: string): boolean;
   pushPublicKey(): string | null;
@@ -1239,6 +1246,27 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       if (!profile?.email) return;
       delete profile.email;
       saveProfile(profile);
+    },
+
+    signOut(playerKey): void {
+      const profileId = profileIdFor(playerKey);
+      const profile = profiles.get(profileId);
+      if (!profile) return;
+      if (profile.email) {
+        delete profile.email;
+        saveProfile(profile);
+      }
+      for (const room of rooms.values()) {
+        let changed = false;
+        for (const [playerId, bound] of Object.entries(room.bindings)) {
+          if (!bound.includes(profileId)) continue;
+          const rest = bound.filter((id) => id !== profileId);
+          if (rest.length === 0) delete room.bindings[playerId];
+          else room.bindings[playerId] = rest;
+          changed = true;
+        }
+        if (changed) saveRoom(room);
+      }
     },
 
     confirmEmail(token): ConfirmResult {
