@@ -1,10 +1,19 @@
-// The entry list: every room this device holds a seat in, summarized by the
-// server. One POST per mount — the list is a lobby, not a live view; the
-// room page is where live state lives. A room the server disowns gets its
-// identity cleared so it never haunts the list again.
+// The entry list: restore first, then list. Restore (spec 2026-09-09
+// §Restore) asks the notify service for every seat the person behind this
+// device's key holds and writes each into the identity store — so a
+// freshly installed app that has signed in lists the same games Safari
+// does. Then the summaries call runs exactly as before over whatever the
+// store holds. A room the server disowns gets its identity cleared so it
+// never haunts the list again.
+//
+// Re-run on visibility, not on an interval: the iOS sign-in flow is "leave
+// for Mail, tap the link, come back", and a backgrounded app runs no timers.
 
-import { useEffect, useState } from 'react';
-import { listRooms, clearIdentity } from '../net/identity';
+import { useCallback, useEffect, useState } from 'react';
+import { fetchMine, type MineInvite } from '@game-host/notify/client/api';
+import { listRooms, clearIdentity, saveIdentity } from '../net/identity';
+import { getPlayerKey } from '../notify/playerKey';
+import { GAME_ID } from '../notify/gameId';
 import type { RoomSummary } from '../../session/protocol';
 
 /** The list only ever holds rooms the server still knows about — the
@@ -29,14 +38,47 @@ export interface MyGame {
 const summariesUrl = () =>
   `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}api/summaries`;
 
-export function useMyGames(): { games: MyGame[] | null } {
+export function useMyGames(): {
+  games: MyGame[] | null;
+  /** Live invites to this game addressed to the person. */
+  invites: MineInvite[];
+  /** The signed-in address, or null. */
+  address: string | null;
+  /** True once /notify/me answered at all; false on the standalone dev server. */
+  signedInKnown: boolean;
+  refresh(): void;
+} {
   const [games, setGames] = useState<MyGame[] | null>(null);
+  const [invites, setInvites] = useState<MineInvite[]>([]);
+  const [address, setAddress] = useState<string | null>(null);
+  const [signedInKnown, setSignedInKnown] = useState(false);
+  const [epoch, setEpoch] = useState(0);
+  const refresh = useCallback(() => { setEpoch((e) => e + 1); }, []);
+
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { document.removeEventListener('visibilitychange', onVisible); };
+  }, [refresh]);
 
   useEffect(() => {
     let cancelled = false;
-    const rooms = listRooms();
-    if (rooms.length === 0) { setGames([]); return; }
     void (async () => {
+      const playerKey = getPlayerKey();
+      const mine = playerKey === null ? null : await fetchMine(playerKey);
+      if (cancelled) return;
+      if (mine !== null) {
+        for (const seat of mine.seats) {
+          if (seat.game !== GAME_ID) continue;
+          saveIdentity(seat.roomId, { playerId: seat.playerId, token: seat.token, name: seat.name });
+        }
+        setAddress(mine.address);
+        setInvites(mine.invites.filter((i) => i.game === GAME_ID));
+        setSignedInKnown(true);
+      }
+
+      const rooms = listRooms();
+      if (rooms.length === 0) { setGames([]); return; }
       try {
         const res = await fetch(summariesUrl(), {
           method: 'POST',
@@ -69,7 +111,7 @@ export function useMyGames(): { games: MyGame[] | null } {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [epoch]);
 
-  return { games };
+  return { games, invites, address, signedInKnown, refresh };
 }

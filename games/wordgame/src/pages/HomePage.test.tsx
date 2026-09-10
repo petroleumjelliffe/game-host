@@ -6,6 +6,7 @@ import { HomePage, type HomePageProps } from './HomePage';
 import type { Connection } from '../net/connection';
 import type { JoinedMessage, RejectedMessage } from '@game-host/lobby/protocol/protocol';
 import type { NotifyStatus } from '../notify/useNotifyStatus';
+import type { Mine } from '@game-host/notify/client/api';
 import type { RoomSummary } from '../../session/protocol';
 
 type KnownSummary = Extract<RoomSummary, { known: true }>;
@@ -32,6 +33,8 @@ vi.mock('../net/identity', () => ({
   rememberedName: (...args: unknown[]) => rememberedNameMock(...args),
   saveIdentity: (...args: unknown[]) => saveIdentityMock(...args),
 }));
+// The restore call needs a device key; a fixed one keeps localStorage out of it.
+vi.mock('../notify/playerKey', () => ({ getPlayerKey: () => 'k'.repeat(24) }));
 
 const fetchMock = vi.fn();
 
@@ -86,15 +89,19 @@ function playingRoom(roomId: string, opts: { yourTurn: boolean }): KnownSummary 
 
 /** Wires `listRooms()` and the `/api/summaries` fetch together from a set of
  * already-known summaries — the ordinary case where the server still
- * recognizes every room this device remembers. */
-function mockRooms(summaries: KnownSummary[]) {
+ * recognizes every room this device remembers. `mine` is what /notify/me
+ * answers; null is the standalone dev server, which has no such route. */
+function mockRooms(summaries: KnownSummary[], mine: Mine | null = null) {
   listRoomsMock.mockReturnValue(
     summaries.map((s) => ({
       roomId: s.roomId,
       identity: { playerId: `p-${s.roomId}`, token: `t-${s.roomId}`, name: 'You' },
     })),
   );
-  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ summaries }) } as Response);
+  fetchMock.mockImplementation((input: string) =>
+    Promise.resolve(input === '/notify/me'
+      ? ({ ok: mine !== null, json: async () => mine ?? {} } as Response)
+      : ({ ok: true, json: async () => ({ summaries }) } as Response)));
 }
 
 function RoomMarker() {
