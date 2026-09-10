@@ -263,3 +263,47 @@ describe('me: the person derived from a confirmed address', () => {
     }
   });
 });
+
+describe('acceptInvite: claim by the hash the server holds', () => {
+  async function invitedRoom(f: Fixture): Promise<void> {
+    f.game.addRoom('ROOM1');
+    const host = seatAndBind(f, OTHER, 'ROOM1', 'p1', 'Alice');
+    await confirm(f, APP, 'pete@example.com');
+    await f.service.invite({
+      playerKey: OTHER, gameId: 'testgame', roomId: 'ROOM1', playerId: 'p1', token: host.token,
+      email: 'pete@example.com',
+    });
+    await drain();
+  }
+
+  test('claims the pending seat, binds the asking profile, and answers credentials', async () => {
+    const f = await makeFixture();
+    await invitedRoom(f);
+    const creds = f.service.acceptInvite(APP, 'testgame', 'ROOM1');
+    expect(creds).toMatchObject({ playerId: 'p2', inviterName: 'Alice' });
+    expect(f.game.pendingIn('ROOM1')).toEqual([]);
+    // Bound: restore now lists it as a seat, and the invite is gone.
+    const mine = f.service.me(APP);
+    expect(mine.seats.map((s) => s.playerId)).toEqual(['p2']);
+    expect(mine.invites).toEqual([]);
+  });
+
+  test('a second accept, and an accept by someone it was not for, are one shaped null', async () => {
+    const f = await makeFixture();
+    await invitedRoom(f);
+    expect(f.service.acceptInvite(SAFARI, 'testgame', 'ROOM1')).toBeNull();
+    expect(f.service.acceptInvite(APP, 'testgame', 'ROOM1')).not.toBeNull();
+    expect(f.service.acceptInvite(APP, 'testgame', 'ROOM1')).toBeNull();
+  });
+
+  test('an invite claimed by link in Safari first refuses the app, whose restore then shows the seat', async () => {
+    const f = await makeFixture();
+    await invitedRoom(f);
+    const mail = f.email.sent.find((m) => m.kind === 'invite')!;
+    const token = mail.url.split('invite=')[1]!;
+    expect(f.service.claimInvite(token, SAFARI)).not.toBeNull();
+    expect(f.service.acceptInvite(APP, 'testgame', 'ROOM1')).toBeNull();
+    // Safari's claim confirmed the address on its profile, so the app is linked.
+    expect(f.service.me(APP).seats.map((s) => s.playerId)).toEqual(['p2']);
+  });
+});

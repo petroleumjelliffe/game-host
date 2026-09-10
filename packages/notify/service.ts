@@ -222,6 +222,17 @@ export interface NotifyService extends TurnNotifier {
     playerKey?: string,
   ): (SeatCredentials & { inviterName: string | null }) | null;
   /**
+   * The in-app accept (spec §Accept): claim one of the person's live
+   * invites for this room by the hash the server already stores. Same
+   * shaped null for every failure, including "someone linked to you
+   * claimed it by link a moment ago" — the client re-runs `me` on null.
+   */
+  acceptInvite(
+    playerKey: string,
+    gameId: string,
+    roomId: string,
+  ): (SeatCredentials & { inviterName: string | null }) | null;
+  /**
    * "That's me" on the pre-join chooser: mail the address already on a seat
    * a way back in. An occupied seat gets its derived sign-in (`?key=`) link;
    * a reserved seat gets its live invite resent to the original target; an
@@ -478,6 +489,59 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     if (bound.includes(profileId)) return false;
     bound.push(profileId);
     return true;
+  }
+
+  /**
+   * The claim itself, shared by the emailed link (`claimInvite`) and the
+   * in-app accept (`acceptInvite`): convert the pending seat, stamp the
+   * record, and — with a key — confirm an emailed address and bind the
+   * claiming device.
+   */
+  function finishClaim(
+    record: InviteRecord,
+    playerKey: string | null,
+  ): (SeatCredentials & { inviterName: string | null }) | null {
+    const reg = games.get(record.gameId);
+    const creds = reg?.claimSeat?.(record.roomId, record.tokenHash) ?? null;
+    if (!creds) return null;
+    record.claimedAt = now();
+    saveInvite(record);
+    if (playerKey !== null) {
+      const profile = profileFor(playerKey);
+      // For an email invite, claiming IS the double-opt-in: at least as
+      // strong a consent signal as a confirm click. Never clobbers an
+      // address the profile already carries.
+      if (
+        record.target.kind === 'email' &&
+        (profile.email === undefined || profile.email.address === record.target.address)
+      ) {
+        profile.email = {
+          address: record.target.address,
+          status: 'confirmed',
+          unsubscribeToken: profile.email?.unsubscribeToken ?? newToken(),
+        };
+      }
+      saveProfile(profile);
+      // Bind the claiming device — lobby phase: the ledger waits for the
+      // game to start.
+      const key = roomKey(record.gameId, record.roomId);
+      let room = rooms.get(key);
+      if (!room) {
+        room = {
+          key,
+          gameId: record.gameId,
+          roomId: record.roomId,
+          savedAt: now(),
+          bindings: {},
+          lastNotified: {},
+        };
+        rooms.set(key, room);
+      }
+      if (addBinding(room, creds.playerId, profile.profileId)) saveRoom(room);
+    }
+    // Who saved the seat, for the landing's greeting — a name the invite
+    // already showed, never anything more.
+    return { ...creds, inviterName: profiles.get(record.inviterProfileId)?.name ?? null };
   }
 
   /**
@@ -1346,47 +1410,23 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       const record = invites.get(sha256hex(inviteToken));
       // One shaped null: unknown, revoked, already claimed, dead room.
       if (!record || record.claimedAt !== undefined || record.revokedAt !== undefined) return null;
-      const reg = games.get(record.gameId);
-      const creds = reg?.claimSeat?.(record.roomId, record.tokenHash) ?? null;
-      if (!creds) return null;
-      record.claimedAt = now();
-      saveInvite(record);
-      if (playerKey !== undefined && isPlayerKey(playerKey)) {
-        const profile = profileFor(playerKey);
-        // For an email invite, claiming IS the double-opt-in: at least as
-        // strong a consent signal as a confirm click. Never clobbers an
-        // address the profile already carries.
-        if (
-          record.target.kind === 'email' &&
-          (profile.email === undefined || profile.email.address === record.target.address)
-        ) {
-          profile.email = {
-            address: record.target.address,
-            status: 'confirmed',
-            unsubscribeToken: profile.email?.unsubscribeToken ?? newToken(),
-          };
-        }
-        saveProfile(profile);
-        // Bind the claiming device — lobby phase: the ledger waits for the
-        // game to start.
-        const key = roomKey(record.gameId, record.roomId);
-        let room = rooms.get(key);
-        if (!room) {
-          room = {
-            key,
-            gameId: record.gameId,
-            roomId: record.roomId,
-            savedAt: now(),
-            bindings: {},
-            lastNotified: {},
-          };
-          rooms.set(key, room);
-        }
-        if (addBinding(room, creds.playerId, profile.profileId)) saveRoom(room);
+      return finishClaim(record, playerKey !== undefined && isPlayerKey(playerKey) ? playerKey : null);
+    },
+
+    acceptInvite(playerKey, gameId, roomId) {
+      if (!GAME_ID.test(gameId) || !ROOM_ID.test(roomId)) return null;
+      const profileId = profileIdFor(playerKey);
+      const person = new Set(personProfileIds(profileId));
+      const wanted = personAddress(profileId);
+      for (const record of invitesLive()) {
+        if (record.gameId !== gameId || record.roomId !== roomId) continue;
+        const mine =
+          record.target.kind === 'profile'
+            ? record.target.profileIds.some((id) => person.has(id))
+            : wanted !== null && record.target.address.toLowerCase() === wanted;
+        if (mine) return finishClaim(record, playerKey);
       }
-      // Who saved the seat, for the landing's greeting — a name the invite
-      // already showed, never anything more.
-      return { ...creds, inviterName: profiles.get(record.inviterProfileId)?.name ?? null };
+      return null;
     },
 
     seatSignin(gameId, roomId, playerId): 'sent' | 'cooldown' {
