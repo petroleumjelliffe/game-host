@@ -145,7 +145,20 @@ export type RoomSummary =
       known: true;
       lifecycle: Lifecycle;
       capacity: number;
-      players: { name: string; score: number | null; isHost: boolean; isYou: boolean }[];
+      /**
+       * `isCurrent` and `isWinner` are flags rather than a name lookup
+       * against `currentPlayerName`/`winnerNames`: the lobby never made
+       * names unique, and two Sams would otherwise both wear the shaded
+       * chip (review finding, 2026-09-10).
+       */
+      players: {
+        name: string;
+        score: number | null;
+        isHost: boolean;
+        isYou: boolean;
+        isCurrent: boolean;
+        isWinner: boolean;
+      }[];
       yourTurn: boolean;
       currentPlayerName: string | null;
       /** Last committed move, when playing/over and the log has one. */
@@ -157,4 +170,12 @@ export type RoomSummary =
         at: number | null;
       } | null;
       winnerNames: string[] | null;
+      /**
+       * Where the current turn stands with the reminder machinery, stamped
+       * from the notify reporter (the same words as `NudgeState` in the
+       * host contract). Null when the game is not playing or no notify
+       * service is mounted — the entry card then shows no Nudge and no
+       * Reminded, rather than a button that cannot work.
+       */
+      nudge: 'unreachable' | 'waiting' | 'ready' | 'reminded' | null;
     };

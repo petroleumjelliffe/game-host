@@ -62,6 +62,8 @@ export interface ServerHandle {
 interface Built {
   game: MountedGame;
   rooms: RoomRegistry;
+  /** After restore: re-report every non-lobby room's turn to notify. */
+  reportTurns(): void;
 }
 
 // `import.meta.resolve`, not `import.meta.url`: the composed host is shipped
@@ -88,6 +90,7 @@ export async function mount(ctx: HostContext): Promise<MountedGame> {
   try {
     const restored = await built.rooms.restore();
     if (restored > 0) console.log(`✓ Restored ${restored} word game room(s)`);
+    built.reportTurns();
   } catch (e: unknown) {
     console.warn('! Word game restore failed, starting with no rooms:', e);
   }
@@ -134,7 +137,14 @@ function build(
   // health. `express.json()` is scoped to this one route, never `app.use`
   // global: global middleware in a shared process would land on the other
   // games and the menu too (the composed-host rule the CORS removal found).
-  app.post(`${BASE_PATH}/api/summaries`, express.json(), summariesHandler(rooms));
+  // The nudge state rides each row from the notify reporter registered just
+  // below — read through a closure, at request time, so the route can be
+  // registered here beside its sibling and still see the reporter.
+  app.post(
+    `${BASE_PATH}/api/summaries`,
+    express.json(),
+    summariesHandler(rooms, (roomId) => notifier?.nudgeState?.(roomId) ?? null),
+  );
 
   // Turn notifications, when the host runs the service. `moveCount` is the
   // turnKey: it increments on every applied move, so it is distinct per turn
@@ -288,6 +298,24 @@ function build(
       ...rooms,
       restore: (now?: number) =>
         rooms.restore(now, (roomId) => notifier?.roomRemoved(roomId)),
+    },
+    /**
+     * Re-report every restored room's turn to notify. Notify persists a
+     * per-room marker naming the current turn; this game's saves may
+     * restore a move behind (one-move-apart is the discipline, not
+     * zero), so after a boot the marker can name the *next* player while
+     * the board still waits on the previous one — and a nudge would then
+     * remind the wrong person. A same-turn re-report is a no-op inside
+     * notify; a differing one re-notifies the player the board actually
+     * waits on, which is exactly what a lost move needs. Finished rooms
+     * clear their marker; lobbies have nothing to report.
+     */
+    reportTurns(): void {
+      for (const room of rooms.all()) {
+        const lifecycle = room.lifecycle();
+        if (lifecycle === 'lobby') continue;
+        notifier?.turnChanged(room.id, room.actorId(), String(room.state()?.moveCount ?? 0));
+      }
     },
     game: {
       basePath: BASE_PATH,

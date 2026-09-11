@@ -116,7 +116,8 @@ export interface ProfileRecord {
 
 /**
  * The reminder bookkeeping: who the last turn notification went to, when,
- * and whether the 24h reminder has fired. Written under the same
+ * and whether this turn's one reminder (a player's nudge — there is no
+ * automatic one since 2026-09-10) has gone. Written under the same
  * marker-before-send discipline as `lastNotified`; cleared or replaced by
  * every `turnChanged` that supersedes it, so a reminder can never fire for
  * a turn already taken.

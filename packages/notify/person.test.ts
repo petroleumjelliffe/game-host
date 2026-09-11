@@ -10,7 +10,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NotifyGameRegistration } from '@game-host/host/contract.js';
-import { createNotifyService, type NotifyService } from './service.js';
+import { createNotifyService, NUDGE_MIN_AGE_MS, type NotifyService } from './service.js';
 import {
   fakeEmailSender,
   fakePushSender,
@@ -309,6 +309,28 @@ describe('acceptInvite: claim by the hash the server holds', () => {
 });
 
 describe('fan-out reaches the person, not only the bound profile', () => {
+  test('a nudge: the push lands on the linked app profile, the mail once at the address', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p2');
+    seatAndBind(f, SAFARI, 'ROOM1', 'p1', 'Pete');
+    await confirm(f, SAFARI, 'pete@example.com');
+    await confirm(f, APP, 'pete@example.com');
+    f.service.addSubscription(APP, sub('https://push.test/app', 'testgame'));
+    f.reporter.turnChanged('ROOM1', 'p1', 'turn-1');
+    await wait(30);
+    f.email.sent.length = 0;
+    f.push.sent.length = 0;
+    f.clock.now += NUDGE_MIN_AGE_MS;
+    expect(f.service.nudge({ gameId: 'testgame', roomId: 'ROOM1', playerId: 'p2', token: host.token })).toEqual({ ok: true });
+    await wait(30);
+    expect(f.push.sent.map((p) => p.endpoint).sort()).toEqual([
+      'https://push.test/app',
+      `https://push.test/${SAFARI}`,
+    ]);
+    expect(f.email.sent.filter((m) => m.kind === 'reminder').map((m) => m.to)).toEqual(['pete@example.com']);
+  });
+
   test('a turn: one push to the linked app profile, one email to the address — never two mails', async () => {
     const f = await makeFixture();
     f.game.addRoom('ROOM1');

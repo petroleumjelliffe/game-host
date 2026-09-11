@@ -66,7 +66,7 @@ export interface EmailSender {
    */
   sendConfirmation(to: string, confirmUrl: string, context: ConfirmationContext): Promise<void>;
   sendTurn(to: string, payload: TurnPayload, roomUrl: string, unsubscribeUrl: string): Promise<void>;
-  /** The 24h nudge: same content as the turn mail, subject marked as a reminder. */
+  /** The nudge: same content as the turn mail, subject marked as a reminder. */
   sendTurnReminder(
     to: string,
     payload: TurnPayload,

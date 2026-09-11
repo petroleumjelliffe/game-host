@@ -140,3 +140,29 @@ export function signOut(playerKey: string): Promise<boolean> {
 export function setEmailPref(playerKey: string, email: boolean): Promise<boolean> {
   return okPost('/prefs', { playerKey, email });
 }
+
+/**
+ * What the entry list shows after a Nudge: 'sent' or 'reminded' both flip
+ * the button to "Reminded ✓" (a turn already reminded is the state the
+ * button was trying to reach), and 'failed' leaves it standing for
+ * whatever refused — a stale seat, an unreachable player, a network blip.
+ */
+export type NudgeOutcome = 'sent' | 'reminded' | 'failed';
+
+/** Ask for the current turn's reminder now, from a seat in the room. */
+export async function nudgeTurn(args: {
+  game: string;
+  roomId: string;
+  playerId: string;
+  token: string;
+}): Promise<NudgeOutcome> {
+  try {
+    const res = await notifyPost('/nudge', { ...args });
+    if (res.ok) return 'sent';
+    const body: unknown = await res.json().catch(() => null);
+    const reason = typeof body === 'object' && body !== null ? (body as { reason?: unknown }).reason : null;
+    return reason === 'alreadyReminded' ? 'reminded' : 'failed';
+  } catch {
+    return 'failed';
+  }
+}

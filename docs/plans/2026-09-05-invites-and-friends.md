@@ -29,7 +29,9 @@ Four decisions were put to the owner before planning; their answers are
 the shape of this plan.
 
 1. **The whole parent spec ships**, seat keys and the 24-hour auto-remind
-   included — not just the pieces the lobby flow strictly needs.
+   included — not just the pieces the lobby flow strictly needs. *(The
+   auto-remind was later removed, 2026-09-10 — see
+   [2026-09-10-turn-nudge.md](2026-09-10-turn-nudge.md).)*
 2. **Claims are lobby-only in this slice.** `beginGame` auto-revokes any
    unclaimed reserved seat, so a pending seat never exists inside a
    running game. The parent spec's mid-game claim (pending seat outside
@@ -416,7 +418,10 @@ posture.
 - **Fan-out.** The send loop iterates the seat's binding set: email
   deduped by address across profiles, dead push endpoints pruned as
   today. This is parent-spec §5 finishing what `bindSeat` started.
-- **Auto-remind.** Not a naive 24-hour `setTimeout`: the process
+- **Auto-remind.** *(Removed 2026-09-10 — owner: "don't autoremind". The
+  marker described here survives as the anchor for the manual Nudge; see
+  [2026-09-10-turn-nudge.md](2026-09-10-turn-nudge.md). The rest of this
+  bullet is history.)* Not a naive 24-hour `setTimeout`: the process
   restarts on every deploy. `fire` records
   `currentTurn = { playerId, turnKey, notifiedAt }`, and **`turnChanged`
   clears any `currentTurn` whose `turnKey` it supersedes** (persisted) —

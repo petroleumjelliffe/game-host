@@ -96,8 +96,14 @@ test('summarizes a held seat and refuses a bad token identically to a missing ro
     capacity: MAX_PLAYERS,
     yourTurn: expect.any(Boolean),
   });
-  const known = body.summaries[0] as { players: object[]; lastMove: { kind: string } | null };
+  const known = body.summaries[0] as {
+    players: { isCurrent: boolean; isWinner: boolean }[];
+    lastMove: { kind: string } | null;
+  };
   expect(known.players.every((p) => !('rack' in p))).toBe(true);
+  // Exactly one seat is the current player, by id — not by name.
+  expect(known.players.filter((p) => p.isCurrent)).toHaveLength(1);
+  expect(known.players.every((p) => !p.isWinner)).toBe(true);
   expect(known.lastMove).toMatchObject({ kind: 'pass' });
   expect(body.summaries[1]).toEqual({ roomId, known: false });
   expect(body.summaries[2]).toEqual({ roomId: 'ZZZZ', known: false });
@@ -115,12 +121,38 @@ test('a lobby-stage room summarizes with no game state yet', async () => {
     known: true,
     lifecycle: 'lobby',
     capacity: MAX_PLAYERS,
-    players: [{ name: 'Ada', score: null, isHost: true, isYou: true }],
+    players: [{ name: 'Ada', score: null, isHost: true, isYou: true, isCurrent: false, isWinner: false }],
     yourTurn: false,
     currentPlayerName: null,
     lastMove: null,
     winnerNames: null,
+    nudge: null,
   }]);
+});
+
+test('a playing room carries the reporter\'s nudge state; a finished or lobby room never does', async () => {
+  // The handler alone, over a registry stub: the state is the reporter's
+  // word, and the handler's job is only to ask at the right lifecycle.
+  const { summariesHandler } = await import('./summaries.js');
+  const room = (lifecycle: 'lobby' | 'playing' | 'over') => ({
+    players: [{ id: 'p1', token: 't', name: 'Ada', isHost: true }],
+    state: () => null,
+    actorId: () => null,
+    lifecycle: () => lifecycle,
+  });
+  const asked: string[] = [];
+  const handler = summariesHandler(
+    { get: (id: string) => (id === 'LOBBY' ? room('lobby') : id === 'PLAY' ? room('playing') : id === 'OVER' ? room('over') : undefined) } as never,
+    (roomId) => { asked.push(roomId); return 'ready'; },
+  );
+  let sent: unknown;
+  handler(
+    { body: { rooms: ['LOBBY', 'PLAY', 'OVER'].map((roomId) => ({ roomId, playerId: 'p1', token: 't' })) } } as never,
+    { json: (v: unknown) => { sent = v; }, status: () => ({ json: () => {} }) } as never,
+  );
+  const rows = (sent as { summaries: { roomId: string; nudge: unknown }[] }).summaries;
+  expect(rows.map((r) => [r.roomId, r.nudge])).toEqual([['LOBBY', null], ['PLAY', 'ready'], ['OVER', null]]);
+  expect(asked).toEqual(['PLAY']);
 });
 
 test('silently caps a request at 20 rooms — extras dropped, not an error', async () => {

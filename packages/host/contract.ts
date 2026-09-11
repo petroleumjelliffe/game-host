@@ -66,6 +66,15 @@ export interface NotifyGameRegistration {
   getSeatCredentials?(roomId: string, playerId: string): { playerId: string; token: string; name: string } | null;
 }
 
+/**
+ * Where the current turn stands with the nudge, for an entry list that
+ * wants to offer the button honestly. `unreachable`: nobody is bound to the
+ * current player's seat (or no turn has been reported), so a nudge would
+ * reach no one. `waiting`: the turn push is too fresh to nudge yet.
+ * `ready`: it can be nudged. `reminded`: this turn's one nudge has gone.
+ */
+export type NudgeState = 'unreachable' | 'waiting' | 'ready' | 'reminded';
+
 /** What a registered game calls back into. */
 export interface GameTurnReporter {
   /**
@@ -85,6 +94,13 @@ export interface GameTurnReporter {
   seatVacated?(roomId: string, playerId: string): void;
   /** The room is gone; drop its bindings and markers. */
   roomRemoved(roomId: string): void;
+  /**
+   * A pure read of the current turn's reminder state, stamped onto each
+   * row of a game's room list so the entry screen can show Nudge, Reminded,
+   * or nothing. Optional so a reporter without it reads as "no nudging
+   * here" rather than as a broken one.
+   */
+  nudgeState?(roomId: string): NudgeState;
 }
 
 /** The host-level turn-notification service, as lent to a game. */

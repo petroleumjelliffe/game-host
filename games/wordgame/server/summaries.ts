@@ -10,13 +10,19 @@ import { MAX_PLAYERS } from '../engine/constants.js';
 import type { RoomSummary } from '../session/protocol.js';
 import type { RoomRegistry } from './rooms.js';
 
+/** The notify reporter's per-room read, or nothing when no service is mounted. */
+export type NudgeStateReader = (roomId: string) => 'unreachable' | 'waiting' | 'ready' | 'reminded' | null;
+
 // Cap the per-request workload: 20 covers any honest device's localStorage
 // several times over, and extra entries are dropped rather than erroring so
 // a wild client still gets its first 20 answered (documented 2026-08-31;
 // the silent-drop shape was a review finding on the redesign branch).
 const MAX_ROOMS = 20;
 
-export function summariesHandler(rooms: Pick<RoomRegistry, 'get'>) {
+export function summariesHandler(
+  rooms: Pick<RoomRegistry, 'get'>,
+  nudgeState: NudgeStateReader = () => null,
+) {
   return (req: Request, res: Response): void => {
     const body: unknown = req.body;
     const list = (typeof body === 'object' && body !== null && Array.isArray((body as Record<string, unknown>).rooms))
@@ -40,6 +46,7 @@ export function summariesHandler(rooms: Pick<RoomRegistry, 'get'>) {
 
       const state = room.state();
       const currentId = room.actorId();
+      const lifecycle = room.lifecycle();
       const log = state?.log ?? [];
       const last = log[log.length - 1];
       const lastName = last === undefined ? null
@@ -48,13 +55,15 @@ export function summariesHandler(rooms: Pick<RoomRegistry, 'get'>) {
       return {
         roomId,
         known: true,
-        lifecycle: room.lifecycle(),
+        lifecycle,
         capacity: MAX_PLAYERS,
         players: room.players.map((p) => ({
           name: p.name,
           score: state?.players.find((sp) => sp.id === p.id)?.score ?? null,
           isHost: p.isHost,
           isYou: p.id === playerId,
+          isCurrent: currentId === p.id,
+          isWinner: state?.final?.winnerIds.includes(p.id) ?? false,
         })),
         yourTurn: currentId === playerId,
         currentPlayerName: state?.players.find((p) => p.id === currentId)?.name ?? null,
@@ -67,6 +76,10 @@ export function summariesHandler(rooms: Pick<RoomRegistry, 'get'>) {
         },
         winnerNames: state?.final === undefined ? null
           : state.final.winnerIds.map((id) => state.players.find((p) => p.id === id)?.name ?? id),
+        // Only a turn in progress has a reminder state; a finished game's
+        // stale marker (cleared by the null turnChanged, but belt and
+        // braces) must never put a Nudge on a FINISHED card.
+        nudge: lifecycle === 'playing' ? nudgeState(roomId) : null,
       };
     });
     res.json({ summaries });

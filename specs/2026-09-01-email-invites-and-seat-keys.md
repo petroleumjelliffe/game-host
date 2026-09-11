@@ -36,7 +36,10 @@ The design held; six deltas, each argued in the plan:
   and hourly), not a 24h timer — the process restarts on every deploy.
   `turnChanged` clears a superseded marker so a skipped-send turn cannot
   leave a stale reminder armed. Eviction in wordgame now actually calls
-  `roomRemoved`, which nothing had ever called.
+  `roomRemoved`, which nothing had ever called. *Superseded 2026-09-10:
+  the sweep is removed; the marker stays as the anchor for a player's
+  Nudge, the only reminder there is — see
+  [docs/plans/2026-09-10-turn-nudge.md](../docs/plans/2026-09-10-turn-nudge.md).*
 - **Claims are lobby-only in this slice**: `beginGame` auto-revokes
   unclaimed reservations. §2's mid-game claim (rotation insertion,
   tray-on-claim) is the deferred follow-up, likeliest to arrive with
@@ -245,6 +248,12 @@ same seat behave identically to one person for everything that matters
 per-game, without ever being merged.
 
 ### 6. Auto-remind at 24 hours
+
+*Superseded 2026-09-10: the automatic reminder is removed and the manual
+nudge this section deferred is the only reminder — an hour after the turn
+push at the earliest, once per turn, from the entry list. See
+[docs/plans/2026-09-10-turn-nudge.md](../docs/plans/2026-09-10-turn-nudge.md).
+The section below is the original design.*
 
 If the turn has not changed 24 hours after the turn notification, notify
 sends one reminder — same `turnKey`, second send, subject line marked as a

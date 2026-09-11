@@ -14,7 +14,10 @@ import type { RosterMessage } from '@game-host/lobby/protocol/protocol.js';
 import { BASE_PATH } from '../basePath.js';
 import { createDictionary } from '../engine/dictionary.js';
 import { PROTOCOL_VERSION, type StateMessage } from '../session/protocol.js';
-import { createServer, type ServerHandle } from './index.js';
+import express from 'express';
+import { createServer as createHttpServer } from 'node:http';
+import type { TurnNotifier } from '@game-host/host/contract.js';
+import { createServer, mount, type ServerHandle } from './index.js';
 import { createFileStore, type SavedRoom } from './store.js';
 import {
   ACTIVE_MAX_AGE_MS,
@@ -195,6 +198,45 @@ test('a lobby-stage room survives a restart: seats, names, host — nobody conne
   const begun = next<StateMessage>(back, 'state');
   back.emit('beginGame');
   expect((await begun).view.moveCount).toBe(0);
+});
+
+test('mount re-reports every restored non-lobby turn to notify, after restore', async () => {
+  // Notify's per-room marker names the current turn; this game may restore
+  // a move behind. The re-report is what keeps a nudge aimed at the player
+  // the board actually waits on (docs/plans/2026-09-10-turn-nudge.md).
+  const store = createFileStore(dir);
+  const now = Date.now();
+  const seats = [
+    { id: 'p1', name: 'Ada', token: 't1', isHost: true, connected: false },
+    { id: 'p2', name: 'Ben', token: 't2', isHost: false, connected: false },
+  ];
+  const live = twoPlayerState();
+  const done = twoPlayerState();
+  done.stage = 'over';
+  await store.save({ roomId: 'LIVE', version: 1, protocolVersion: PROTOCOL_VERSION, savedAt: now, players: seats, state: live });
+  await store.save({ roomId: 'DONE', version: 1, protocolVersion: PROTOCOL_VERSION, savedAt: now, players: seats, state: done });
+  await store.save({ roomId: 'LOBBY', version: 1, protocolVersion: PROTOCOL_VERSION, savedAt: now, players: [seats[0]!] });
+  await store.settled();
+
+  const calls: [string, string | null, string][] = [];
+  const notify: TurnNotifier = {
+    registerGame: () => ({
+      turnChanged: (roomId, playerId, turnKey) => { calls.push([roomId, playerId, turnKey]); },
+      roomRemoved: () => {},
+    }),
+  };
+  const app = express();
+  const httpServer = createHttpServer(app);
+  const game = await mount({ app, httpServer, dataDir: dir, notify });
+  try {
+    expect(calls.map(([roomId]) => roomId).sort()).toEqual(['DONE', 'LIVE']);
+    const liveCall = calls.find(([roomId]) => roomId === 'LIVE')!;
+    expect(['p1', 'p2']).toContain(liveCall[1]);
+    expect(liveCall[2]).toBe(String(live.moveCount));
+    expect(calls.find(([roomId]) => roomId === 'DONE')![1]).toBeNull(); // clears the marker
+  } finally {
+    await game.close();
+  }
 });
 
 test('eviction: finished rooms age out at 30 days, live ones at 60', async () => {

@@ -2,14 +2,14 @@
 // The invite layer and the friends layer: the co-player ledger, the contacts
 // listing (proved on serialized output, never intent), invite by contact and
 // by email with the caps, resend vs revoke, claim as double-opt-in, seat-key
-// redemption, the legacy-bindings migration, and the 24h reminder sweep.
+// redemption, the legacy-bindings migration, and the Nudge.
 
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NotifyGameRegistration } from '@game-host/host/contract.js';
-import { createNotifyService, type NotifyService } from './service.js';
+import { createNotifyService, NUDGE_MIN_AGE_MS, type NotifyService } from './service.js';
 import {
   fakeEmailSender,
   fakePushSender,
@@ -702,67 +702,148 @@ describe('the seat binding set', () => {
   });
 });
 
-describe('the 24h reminder', () => {
-  test('sweeps once per turn, survives restarts, never fires for a superseded turn', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'notify-invites-'));
-    const f = await makeFixture(dir);
-    f.game.addRoom('ROOM1');
-    seatAndBind(f, SAM_KEY, 'ROOM1', 'p2', 'Sam');
+describe('the Nudge button', () => {
+  const nudgeFrom = (f: Fixture, seat: { playerId: string; token: string }) =>
+    f.service.nudge({ gameId: 'testgame', roomId: 'ROOM1', playerId: seat.playerId, token: seat.token });
 
-    f.reporter.turnChanged('ROOM1', 'p2', 'turn-1');
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(f.push.sent).toHaveLength(1);
-
-    // Under 24h: the sweep holds.
-    f.clock.now += 23 * 60 * 60 * 1000;
-    f.service.startReminderSweep();
-    await drain();
-    expect(f.push.sent).toHaveLength(1);
-
-    // Past 24h — and across a restart, in the same data dir: the marker is
-    // durable, so a deploy cannot forget a pending reminder.
-    await f.service.close();
-    const push2 = fakePushSender();
-    const service2 = await createNotifyService({
-      dataDir: dir,
-      debounceMs: 5,
-      channels: { push: push2 },
-      now: () => f.clock.now + 2 * 60 * 60 * 1000,
-      log: () => {},
-    });
-    cleanups.push(async () => {
-      await service2.close();
-    });
-    const game2 = fakeGame();
-    service2.registerGame(game2.registration);
-    game2.addRoom('ROOM1');
-    game2.seat('ROOM1', 'p2');
-    service2.startReminderSweep();
-    await drain();
-    expect(push2.sent).toHaveLength(1);
-
-    // One per turn: a second sweep sends nothing more.
-    service2.startReminderSweep();
-    await drain();
-    expect(push2.sent).toHaveLength(1);
-  });
-
-  test('a superseded turn clears the marker even when its own send was skipped', async () => {
+  test('sends this turn\'s reminder once, an hour or more after the turn push', async () => {
     const f = await makeFixture();
     f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
     seatAndBind(f, SAM_KEY, 'ROOM1', 'p2', 'Sam');
+
+    // Before any turn: nothing to remind against.
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('unreachable');
+    expect(nudgeFrom(f, host)).toEqual({ ok: false, reason: 'unreachable' });
 
     f.reporter.turnChanged('ROOM1', 'p2', 'turn-1');
     await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(f.push.sent).toHaveLength(1); // notified for turn-1
+    expect(f.push.sent).toHaveLength(1);
 
-    // The turn advances; the marker for turn-1 must die with it, or the
-    // sweep would remind for a turn already taken.
-    f.reporter.turnChanged('ROOM1', 'p1', 'turn-2');
-    f.clock.now += 25 * 60 * 60 * 1000;
-    f.service.startReminderSweep();
+    // Fresh turn: the player just got the push. Waiting, and refused.
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('waiting');
+    expect(nudgeFrom(f, host)).toEqual({ ok: false, reason: 'tooSoon' });
+    f.clock.now += NUDGE_MIN_AGE_MS;
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('ready');
+
+    // The current player cannot nudge themself; a wrong token is refused.
+    const sam = { playerId: 'p2', token: 'token-p2-ROOM1' };
+    expect(nudgeFrom(f, sam)).toEqual({ ok: false, reason: 'yourTurn' });
+    expect(nudgeFrom(f, { playerId: 'p1', token: 'stolen' })).toEqual({ ok: false, reason: 'seatRefused' });
+
+    // The host nudges: dual-channel reminder, marker stamped, state flips.
+    expect(nudgeFrom(f, host)).toEqual({ ok: true });
     await drain();
-    expect(f.push.sent).toHaveLength(1); // no reminder — turn-1 is gone
+    expect(f.push.sent).toHaveLength(2);
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('reminded');
+    expect(nudgeFrom(f, host)).toEqual({ ok: false, reason: 'alreadyReminded' });
+
+    // The next turn starts fresh — and p1, unbound, is unreachable.
+    f.reporter.turnChanged('ROOM1', 'p1', 'turn-2');
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('unreachable');
+  });
+
+  test('a nudge is not presence-gated: the nudger asked', async () => {
+    const f = await makeFixture();
+    f.game.registration.isConnected = () => true;
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
+    seatAndBind(f, SAM_KEY, 'ROOM1', 'p2', 'Sam');
+    f.reporter.turnChanged('ROOM1', 'p2', 'turn-1');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    f.clock.now += NUDGE_MIN_AGE_MS;
+    expect(nudgeFrom(f, host)).toEqual({ ok: true });
+    await drain();
+    expect(f.push.sent).toHaveLength(2);
+  });
+
+  test('a nudge supersedes a turn email still waiting out its debounce', async () => {
+    // A debounce longer than the nudge floor is one env var away; the two
+    // mails must not land a minute apart.
+    const dir = await mkdtemp(join(tmpdir(), 'notify-invites-'));
+    const push = fakePushSender();
+    const email = fakeEmailSender();
+    const game = fakeGame();
+    const clock = { now: 1_700_000_000_000 };
+    const service = await createNotifyService({
+      dataDir: dir, debounceMs: 60, origin: 'https://games.test',
+      channels: { push, email }, now: () => clock.now, log: () => {},
+    });
+    cleanups.push(async () => { await service.close(); await rm(dir, { recursive: true, force: true }); });
+    const reporter = service.registerGame(game.registration);
+    game.addRoom('ROOM1');
+    const host = game.seat('ROOM1', 'p1');
+    const sam = game.seat('ROOM1', 'p2');
+    service.bindSeat(SAM_KEY, 'testgame', 'ROOM1', 'p2', sam.token, { name: 'Sam', phase: 'playing' });
+    await service.submitEmail(SAM_KEY, 'sam@example.com');
+    service.confirmEmail(email.sent[0]!.url.split('token=')[1]!);
+    email.sent.length = 0;
+
+    reporter.turnChanged('ROOM1', 'p2', 'turn-1');
+    clock.now += NUDGE_MIN_AGE_MS; // the wall clock is faked; the debounce timer is real
+    expect(service.nudge({ gameId: 'testgame', roomId: 'ROOM1', playerId: 'p1', token: host.token })).toEqual({ ok: true });
+    await new Promise((resolve) => setTimeout(resolve, 90)); // past the debounce
+    expect(email.sent.map((m) => m.kind)).toEqual(['reminder']); // no 'turn' mail after it
+  });
+
+  test('a rollback re-report keeps the turn nudgeable, without a second push', async () => {
+    // The word game restores saves one move behind at worst and re-reports
+    // every room's turn after boot. The re-reported turn was already
+    // notified (lastNotified says so) and its marker was deleted when the
+    // newer turn superseded it; the marker must come back, the push must not.
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
+    seatAndBind(f, SAM_KEY, 'ROOM1', 'p2', 'Sam');
+    f.reporter.turnChanged('ROOM1', 'p2', 'turn-1');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    f.reporter.turnChanged('ROOM1', 'p1', 'turn-2'); // Sam moved
+    expect(f.push.sent).toHaveLength(1);
+    f.reporter.turnChanged('ROOM1', 'p2', 'turn-1'); // restored a move behind
+    await drain();
+    expect(f.push.sent).toHaveLength(1); // told once already
+    f.clock.now += NUDGE_MIN_AGE_MS;
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('ready');
+    expect(nudgeFrom(f, host)).toEqual({ ok: true });
+  });
+
+  test('an unbound room\'s marker lives in memory only — no file until someone binds', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const sam = f.game.seat('ROOM1', 'p2');
+    f.reporter.turnChanged('ROOM1', 'p2', 'turn-1');
+    await drain();
+    // No rooms directory yet, or an empty one: either way, nothing written.
+    expect(await readdir(join(f.dir, 'rooms')).catch(() => [])).toEqual([]);
+    // The first bind persists the record, marker included. Close first:
+    // the store writes atomically (temp file, then rename), and reading the
+    // directory mid-write finds the temp file under load.
+    f.service.bindSeat(SAM_KEY, 'testgame', 'ROOM1', 'p2', sam.token, { name: 'Sam', phase: 'playing' });
+    await f.service.close();
+    const files = await readdir(join(f.dir, 'rooms'));
+    expect(files).toHaveLength(1);
+    const raw = JSON.parse(await readFile(join(f.dir, 'rooms', files[0]!), 'utf8')) as { currentTurn?: { turnKey: string } };
+    expect(raw.currentTurn?.turnKey).toBe('turn-1');
+  });
+
+  test('a player who enrols after their turn began can still be nudged on it', async () => {
+    const f = await makeFixture();
+    f.game.addRoom('ROOM1');
+    const host = f.game.seat('ROOM1', 'p1');
+    const sam = f.game.seat('ROOM1', 'p2');
+    // Nobody bound: the turn push reaches no one, but the marker stands.
+    f.reporter.turnChanged('ROOM1', 'p2', 'turn-1');
+    await drain();
+    expect(f.push.sent).toHaveLength(0);
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('unreachable');
+    // Sam enrols mid-turn.
+    f.service.bindSeat(SAM_KEY, 'testgame', 'ROOM1', 'p2', sam.token, { name: 'Sam', phase: 'playing' });
+    f.service.addSubscription(SAM_KEY, sub('https://push.test/sam'));
+    f.clock.now += NUDGE_MIN_AGE_MS;
+    expect(f.reporter.nudgeState!('ROOM1')).toBe('ready');
+    expect(nudgeFrom(f, host)).toEqual({ ok: true });
+    await drain();
+    expect(f.push.sent.map((p) => p.endpoint)).toEqual(['https://push.test/sam']);
   });
 });
 

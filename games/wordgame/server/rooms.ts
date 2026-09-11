@@ -37,8 +37,8 @@ export interface RoomRegistry extends LobbyRegistry<GameRoom> {
    * `onEvicted` fires for each aged-out room *after* its save is removed —
    * the bridge to notify's `roomRemoved`, which nothing had ever called
    * before invites landed (found 2026-09-05): notify's room records,
-   * invite records and reminder bookkeeping were immortal, and the
-   * reminder sweep would nudge for rooms that no longer exist. The
+   * invite records and reminder bookkeeping were immortal, and a nudge
+   * could remind for a room that no longer exists. The
    * protocol-skew skip stays silent on purpose: a skipped room may come
    * back under a rollback, so its notify state must survive.
    */
