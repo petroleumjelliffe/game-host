@@ -161,12 +161,6 @@ export async function createHost(opts: HostOptions): Promise<RunningHost> {
     games.push(await mount(ctx));
   }
 
-  // After every mount, never before: the sweep resolves each room's game
-  // registration for its title, path and presence check, and the service is
-  // created above with none registered yet. It skips (never drops) rooms
-  // whose game is absent this boot.
-  notify.startReminderSweep();
-
   // Last, so it can never shadow a game. Every game's routes are scoped to
   // its own base path — which used to be an accident of each game being alone
   // in a process and is now a cross-package invariant that routes.test.ts

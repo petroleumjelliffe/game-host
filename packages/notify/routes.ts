@@ -201,6 +201,32 @@ export function createNotifyRouter(service: NotifyService): Router {
       .catch(() => res.status(500).json({ error: 'internal' }));
   });
 
+  // The entry list's Nudge: seat credentials only — the seat is the proof,
+  // and no profile is needed to ask for someone else's reminder.
+  router.post('/nudge', (req, res) => {
+    const b = body(req);
+    const game = asString(b.game);
+    const roomId = asString(b.roomId);
+    const playerId = asString(b.playerId);
+    const token = asString(b.token);
+    if (!game || !roomId || !playerId || !token) {
+      res.status(400).json({ error: 'bad request' });
+      return;
+    }
+    const result = service.nudge({ gameId: game, roomId, playerId, token });
+    if (result.ok) {
+      res.json(result);
+      return;
+    }
+    const status =
+      result.reason === 'seatRefused'
+        ? 403
+        : result.reason === 'noSuchGame'
+          ? 404
+          : 409; // yourTurn, unreachable, alreadyReminded, tooSoon
+    res.status(status).json(result);
+  });
+
   // The two send-me-a-link endpoints. No playerKey — a visitor who holds
   // nothing yet is exactly who they are for — and one vague answer for
   // every case (the mail goes only to the address already on the seat or

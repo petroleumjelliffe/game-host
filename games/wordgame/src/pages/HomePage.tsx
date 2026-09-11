@@ -2,15 +2,18 @@
 // old two-door landing page — the doors are still here, pinned to the
 // bottom, but now they sit under whatever this device already has a seat
 // in. See docs/plans/2026-08-31-wordgame-redesign/Word Game Entry.dc.html
-// for the card anatomy this file implements.
+// for the card anatomy this file implements — the 2026-09-10 revision:
+// score chips instead of a name line, a Nudge on their-move cards, and a
+// REMINDED badge on yours (docs/plans/2026-09-10-turn-nudge.md).
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, type NavigateFunction } from 'react-router-dom';
 import { askWithTimeout } from '@game-host/lobby/client/answerTimeout';
 import { getConnection, type Connection } from '../net/connection';
-import { rememberedName, saveIdentity } from '../net/identity';
+import { rememberedName, saveIdentity, loadIdentity } from '../net/identity';
 import { acceptInvite } from '@game-host/notify/client/landing';
-import type { MineInvite } from '@game-host/notify/client/api';
+import { nudgeTurn, type MineInvite } from '@game-host/notify/client/api';
+import { GAME_ID } from '../notify/gameId';
 import { useMyGames, type MyGame } from './useMyGames';
 import { useNotifyStatus } from '../notify/useNotifyStatus';
 import { NotificationSettings } from '../notify/NotificationSettings';
@@ -35,66 +38,48 @@ function maskEmail(address: string | null): string {
   return `${address[0]}•••${address.slice(at)}`;
 }
 
-function ordinal(n: number): string {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1: return `${n}st`;
-    case 2: return `${n}nd`;
-    case 3: return `${n}rd`;
-    default: return `${n}th`;
-  }
+/** How long since the last committed move, or '' when there is none. */
+function agoLine(summary: KnownSummary): string {
+  return summary.lastMove?.at == null ? '' : ago(summary.lastMove.at);
 }
 
-function moveFragment(lastMove: KnownSummary['lastMove']): string | null {
-  if (lastMove === null) return null;
-  if (lastMove.kind === 'play') {
-    return `${lastMove.name} played ${(lastMove.word ?? '').toUpperCase()} for ${lastMove.score}`;
-  }
-  // RoomSummary's lastMove carries no tile count, unlike the in-game log —
-  // "swapped tiles" rather than "swapped N tiles".
-  if (lastMove.kind === 'exchange') return `${lastMove.name} swapped tiles`;
-  return `${lastMove.name} passed`;
+type Player = KnownSummary['players'][number];
+
+/**
+ * Chip order (design 2026-09-10): the featured player first — whoever the
+ * card is about, the current player or the winner — then You, then the
+ * rest in seating order. On a your-move card the featured player *is* You,
+ * so it reads You-first like the old line did.
+ */
+function chipOrder(players: Player[], featured: (p: Player) => boolean): Player[] {
+  const lead = players.filter(featured);
+  const you = players.filter((p) => p.isYou && !featured(p));
+  const rest = players.filter((p) => !featured(p) && !p.isYou);
+  return [...lead, ...you, ...rest];
 }
 
-/** Competition ranking (1, 2, 2, 4, …): how many players outscore you, plus
- * one. Ties share a rank rather than splitting it. */
-function rankOf(players: { score: number | null }[], you: { score: number | null }): number {
-  const yourScore = you.score ?? 0;
-  return players.filter((p) => (p.score ?? 0) > yourScore).length + 1;
-}
-
-/** The subline shared by every playing/finished card: a score line (2-player
- * scores, or your rank among 3+), then the last-move fragment, then how long
- * ago — each omitted when there's nothing to say. */
-function playingSubline(summary: KnownSummary): string {
-  const you = summary.players.find((p) => p.isYou);
-  const others = summary.players.filter((p) => !p.isYou);
-  const parts: string[] = [];
-  if (summary.players.length === 2 && you !== undefined && others[0] !== undefined) {
-    parts.push(`You ${you.score ?? 0}`);
-    parts.push(`${others[0].name} ${others[0].score ?? 0}`);
-  } else if (you !== undefined) {
-    parts.push(`${ordinal(rankOf(summary.players, you))} of ${summary.players.length}`);
-  }
-  const frag = moveFragment(summary.lastMove);
-  if (frag !== null) parts.push(frag);
-  if (summary.lastMove?.at != null) {
-    const agoText = ago(summary.lastMove.at);
-    if (agoText !== '') parts.push(agoText);
-  }
-  return parts.join(' · ');
-}
-
-/** Everyone in the room as one line, "You" first with the rest following in
- * turn order — matching the in-game chip row, and replacing the seat-emoji
- * strip that read as noise (feedback 2026-09-01). */
-function playerLine(summary: KnownSummary): string {
-  const i = summary.players.findIndex((p) => p.isYou);
-  const ordered = i <= 0
-    ? summary.players
-    : [...summary.players.slice(i), ...summary.players.slice(0, i)];
-  return ordered.map((p) => (p.isYou ? 'You' : p.name)).join(', ');
+/**
+ * One player's chip: name and score. `tone` is the design's three fills —
+ * accent for You when it is your move, shaded for the featured other
+ * (their turn, or the winner), plain for everyone else.
+ */
+function ScoreChip({ player, tone }: { player: Player; tone: 'accent' | 'shaded' | 'plain' }) {
+  const name = player.isYou ? 'You' : player.name;
+  const score = player.score ?? 0;
+  const cls = tone === 'accent'
+    ? 'bg-accent text-white'
+    : tone === 'shaded'
+      ? 'border border-line-strong bg-[#eee8db] text-ink'
+      : 'border border-[#dcd4c2] bg-white text-ink-soft';
+  return (
+    <span
+      data-testid="score-chip"
+      data-tone={tone}
+      className={`rounded-lg px-2.5 py-1 text-[12.5px] font-semibold ${cls}`}
+    >
+      {name} · {score}
+    </span>
+  );
 }
 
 function SectionHeader({ children }: { children: ReactNode }) {
@@ -105,24 +90,52 @@ function SectionHeader({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The tappable card. The open target is a real <button> holding the card's
+ * content; an optional `control` (the Nudge) is a sibling overlaid at the
+ * top right, never a descendant. A button inside a button is invalid HTML,
+ * and a button inside role="button" is no better: ARIA marks a button's
+ * children presentational, so assistive tech may flatten the nudge away
+ * (review, 2026-09-10). Native buttons also handle Enter and Space
+ * themselves, so there is no key handler to get wrong.
+ */
 function CardShell({
-  roomId, navigate, borderClass, bgClass, children,
+  roomId, navigate, borderClass, bgClass, control, children,
 }: {
   roomId: string;
   navigate: NavigateFunction;
   borderClass: string;
   bgClass: string;
+  control?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      data-testid={`game-${roomId}`}
-      onClick={() => navigate(`/room/${roomId}`)}
-      className={`m-0 mx-4 mb-2 flex w-[calc(100%-2rem)] flex-col gap-[3px] rounded-xl px-3 py-2.5 text-left ${borderClass} ${bgClass}`}
-    >
-      {children}
-    </button>
+    <div data-testid={`game-${roomId}`} className={`relative mx-4 mb-2 rounded-xl ${borderClass} ${bgClass}`}>
+      <button
+        type="button"
+        data-testid={`open-${roomId}`}
+        onClick={() => { void navigate(`/room/${roomId}`); }}
+        className={`m-0 flex w-full flex-col gap-2 rounded-xl border-0 bg-transparent px-3 py-2.5 text-left ${control !== undefined ? 'pr-24' : ''}`}
+      >
+        {children}
+      </button>
+      {control !== undefined && (
+        <div className="absolute right-3 top-2.5 flex h-[26px] items-center">{control}</div>
+      )}
+    </div>
+  );
+}
+
+function ChipRow({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-1.5">{children}</div>;
+}
+
+function MetaRow({ left, right }: { left?: ReactNode; right: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex-1 text-[11.5px] text-ink-ghost">{left}</span>
+      <span className="flex-none text-[11.5px] text-ink-ghost">{right}</span>
+    </div>
   );
 }
 
@@ -131,6 +144,7 @@ function WaitingCard({ roomId, summary, navigate }: { roomId: string; summary: K
   const border = you?.isHost
     ? 'border-[1.5px] border-dashed border-warn-accent'
     : 'border border-line';
+  const ordered = chipOrder(summary.players, (p) => p.isYou);
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass={border} bgClass="bg-white">
       <div className="flex items-center gap-2">
@@ -141,50 +155,108 @@ function WaitingCard({ roomId, summary, navigate }: { roomId: string; summary: K
           {summary.players.length} OF {summary.capacity}
         </span>
       </div>
-      <div className="text-[12px] text-ink-mute">{playerLine(summary)}</div>
+      <div className="text-[12px] text-ink-mute">
+        {ordered.map((p) => (p.isYou ? 'You' : p.name)).join(', ')}
+      </div>
     </CardShell>
   );
 }
 
 function YourMoveCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
+  const ordered = chipOrder(summary.players, (p) => p.isYou);
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass="border-[1.5px] border-accent" bgClass="bg-[#f0f5ff]">
-      <div className="flex items-center gap-2">
-        <span className="flex-1 truncate text-[14px] font-semibold text-ink">{playerLine(summary)}</span>
-        <span className="flex-none rounded-md bg-accent px-2 py-0.5 text-[10.5px] font-bold text-white">
-          YOUR TURN
-        </span>
-      </div>
-      <div className="text-[12px] text-ink-mute">{playingSubline(summary)}</div>
+      <ChipRow>
+        {ordered.map((p, i) => <ScoreChip key={i} player={p} tone={p.isYou ? 'accent' : 'plain'} />)}
+      </ChipRow>
+      <MetaRow
+        left={summary.nudge === 'reminded' && (
+          <span
+            data-testid="reminded-badge"
+            className="rounded-md bg-warnbg px-2 py-0.5 text-[10.5px] font-bold text-warn-ink"
+          >
+            REMINDED
+          </span>
+        )}
+        right={agoLine(summary)}
+      />
     </CardShell>
   );
 }
 
-function TheirMoveCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
+/**
+ * The Nudge control on a their-move card: a button while the turn can be
+ * nudged, "Reminded ✓" once it has been — by this button or another
+ * player's, which the summary reports the same way — and nothing while the
+ * turn is too fresh ('waiting') or nobody could receive it. Rendered beside
+ * the card's open button, never inside it.
+ */
+function NudgeControl({ roomId, state }: { roomId: string; state: KnownSummary['nudge'] }) {
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (state === 'reminded' || sent) {
+    return <span data-testid="nudge-done" className="text-[12px] font-semibold text-[#3fa053]">Reminded ✓</span>;
+  }
+  if (state !== 'ready') return null;
+  const nudge = () => {
+    const identity = loadIdentity(roomId);
+    if (identity === null) return;
+    setBusy(true);
+    void nudgeTurn({ game: GAME_ID, roomId, playerId: identity.playerId, token: identity.token })
+      .then((outcome) => { setBusy(false); if (outcome !== 'failed') setSent(true); });
+  };
   return (
-    <CardShell roomId={roomId} navigate={navigate} borderClass="border border-line" bgClass="bg-white">
-      <div className="flex items-center gap-2">
-        <span className="flex-1 truncate text-[14px] font-semibold text-ink-soft">{playerLine(summary)}</span>
-        <span className="flex-none rounded-md bg-[#eee8db] px-2 py-0.5 text-[10.5px] font-semibold text-ink-mute">
-          {(summary.currentPlayerName ?? '…').toUpperCase()}’S TURN
-        </span>
-      </div>
-      <div className="text-[12px] text-ink-ghost">{playingSubline(summary)}</div>
+    <button
+      type="button"
+      disabled={busy}
+      onClick={nudge}
+      className="m-0 rounded-lg border-[1.5px] border-accent bg-transparent px-2.5 py-[3px] text-[12px] font-semibold text-accent disabled:opacity-60"
+    >
+      Nudge
+    </button>
+  );
+}
+
+function TheirMoveCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
+  const current = summary.currentPlayerName;
+  const ordered = chipOrder(summary.players, (p) => p.isCurrent);
+  return (
+    <CardShell
+      roomId={roomId}
+      navigate={navigate}
+      borderClass="border border-line"
+      bgClass="bg-white"
+      control={summary.nudge === 'ready' || summary.nudge === 'reminded'
+        ? <NudgeControl roomId={roomId} state={summary.nudge} />
+        : undefined}
+    >
+      <ChipRow>
+        {ordered.map((p, i) => (
+          <ScoreChip key={i} player={p} tone={p.isCurrent && !p.isYou ? 'shaded' : 'plain'} />
+        ))}
+      </ChipRow>
+      <MetaRow left={`${current ?? '…'}’s turn`} right={agoLine(summary)} />
     </CardShell>
   );
 }
 
 function FinishedCard({ roomId, summary, navigate }: { roomId: string; summary: KnownSummary; navigate: NavigateFunction }) {
-  const winner = (summary.winnerNames ?? []).join(' & ');
+  const won = (p: Player) => p.isWinner;
+  const ordered = chipOrder(summary.players, won);
+  const winners = summary.players.filter(won);
+  const label = winners.some((p) => p.isYou)
+    ? (winners.length > 1 ? 'YOU TIED' : 'YOU WON')
+    : `${winners.map((p) => p.name).join(' & ')} WON`;
   return (
     <CardShell roomId={roomId} navigate={navigate} borderClass="border border-line" bgClass="bg-white">
-      <div className="flex items-center gap-2">
-        <span className="flex-1 truncate text-[14px] font-semibold text-ink-soft">{playerLine(summary)}</span>
+      <ChipRow>
+        {ordered.map((p, i) => <ScoreChip key={i} player={p} tone={won(p) ? 'shaded' : 'plain'} />)}
+        <span className="flex-1" />
         <span className="flex-none rounded-md bg-[#eee8db] px-2 py-0.5 text-[10.5px] font-semibold text-ink-mute">
-          {winner} WON
+          {label.toUpperCase()}
         </span>
-      </div>
-      <div className="text-[12px] text-ink-ghost">{playingSubline(summary)}</div>
+      </ChipRow>
+      <MetaRow right={agoLine(summary)} />
     </CardShell>
   );
 }

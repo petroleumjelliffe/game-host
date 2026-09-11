@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import type {
   GameTurnReporter,
   NotifyGameRegistration,
+  NudgeState,
   TurnNotifier,
 } from '@game-host/host/contract.js';
 import type {
@@ -51,6 +52,7 @@ import {
   type ProfileRecord,
   type PushSubscriptionRecord,
   type RoomRecord,
+  type TurnMarker,
 } from './records.js';
 
 export interface NotifyServiceOptions {
@@ -189,6 +191,29 @@ export interface RemindRequest {
   targetPlayerId: string;
 }
 
+/** The entry list's Nudge: a seated player asks for this turn's reminder now. */
+export interface NudgeRequest {
+  gameId: string;
+  roomId: string;
+  /** The nudger's own seat — proof, via verifySeat, that they are in the room. */
+  playerId: string;
+  token: string;
+}
+
+export type NudgeRefusal =
+  | 'noSuchGame'
+  | 'seatRefused'
+  /** The nudger is the current player — there is no one else to remind. */
+  | 'yourTurn'
+  /** No turn marker, or nobody bound to the current seat: a nudge would reach no one. */
+  | 'unreachable'
+  /** This turn's one reminder already went out. */
+  | 'alreadyReminded'
+  /** The turn push is less than NUDGE_MIN_AGE_MS old. */
+  | 'tooSoon';
+
+export type NudgeResult = { ok: true } | { ok: false; reason: NudgeRefusal };
+
 /** What a claim or key redemption hands the landing page: a whole identity. */
 export interface SeatCredentials {
   playerId: string;
@@ -217,6 +242,19 @@ export interface NotifyService extends TurnNotifier {
    * behind it (that is the privacy stance working). Same caps, same link.
    */
   remind(request: RemindRequest): Promise<InviteResult>;
+  /**
+   * The entry list's Nudge (design 2026-09-10): a seated player asks for
+   * the current turn's reminder. The only reminder there is — the automatic
+   * 24h sweep was removed the same day (owner: "don't autoremind") — so a
+   * turn is reminded when a human decides it should be, once, on both
+   * channels, and not before NUDGE_MIN_AGE_MS have passed since the turn
+   * push (the player just got that push; a nudge is "you've gone quiet",
+   * not "hurry up"). Not presence-gated: the nudger asked, and a push to
+   * someone already on the board is the same convenience the turn push is.
+   * A nudge supersedes a turn email still waiting out its debounce, so the
+   * two can never land a minute apart.
+   */
+  nudge(request: NudgeRequest): NudgeResult;
   /** One shaped null for every failure: unknown, revoked, already claimed, dead room. */
   claimInvite(
     inviteToken: string,
@@ -253,14 +291,6 @@ export interface NotifyService extends TurnNotifier {
   refreshInvite(inviteToken: string): 'sent' | 'cooldown';
   /** Redeem an emailed seat key. Same single refusal shape. */
   redeemSeatKey(key: string): SeatCredentials | null;
-  /**
-   * Run the 24h reminder sweep now and hourly after. Called by the host
-   * AFTER every game has mounted — the service is created before any game
-   * registers, and a sweep with no registrations could resolve no title,
-   * path, or presence check. Rooms whose game is unregistered are skipped,
-   * never dropped: absent this boot is not gone.
-   */
-  startReminderSweep(): void;
   /**
    * Restore: everything the person behind this key holds. The person is
    * derived, never stored — this profile plus every profile proven on the
@@ -342,8 +372,13 @@ const MAX_INVITES_PER_INVITER_PER_DAY = 20;
 const MAX_INVITES_PER_ADDRESS_PER_DAY = 3;
 const MAX_SIGNIN_REQUESTS_PER_SEAT_PER_DAY = 3;
 const PLAYER_ID = /^[A-Za-z0-9_-]{1,64}$/;
-const REMINDER_DELAY_MS = 24 * 60 * 60 * 1000;
-const REMINDER_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+/**
+ * How old a turn must be before anyone can nudge it. The turn push went out
+ * the moment the turn changed; a nudge inside the hour would re-push and
+ * mail someone who has just been told. Measured from the marker's
+ * `notifiedAt`, which is the push's timestamp.
+ */
+export const NUDGE_MIN_AGE_MS = 60 * 60 * 1000;
 
 function sha256hex(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -428,7 +463,6 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     { timer: NodeJS.Timeout; playerId: string; turnKey: string }
   >();
   const inFlightSends = new Set<Promise<void>>();
-  let reminderTimer: NodeJS.Timeout | null = null;
   let closed = false;
 
   function saveProfile(profile: ProfileRecord): void {
@@ -681,24 +715,45 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
    * where the same email would be noise, so the channels split: push now,
    * email behind the debounce with the presence re-check.
    */
+  /**
+   * Persist a room's marker only once someone is bound there. An unbound
+   * room's record exists in memory so its turn can be nudged the moment a
+   * player enrols, but Rail Baron and Acquire never call `roomRemoved`, and
+   * a file per room they ever play would be immortal (review, 2026-09-10).
+   * The first bind saves the whole record, marker included.
+   */
+  function persistRoom(room: RoomRecord): void {
+    if (Object.keys(room.bindings).length > 0) saveRoom(room);
+  }
+
   function firePush(reg: NotifyGameRegistration, roomId: string, playerId: string, turnKey: string): void {
     if (closed) return;
-    const room = rooms.get(roomKey(reg.gameId, roomId));
-    if (!room) return;
+    const key = roomKey(reg.gameId, roomId);
+    let room = rooms.get(key);
+    // A record for every room that reports a turn, bound or not (in memory
+    // until someone binds — see persistRoom): the currentTurn marker is the
+    // nudge's anchor, and a player who sets up notifications *after* their
+    // turn began must still be nudgeable on that turn. Before 2026-09-10 an
+    // unbound turn wrote nothing, which made the first turn after enrolment
+    // silently un-nudgeable.
+    if (!room) {
+      room = { key, gameId: reg.gameId, roomId, savedAt: now(), bindings: {}, lastNotified: {} };
+      rooms.set(key, room);
+    }
     if (room.lastNotified[playerId] === turnKey) return;
     const targets = seatTargets(room, playerId);
-    if (targets.length === 0) return;
 
     // Markers before sends — see the file comment for why this order. The
     // marker now stands for the whole turn the moment the push leg runs, so
     // a crash inside the debounce window skips that turn's email rather
     // than ever duplicating the push — the same crash-skips discipline as
     // always, applied at the new earliest send. The currentTurn marker is
-    // the 24h reminder's anchor; turnChanged clears it the moment a newer
-    // turn supersedes it.
+    // the nudge's anchor; turnChanged clears it the moment a newer turn
+    // supersedes it.
     room.lastNotified[playerId] = turnKey;
     room.currentTurn = { playerId, turnKey, notifiedAt: now() };
-    saveRoom(room);
+    persistRoom(room);
+    if (targets.length === 0) return;
 
     const payload: TurnPayload = {
       gameTitle: reg.title,
@@ -733,38 +788,34 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
     track(sendToSeat(targets, payload, emailUrl, 'turn', reg.gameId, { push: false, email: true }));
   }
 
-  function sweepReminders(): void {
-    if (closed) return;
-    for (const room of rooms.values()) {
-      const marker = room.currentTurn;
-      if (!marker || marker.remindedAt !== undefined) continue;
-      if (now() - marker.notifiedAt < REMINDER_DELAY_MS) continue;
-      const reg = games.get(room.gameId);
-      // Unregistered is skipped, never dropped: a game absent this boot may
-      // be back the next, and its rooms are not ours to forget.
-      if (!reg) continue;
-      if (reg.isConnected(room.roomId, marker.playerId)) continue;
-      const targets = (room.bindings[marker.playerId] ?? [])
-        .map((id) => profiles.get(id))
-        .filter((p): p is ProfileRecord => p !== undefined);
-      if (targets.length === 0) continue;
+  /**
+   * The profiles a reminder for this turn would go to: the same person
+   * expansion as the turn push (spec 2026-09-09 §Fan-out). Until 2026-09-10
+   * the reminder used the raw bindings, so a seat bound only in Safari with
+   * the app linked by address was reminded on the one profile that has no
+   * push.
+   */
+  function reminderTargets(room: RoomRecord, marker: TurnMarker): ProfileRecord[] {
+    return seatTargets(room, marker.playerId);
+  }
 
-      // Marker before send, same crash discipline as lastNotified: one
-      // reminder per turn, and a crash mid-send misses rather than doubles.
-      marker.remindedAt = now();
-      saveRoom(room);
-
-      const payload: TurnPayload = {
-        gameTitle: reg.title,
-        roomId: room.roomId,
-        url: reg.roomPath(room.roomId),
-      };
-      const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, room.roomId, marker.playerId)}`;
-      // The 24h nudge stays dual-channel and presence-checked: by then the
-      // immediate push is long dismissed, and both channels saying "still
-      // your turn" is the reminder's whole job.
-      track(sendToSeat(targets, payload, emailUrl, 'reminder', room.gameId, { push: true, email: true }));
-    }
+  /**
+   * The reminder send. Marker before send, same crash discipline as
+   * lastNotified: one reminder per turn, and a crash mid-send misses rather
+   * than doubles. Dual-channel: by the time anyone nudges, the immediate
+   * push is at least an hour dismissed, and both channels saying "still
+   * your turn" is the reminder's whole job.
+   */
+  function sendReminder(reg: NotifyGameRegistration, room: RoomRecord, marker: TurnMarker, targets: ProfileRecord[]): void {
+    marker.remindedAt = now();
+    saveRoom(room);
+    const payload: TurnPayload = {
+      gameTitle: reg.title,
+      roomId: room.roomId,
+      url: reg.roomPath(room.roomId),
+    };
+    const emailUrl = `${origin ?? ''}${seatEmailUrl(reg, room.roomId, marker.playerId)}`;
+    track(sendToSeat(targets, payload, emailUrl, 'reminder', room.gameId, { push: true, email: true }));
   }
 
   /** Counts an attempt against the daily cap. False means over the cap. */
@@ -1073,18 +1124,30 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
           }
           // A superseded currentTurn dies here, persisted — without this, a
           // turn whose notification was *skipped* (player present at fire
-          // time) would leave the previous turn's marker standing, and the
-          // 24h sweep would remind for a turn already taken.
+          // time) would leave the previous turn's marker standing, and a
+          // nudge would remind for a turn already taken.
           const room = rooms.get(key);
           if (
             room?.currentTurn !== undefined &&
             (currentPlayerId === null || room.currentTurn.turnKey !== turnKey)
           ) {
             delete room.currentTurn;
-            saveRoom(room);
+            persistRoom(room);
           }
           if (currentPlayerId === null) return;
-          if (rooms.get(key)?.lastNotified[currentPlayerId] === turnKey) return;
+          if (room?.lastNotified[currentPlayerId] === turnKey) {
+            // Already notified for this very turn: a same-turn re-report
+            // (post-boot, a duplicate event) sends nothing. But a game
+            // restored a move *behind* re-reports a turn whose marker the
+            // newer turn already superseded and deleted — and without a
+            // marker the turn could never be nudged (review, 2026-09-10).
+            // Re-establish it, unsent: the player was told once already.
+            if (room.currentTurn === undefined) {
+              room.currentTurn = { playerId: currentPlayerId, turnKey, notifiedAt: now() };
+              persistRoom(room);
+            }
+            return;
+          }
           // Push now, email after the window — see firePush/fireEmail.
           firePush(registration, roomId, currentPlayerId, turnKey);
           const timer = setTimeout(() => {
@@ -1134,6 +1197,15 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
               void inviteStore.remove(hash);
             }
           }
+        },
+        nudgeState: (roomId): NudgeState => {
+          if (!ROOM_ID.test(roomId)) return 'unreachable';
+          const room = rooms.get(roomKey(registration.gameId, roomId));
+          const marker = room?.currentTurn;
+          if (!room || !marker) return 'unreachable';
+          if (marker.remindedAt !== undefined) return 'reminded';
+          if (reminderTargets(room, marker).length === 0) return 'unreachable';
+          return now() - marker.notifiedAt < NUDGE_MIN_AGE_MS ? 'waiting' : 'ready';
         },
       };
     },
@@ -1462,6 +1534,37 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       return { ok: true, playerId, resend: false };
     },
 
+    nudge(request): NudgeResult {
+      const reg = games.get(request.gameId);
+      // Closed: the stores have settled; a send now would write after them.
+      if (closed || !reg || !ROOM_ID.test(request.roomId)) return { ok: false, reason: 'noSuchGame' };
+      if (!reg.verifySeat(request.roomId, request.playerId, request.token)) {
+        return { ok: false, reason: 'seatRefused' };
+      }
+      const room = rooms.get(roomKey(request.gameId, request.roomId));
+      const marker = room?.currentTurn;
+      // No marker means the push leg never ran for this turn — nobody was
+      // bound when it changed — and there is nothing durable to remind
+      // against. The same shape as bound-then-unbound below.
+      if (!room || !marker) return { ok: false, reason: 'unreachable' };
+      if (marker.playerId === request.playerId) return { ok: false, reason: 'yourTurn' };
+      if (marker.remindedAt !== undefined) return { ok: false, reason: 'alreadyReminded' };
+      const targets = reminderTargets(room, marker);
+      if (targets.length === 0) return { ok: false, reason: 'unreachable' };
+      if (now() - marker.notifiedAt < NUDGE_MIN_AGE_MS) return { ok: false, reason: 'tooSoon' };
+      // The reminder supersedes a turn email still waiting out its debounce
+      // (a debounce longer than the nudge floor is a config away): one mail
+      // says "still your turn", not two a minute apart.
+      const key = roomKey(request.gameId, request.roomId);
+      const pending = pendingTimers.get(key);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pendingTimers.delete(key);
+      }
+      sendReminder(reg, room, marker, targets);
+      return { ok: true };
+    },
+
     async remind(request): Promise<InviteResult> {
       const reg = games.get(request.gameId);
       if (!reg || !ROOM_ID.test(request.roomId)) return { ok: false, reason: 'noSuchGame' };
@@ -1661,12 +1764,6 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       return { address, seats, invites };
     },
 
-    startReminderSweep(): void {
-      if (closed || reminderTimer !== null) return;
-      sweepReminders();
-      reminderTimer = setInterval(sweepReminders, REMINDER_SWEEP_INTERVAL_MS);
-      reminderTimer.unref();
-    },
 
     pushPublicKey(): string | null {
       return push?.publicKey ?? null;
@@ -1680,10 +1777,6 @@ export async function createNotifyService(options: NotifyServiceOptions): Promis
       closed = true;
       for (const pending of pendingTimers.values()) clearTimeout(pending.timer);
       pendingTimers.clear();
-      if (reminderTimer !== null) {
-        clearInterval(reminderTimer);
-        reminderTimer = null;
-      }
       while (inFlightSends.size > 0) await Promise.all([...inFlightSends]);
       await profileStore.settled();
       await roomStore.settled();

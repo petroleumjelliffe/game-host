@@ -267,3 +267,14 @@ test('signout is idempotent and answers ok', async () => {
   expect(await (await post('/signout', { playerKey: KEY })).json()).toEqual({ ok: true });
   expect(await (await post('/signout', { playerKey: KEY })).json()).toEqual({ ok: true });
 });
+
+test('nudge takes seat credentials, refuses a stolen token, and reports the refusal shape', async () => {
+  const refused = await post('/nudge', { game: 'testgame', roomId: 'ROOM1', playerId: 'p1', token: 'stolen' });
+  expect(refused.status).toBe(403);
+  // A real seat, but no turn has been reported: nothing to remind against.
+  const nothing = await post('/nudge', { game: 'testgame', roomId: 'ROOM1', playerId: 'p1', token: 'good-token' });
+  expect(nothing.status).toBe(409);
+  expect(await nothing.json()).toEqual({ ok: false, reason: 'unreachable' });
+  const bad = await post('/nudge', { game: 'testgame', roomId: 'ROOM1' });
+  expect(bad.status).toBe(400);
+});

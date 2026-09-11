@@ -276,4 +276,6 @@ the tab — the same email is noise — so `turnChanged` now sends the push
 leg at once (markers written there, same crash-skips discipline) and
 arms the debounce for the email leg alone, which still re-checks
 presence at fire time. The 24h reminder stays dual-channel and
-presence-checked.
+presence-checked. *(2026-09-10: there is no 24h reminder any more; a
+player's Nudge — dual-channel, not presence-checked — replaces it. See
+[docs/plans/2026-09-10-turn-nudge.md](../docs/plans/2026-09-10-turn-nudge.md).)*
