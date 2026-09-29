@@ -14,6 +14,16 @@ is built yet.
    Nudge control or the `nudge` field.
 4. **The settings panel's logic moves to `packages/notify`**, and each game
    keeps only a presentational panel in its own tokens.
+5. **No existing Acquire save is worth keeping.** Save-format changes may
+   bump `SAVE_VERSION` and let old records quarantine; no migration, no
+   rollback compatibility.
+6. **Acquire gets the word game's whole pre-join work** (the 2026-09-06
+   plan: chooser, "That's me", sent/cooldown states, the rebuilt dead-link
+   view), not just a seat sign-in call.
+7. **The local-play exception goes in the shared library.** No
+   notification surface exists without an online seat, and that rule lives
+   in `packages/notify/client`, not in each game, so Rail Baron's local
+   mode inherits it when it adopts notifications.
 
 ## Where Acquire already is
 
@@ -122,10 +132,17 @@ only visible change is the eviction cleanup.
    unseated. The lobby bind is what lets the invite picker say "already in
    this room"; the playing bind writes the co-player ledger that
    `useContacts` reads.
-5. **The panel and its entry point, online only.** Acquire's `GameScreen`
-   also renders pass-and-play (`/pass-and-play/game`), where there is no
-   seat and nobody to notify. The bell and panel take their presence from
-   the online room, not from `GameScreen` itself.
+5. **The panel and its entry point, online only, enforced in the shared
+   library (ruling 7).** Acquire's `GameScreen` also renders pass-and-play
+   (`/pass-and-play/game`), where there is no seat and nobody to notify,
+   and Rail Baron has a local mode beside `OnlineApp` too. So the rule is
+   not "each game remembers to hide the bell": the shared pieces take the
+   seat identity as a required argument (`RoomIdentity | null`) and render
+   or do nothing when it is `null`. `useNotifyBind` already no-ops on a
+   null identity; the new shared bell and `useNotificationSettings` get
+   the same shape, with one test in `packages/notify/client` pinning that
+   a null seat produces no markup and no request. A game's only duty is to
+   pass the seat it actually has, which pass-and-play does not have.
 6. **The enrol prompt**, `useEnrollPush(GAME_ID)`, offered once in the
    lobby after seating. Push subscriptions are scope-tagged per game, so a
    player who enabled push in the word game gets **no** Acquire turn
@@ -135,15 +152,34 @@ only visible change is the eviction cleanup.
    imply push is already on.
 7. **The landing**, `?key=` and `?invite=`, on `RoomPage`, resolved before
    the socket connects, as the word game's outer `RoomPage` does it.
-8. **Pre-join and seat sign-in.** Acquire's `useRoom` does not opt into
-   `useLobbyRoom`'s `preview` mode, so a device with no identity never sees
-   the roster before joining, and there is nothing to hang
-   `requestSeatSignin` on. This item is therefore bigger than one call:
-   turn on preview mode, and give Acquire a pre-join chooser (take a free
-   seat, or "that's me" on a disconnected seat, which mails the sign-in
-   link). The word game's `PreJoin.tsx` is the model and is not shared
-   code; whether its logic can move into `packages/lobby/client` the way
-   the settings panel's does is worth deciding at the start of this item.
+8. **Pre-join, ported whole (ruling 6).** Everything the 2026-09-06 plan
+   gave the word game's `RoomView`, for Acquire's online room:
+   - `useRoom` opts into `useLobbyRoom`'s `preview` mode, so a device with
+     no stored identity views the roster (`viewRoom`) instead of
+     auto-joining, and "Sit here" is the explicit `join()`.
+   - The chooser (A1), and its mid-game variant with no "Sit here" (A2b).
+   - "That's me" on an occupied row (A2): `requestSeatSignin`, then the
+     vague sent state or the cooldown (C1). The reserved row takes "That's
+     me" too, which resends the live invite; this needs Phase 4's
+     invites to mean anything, and until then no Acquire row is reserved.
+   - The dead-link view rebuilt to B1: "Email me a new link"
+     (`refreshInvite`, with the dead token kept from the landing),
+     "Continue to the room" (to the chooser), "Go home". Acquire's
+     existing `RoomGone` and `RoomRefused` are the screens this replaces.
+   - The footer's "Signed in on another phone?" pointing at the That's-me
+     rows.
+
+   `PreJoin.tsx` is word-game code. Following ruling 4's pattern, its
+   state (which sheet is open, the sent/cooldown outcome, the dead-link
+   token) moves to a hook in `packages/lobby/client` or
+   `packages/notify/client` (whichever the import boundary allows; it
+   calls notify's `requestSeatSignin`, so probably notify), and both games
+   keep presentational screens. The word game's `PreJoin` and
+   `RoomPage.invite` tests must pass unchanged across the extraction.
+   Acquire's `rooms.test.ts` refusal tests stay as they are: the server
+   side of the reclaim retirement already applies to Acquire.
+   The 2026-09-06 known issue (a push-only player cannot reclaim on a new
+   device) comes with the port, unchanged.
 
 Every piece above must degrade to one honest sentence on the standalone
 dev server, which 404s `/notify`.
@@ -170,13 +206,12 @@ nothing anyone can see.
 1. **Lobby persistence.** `persist` stops returning early for a lobby and
    writes a record with no `state`; `restore` seats such a record as a
    lobby. Wire `onRosterChanged: save` as the word game does.
-   **Do not bump `SAVE_VERSION`:** `hasEnvelope` requires an exact version
-   match and an unreadable record is quarantined, so a bump would
-   quarantine every live Acquire room at deploy. Make the guard accept an
-   absent `state` at version 5 instead, as the word game made `pending`
-   optional. The cost is on rollback: an older build's guard requires
-   `state`, so it quarantines lobby-only records rather than skipping them.
-   Acceptable for lobbies, and worth one sentence in the store comment.
+   Bump `SAVE_VERSION` to 6 with `state` optional and `pending` added
+   (ruling 5). `hasEnvelope` requires an exact version match, so every
+   version-5 record is quarantined at the first boot of the new build;
+   that is the intended outcome, and the quarantine directory can be
+   deleted by hand afterwards. Say so in the store comment, so the bump
+   does not read as an accident.
 2. **Pending seats in the record** (`pending`, absent when empty) and
    through `createGameRoom`, as the word game does.
 3. **`reserveSeat`, `claimSeat`** on the registration, each saving and
@@ -202,8 +237,8 @@ nothing anyone can see.
 - **Runtime eviction.** Evicting only at boot means notify can hold a
   dead room's markers until the next deploy. Harmless at current deploy
   cadence.
-- **A shared `PreJoin` and `useMyGames`**, if Phases 2 and 3 show they are
-  as generic as they look.
+- **A shared `useMyGames`**, if Phase 3 shows it is as generic as it
+  looks. (`PreJoin`'s logic is no longer a wish; ruling 6 schedules it.)
 - **CLAUDE.md's repo table** should say Acquire has notifications and
   invites once Phase 4 lands.
 
@@ -222,6 +257,9 @@ code:
   Phase 1 extends it.
 - Found that Acquire has no preview mode, which makes seat sign-in a
   pre-join screen rather than one call.
+- Second owner round: saves are disposable (bump `SAVE_VERSION`, no
+  compatibility), the full pre-join port replaces the one-call seat
+  sign-in, and the online-only rule moves into the shared notify client.
 - Added: the bell must be online-only (pass-and-play shares `GameScreen`),
   and push being scope-tagged means enabling it in one game does not
   enable it in another.
