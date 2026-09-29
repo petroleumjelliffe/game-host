@@ -1,8 +1,8 @@
 # Turn notifications for Acquire, push and email, the word game's way
 
 **Status:** proposed 2026-09-29, revised the same day after an owner review
-and a code-checked self-review (see "Revisions" at the end). Nothing below
-is built yet.
+and a code-checked self-review (see "Revisions" at the end). **Phase 1 is
+built** (2026-09-29, see its "As built" note); Phases 2 to 4 are not.
 
 **Owner rulings (2026-09-29):**
 
@@ -110,6 +110,29 @@ All in `games/acquire/server/`. No UI.
 
 Safe to ship alone: nothing binds an Acquire seat until Phase 2, so the
 only visible change is the eviction cleanup.
+
+**As built (2026-09-29).** As planned, with these specifics:
+
+- `games/acquire/server/notify.test.ts` is new and boots through `mount`
+  (the composed path) against a recording notifier over seeded save files:
+  restore re-reports the waited-on player, the shareholder in a merger,
+  and `null` for a finished game; eviction reports `roomRemoved` and a
+  protocol-skew skip reports nothing; `getSeatCredentials` answers the live
+  seat and `null` otherwise; a lobby leaver reports `seatVacated`.
+- The "since the last turn" pin lives in `recovery.test.ts`: a restart and
+  a rejoin leave `savedAt` exactly where the turn put it.
+- `apps/host/notifications.test.ts` gained a block with fake channels: an
+  Acquire `seat-signin` mails a `/acquire/room/<id>?key=` link, the key
+  redeems to the seat, `/notify/me` lists it, and an Acquire turn pushes
+  to the `acquire`-scoped subscription and not the `wordgame` one.
+- The rotated-token case the plan listed is gone: since the reclaim was
+  retired (2026-09-06) no path rotates a seat token, so there is nothing
+  to follow.
+- Each new test was broken on purpose to see it fail: dropping
+  `reportTurns` and the eviction bridge turns four `notify.test.ts` cases
+  red, and dropping `getSeatCredentials` turns the composed sign-in case
+  red. The scope-tag push case is notify's behaviour and passes either
+  way; it is there to pin that Acquire's turns are tagged `acquire`.
 
 ## Phase 2: the client binds, and can be told to
 

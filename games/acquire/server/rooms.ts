@@ -51,16 +51,29 @@ export interface RoomRegistry {
    * the server is serving traffic, it would silently swap a room's object
    * out from under socket bindings that still point at the old one; a loud
    * throw at the call site beats that being discovered from a dead game.
+   *
+   * `onEvicted` fires for each aged-out room *after* its save is removed:
+   * the bridge to notify's `roomRemoved`, which this registry cannot see.
+   * Without it notify's per-room records outlive the room forever (the word
+   * game found the same hole on 2026-09-05). The protocol-skew skip stays
+   * silent on purpose: a skipped room may come back under a rollback, so
+   * its notify state must survive.
    */
-  restore(now?: number): Promise<number>;
+  restore(now?: number, onEvicted?: (roomId: string) => void): Promise<number>;
 }
 
 /**
- * How long a saved room is worth reviving.
+ * How long a saved room is worth reviving, measured from its last turn.
  *
  * Long enough that a game abandoned over a weekend is still there on Monday;
  * short enough that the directory does not grow without bound and `restore`
  * does not delay `listen` behind a boot-time read of every game ever played.
+ *
+ * "Since the last turn" (owner ruling 2026-09-29) is true only because
+ * `savedAt` is stamped by `persist` and `persist` runs only on a commit —
+ * a room is never re-saved by a rejoin, a restore or a notification. A new
+ * save site that is not a turn would quietly extend every room's life;
+ * `recovery.test.ts` pins that a rejoin does not.
  */
 export const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -127,7 +140,7 @@ export function createRoomRegistry(store: RoomStore = createNullStore()): RoomRe
       await store.save(record);
     },
 
-    async restore(now = Date.now()) {
+    async restore(now = Date.now(), onEvicted) {
       if (restored) {
         throw new Error(
           'restore() is boot-only: calling it on a serving registry would swap ' +
@@ -158,6 +171,7 @@ export function createRoomRegistry(store: RoomStore = createNullStore()): RoomRe
       for (const record of saved) {
         if (now - record.savedAt > MAX_AGE_MS) {
           await store.remove(record.roomId);
+          onEvicted?.(record.roomId);
           continue;
         }
 

@@ -8,7 +8,7 @@
 // directory of files.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { io as connect } from 'socket.io-client';
@@ -139,6 +139,34 @@ describe('a server restarted with a game in progress', () => {
 
     a2.close(); s2.close();
     await second.close();
+  });
+
+  it('stamps savedAt at a turn and never at a rejoin, so eviction counts from the last turn', async () => {
+    // The owner ruling (2026-09-29) is "7 days since the last turn", and the
+    // registry measures age from `savedAt`. That is the same thing only while
+    // nothing but a commit writes the file; a rejoin that re-saved would
+    // quietly keep an abandoned room alive forever by being looked at.
+    const first = await boot();
+    const room = first.rooms.fromState('AGE001', ['Alex', 'Sam'], fixture());
+    const [alex] = room.players;
+    const a = await connectPlayer(first.port, 'AGE001', 'Alex', alex!.id, alex!.token);
+    await a.send({ type: 'placeTile', coord: 'E6' });
+    await a.send({ type: 'endTurn' });
+    await waitForPersist(dir, 'AGE001');
+    await first.close();
+    const read = async () =>
+      JSON.parse(await readFile(join(dir, 'AGE001.json'), 'utf8')) as { savedAt: number };
+    const atTurn = (await read()).savedAt;
+
+    await new Promise((r) => setTimeout(r, 20));
+    const second = await boot();
+    await second.rooms.restore();
+    const a2 = await connectPlayer(second.port, 'AGE001', 'Alex', alex!.id, alex!.token);
+    await settleSocket(a2.socket);
+    a2.close();
+    await second.close();
+
+    expect((await read()).savedAt).toBe(atTurn);
   });
 
   it('tells a client the room is gone rather than seating them as a stranger', async () => {

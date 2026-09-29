@@ -125,6 +125,8 @@ interface Built {
   game: MountedGame;
   rooms: RoomRegistry;
   devSeed: boolean;
+  /** After restore: re-report every non-lobby room's turn to notify. */
+  reportTurns(): void;
 }
 
 /**
@@ -142,6 +144,7 @@ export async function mount(ctx: HostContext): Promise<MountedGame> {
   try {
     const restored = await built.rooms.restore();
     if (restored > 0) console.log(`✓ Restored ${restored} room(s)`);
+    built.reportTurns();
   } catch (e: unknown) {
     console.warn('! Restore failed, starting with no rooms:', e);
   }
@@ -217,10 +220,12 @@ function build(
   if (devSeed) registerDevSeed(app, rooms);
 
   // Turn notifications, when the host runs the service. Registration hands
-  // it three closures over things this file already holds; the game's only
-  // other duty is the one `turnChanged` call in `deliver`'s commit branch.
-  // `segmentStart` is the turnKey: it moves exactly when a commit happens,
-  // so it is distinct per turn and survives a restart with the room.
+  // it closures over things this file already holds; the game's other
+  // duties are the `turnChanged` call in `deliver`'s commit branch, the
+  // re-report after restore (`reportTurns`), and the eviction and
+  // seat-vacated bridges. `segmentStart` is the turnKey: it moves exactly
+  // when a commit happens, so it is distinct per turn and survives a
+  // restart with the room.
   const notifier: GameTurnReporter | undefined = options.notify?.registerGame({
     gameId: 'acquire',
     title: TITLE,
@@ -229,6 +234,13 @@ function build(
     verifySeat: (roomId, playerId, token) => {
       const seat = rooms.get(roomId)?.players.find((p) => p.id === playerId);
       return seat !== undefined && seat.token === token;
+    },
+    // A pure read: it runs on every emailed-link click. It is what makes the
+    // turn email's link a sign-in link (`?key=`), and what lets `/notify/me`
+    // and seat sign-in see Acquire seats at all.
+    getSeatCredentials: (roomId, playerId) => {
+      const seat = rooms.get(roomId)?.players.find((p) => p.id === playerId);
+      return seat ? { playerId: seat.id, token: seat.token, name: seat.name } : null;
     },
   });
 
@@ -244,6 +256,10 @@ function build(
       // is waiting on, mid-segment, with work the server still holds.
       if (room.lifecycle() !== 'lobby') sendState(room, playerId, 'resume');
     },
+    // A lobby leaver today; revoked and auto-revoked invite seats once
+    // Acquire reserves them. Notify drops the seat's bindings, since seat
+    // ids are reused and a stale binding would union strangers into a seat.
+    onSeatVacated: (room, playerId) => notifier?.seatVacated?.(room.id, playerId),
   });
 
   /**
@@ -402,8 +418,28 @@ function build(
   });
 
   return {
-    rooms,
+    // `restore` re-bound so eviction reaches notify's `roomRemoved`: the
+    // registry cannot see the notifier.
+    rooms: {
+      ...rooms,
+      restore: (now?: number) => rooms.restore(now, (roomId) => notifier?.roomRemoved(roomId)),
+    },
     devSeed,
+    /**
+     * Re-report every restored room's turn to notify. Notify persists a
+     * marker naming the current turn, and a save can restore a segment
+     * behind (the save is not awaited before the sends), so after a boot the
+     * marker can name the next player while the board still waits on the
+     * previous one. A same-key report is a no-op inside notify; a differing
+     * one re-notifies the player the board actually waits on. A finished
+     * room reports `null` (`getCurrentActor` at `end`), clearing its marker.
+     */
+    reportTurns(): void {
+      for (const room of rooms.all()) {
+        if (room.lifecycle() === 'lobby') continue;
+        notifier?.turnChanged(room.id, room.actorId(), String(room.segmentStart()));
+      }
+    },
     game: {
       basePath: BASE_PATH,
       title: TITLE,
